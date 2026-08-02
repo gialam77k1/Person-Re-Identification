@@ -25,7 +25,7 @@ from src.common.utils import (
     seed_everything,
 )
 from src.data.dataset import Market1501Dataset, RandomIdentitySampler, build_transforms
-from src.models.reid_model import ReIDModel
+from src.models.reid_model import build_model_from_config
 from src.reid.evaluation import compute_distance_matrix, evaluate_market1501, extract_features
 from src.reid.losses import ReIDLoss
 
@@ -177,9 +177,9 @@ def main() -> None:
         warnings.warn("AMP was requested but CUDA is not available. Training will run in FP32.")
 
     train_dataset, train_loader, query_loader, gallery_loader = build_loaders(config)
-    model = ReIDModel(
+    model = build_model_from_config(
+        config,
         num_classes=train_dataset.num_classes,
-        embedding_dim=config["model"]["embedding_dim"],
         pretrained=config["model"]["pretrained"],
     ).to(device)
 
@@ -210,6 +210,7 @@ def main() -> None:
                 "weight_decay": config["train"]["weight_decay"],
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
+                "model_variant": config["model"].get("variant", "baseline"),
                 "device": str(device),
             }
         )

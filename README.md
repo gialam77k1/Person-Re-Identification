@@ -1,35 +1,55 @@
-# Person Re-Identification MLOps Baseline
+# Person Re-Identification with Baseline and DADNet-style Upgrade
 
-Capstone này triển khai baseline cho bài toán person re-identification trên bộ dữ liệu `Market-1501` bằng `PyTorch`, có hỗ trợ:
+Project nay trien khai pipeline person re-identification bang `PyTorch` tren bo du lieu `Market-1501`, bao gom:
 
-- Huấn luyện mô hình ReID với `ResNet50`
-- Đánh giá theo `Rank-1`, `Rank-5`, `Rank-10`, `mAP`
-- Lưu checkpoint và metric
-- Theo dõi thí nghiệm bằng `MLflow`
-- Trích xuất embedding tham chiếu để phục vụ các bước nhận dạng tiếp theo
+- Baseline `ResNet50 -> Embedding -> Classifier`
+- Bien the nang cap theo huong `DADNet-inspired`
+- Train, evaluate, extract reference embeddings
+- Luu checkpoint, metric, artifact
+- Theo doi thi nghiem bang `MLflow`
 
-## 1. Yêu cầu hệ thống
+Cập nhật theo trạng thái local ngày **2026-08-02**.
 
-Cập nhật theo trạng thái hiện tại ngày **2026-08-02**.
+## 1. Tong quan kien truc
 
-- Hệ điều hành: Windows 10/11
-- Python: **3.10 - 3.12**
-- Khuyến nghị: **Python 3.10** để tương thích tốt với cả `PyTorch` và `MLflow`
-- `pip` đã được cập nhật
+### Baseline
+
+```text
+Input
+  -> ResNet50 Backbone
+  -> Global Pooling
+  -> Linear(2048 -> 512)
+  -> BatchNorm
+  -> ReLU
+  -> Classifier
+```
+
+### DADNet-inspired
+
+```text
+Input
+  -> ResNet50 Backbone
+  -> CFT Attention Module
+  -> Global Average Pooling
+  -> DEM (Distinguishability Enhancement Module)
+  -> BatchNorm
+  -> Classifier
+```
 
 Luu y:
 
-- `PyTorch` tren Windows hien tai chi ho tro Python `3.9 - 3.12`.
-- `MLflow` hien tai yeu cau Python `3.10+`.
-- Giao cua an toan nhat cho project nay la **Python 3.10 hoac 3.11**.
+- Ban `DADNet` trong repo nay la phien ban `inspired by` so do kien truc, khong phai ban tai hien full paper 100%.
+- Muc tieu la giu pipeline gon, de train, de so sanh voi baseline trong do an/capstone.
 
 ## 2. Cau truc du an
 
 ```text
-KLTN/
+Person-Re-Identification/
 |- configs/
 |  |- baseline.yaml
 |  |- baseline_smoke.yaml
+|  |- dadnet.yaml
+|  |- dadnet_smoke.yaml
 |- datasets/
 |  |- Market-1501-v15.09.15/
 |- artifacts/
@@ -38,30 +58,39 @@ KLTN/
 |  |- train.py
 |  |- evaluate.py
 |  |- extract_reference.py
+|  |- models/reid_model.py
 |- requirements.txt
+|- .gitignore
 |- README.md
 ```
 
-## 3. Setup moi truong
+## 3. Yeu cau he thong
 
-### Cach 1: Dung `venv` (khuyen nghi, don gian)
+- Windows 10/11
+- Python: `3.10` khuyen nghi nhat
+- GPU NVIDIA la tuy chon, khong bat buoc
 
-Mo PowerShell tai thu muc project:
+Ghi chu:
+
+- `PyTorch` tren Windows nen di voi Python `3.10 - 3.12`.
+- `MLflow` yeu cau Python `3.10+`.
+- Moi truong da xac nhan chay duoc tren may nay la `C:\tmp\reid-mlops`.
+
+## 4. Cai dat moi truong
+
+### Cach 1: Dung moi truong da co san
 
 ```powershell
-cd "C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\KLTN"
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+conda activate C:\tmp\reid-mlops
 ```
 
-Neu PowerShell chan script, chay tam:
+Kiem tra nhanh:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('torchvision =', torchvision.__version__); print('cuda =', torch.cuda.is_available())"
 ```
 
-### Cach 2: Dung `conda`
+### Cach 2: Tao moi bang conda
 
 ```powershell
 conda create -n reid-mlops python=3.10 -y
@@ -69,124 +98,127 @@ conda activate reid-mlops
 python -m pip install --upgrade pip
 ```
 
-## 4. Cai thu vien
-
-### Buoc 1: Cai PyTorch
-
-#### Neu chi chay CPU
+Neu chay CPU:
 
 ```powershell
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
-#### Neu chay NVIDIA GPU
-
-Chon lenh dung voi phien ban CUDA cua may tai trang chinh thuc cua PyTorch:
+Neu chay GPU NVIDIA, chon lenh phu hop tu trang PyTorch:
 
 - [PyTorch Start Locally](https://docs.pytorch.org/get-started/locally/)
 
-Vi du voi CUDA 12.4, lenh thuong co dang:
-
-```powershell
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-```
-
-Neu ban khong chac may dang dung CUDA nao, uu tien cai ban `CPU` truoc de project chay on dinh.
-
-### Buoc 2: Cai cac thu vien con lai
+Sau do cai cac thu vien con lai:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## 5. Kiem tra cai dat
+## 5. Dataset
 
-```powershell
-python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('cuda =', torch.cuda.is_available())"
-```
-
-Neu khong bao loi la moi truong da san sang.
-
-## 6. Dataset
-
-Project dang duoc cau hinh de chay voi `Market-1501` tai:
+Config mac dinh hien tai dung:
 
 ```text
 datasets/Market-1501-v15.09.15/
 ```
 
-Trong file [configs/baseline.yaml](C:/Users/Gia%20Lam/Desktop/IUH%20Data/Năm%205%20-%20Kỳ%201/KLTN/configs/baseline.yaml) duong dan mac dinh la:
-
-```yaml
-data:
-  root: datasets/Market-1501-v15.09.15
-  train_dir: datasets/Market-1501-v15.09.15/bounding_box_train
-  query_dir: datasets/Market-1501-v15.09.15/query
-  gallery_dir: datasets/Market-1501-v15.09.15/bounding_box_test
-```
-
-Ban can dam bao trong thu muc dataset co du 3 folder:
+Can dam bao co du:
 
 - `bounding_box_train`
 - `query`
 - `bounding_box_test`
 
-## 7. Cach chay project
+Duong dan dang duoc khai bao trong [baseline.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\baseline.yaml) va [dadnet.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\dadnet.yaml).
 
-### 7.1. Chay smoke test 1 epoch
+## 6. Cach chay
 
-Dung de kiem tra pipeline truoc khi train full:
+### Smoke test baseline
 
 ```powershell
+conda activate C:\tmp\reid-mlops
 python src\train.py --config configs\baseline_smoke.yaml
 ```
 
-### 7.2. Train day du
+### Smoke test DADNet-inspired
 
 ```powershell
+conda activate C:\tmp\reid-mlops
+python src\train.py --config configs\dadnet_smoke.yaml
+```
+
+### Train full baseline
+
+```powershell
+conda activate C:\tmp\reid-mlops
 python src\train.py --config configs\baseline.yaml
 ```
 
-Ket qua se duoc luu tai:
+### Train full DADNet-inspired
 
-- `artifacts/checkpoints/last_model.pth`
-- `artifacts/checkpoints/best_model.pth`
-- `artifacts/metrics/metrics_v1.json`
+```powershell
+conda activate C:\tmp\reid-mlops
+python src\train.py --config configs\dadnet.yaml
+```
 
-### 7.3. Danh gia checkpoint
+### Evaluate checkpoint
+
+Baseline:
 
 ```powershell
 python src\evaluate.py --config configs\baseline.yaml --checkpoint artifacts\checkpoints\best_model.pth
 ```
 
-File ket qua danh gia se duoc luu tai:
+DADNet-inspired:
 
-- `artifacts/metrics/evaluation_latest.json`
+```powershell
+python src\evaluate.py --config configs\dadnet.yaml --checkpoint artifacts\checkpoints\best_model.pth
+```
 
-### 7.4. Trich xuat reference embeddings
+### Extract reference embeddings
+
+Baseline:
 
 ```powershell
 python src\extract_reference.py --config configs\baseline.yaml --checkpoint artifacts\checkpoints\best_model.pth
 ```
 
-Ket qua se duoc luu tai:
+DADNet-inspired:
 
+```powershell
+python src\extract_reference.py --config configs\dadnet.yaml --checkpoint artifacts\checkpoints\best_model.pth
+```
+
+## 7. Ket qua smoke test da kiem tra
+
+Tren may local hien tai:
+
+- Baseline smoke: `rank1=41.86%`, `mAP=23.03%`
+- DADNet ban dau: `rank1=37.44%`, `mAP=20.78%`
+- DADNet sau tinh chinh: `rank1=45.01%`, `mAP=25.65%`
+
+Dieu nay cho thay ban `DADNet-inspired` sau khi tinh chinh da vuot baseline trong smoke test 1 epoch.
+
+Luu y:
+
+- Smoke test chi la moc kiem tra nhanh.
+- Ket luan cuoi cung nen dua tren train full va evaluate cung dieu kien.
+
+## 8. File output
+
+Sau khi train/evaluate, artifact duoc luu trong:
+
+- `artifacts/checkpoints/last_model.pth`
+- `artifacts/checkpoints/best_model.pth`
+- `artifacts/metrics/metrics_v1.json`
+- `artifacts/metrics/evaluation_latest.json`
 - `artifacts/embeddings/reference_embeddings.npy`
 - `artifacts/embeddings/reference_pids.npy`
 - `artifacts/embeddings/reference_camids.npy`
 - `artifacts/embeddings/reference_manifest.json`
 
-## 8. Theo doi MLflow
+## 9. MLflow
 
-File config hien tai dang bat MLflow trong [configs/baseline.yaml](C:/Users/Gia%20Lam/Desktop/IUH%20Data/Năm%205%20-%20Kỳ%201/KLTN/configs/baseline.yaml) voi:
-
-```yaml
-logging:
-  enable_mlflow: true
-  tracking_uri: sqlite:///mlruns/mlflow.db
-```
-
-De mo giao dien MLflow UI:
+De mo giao dien MLflow:
 
 ```powershell
 mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
@@ -196,28 +228,37 @@ Sau do mo trinh duyet tai:
 
 - [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-## 9. Su dung moi truong co san trong repo
+## 10. Git va push code
 
-Neu ban da co moi truong noi bo tai `.conda/reid-mlops`, co the chay truc tiep:
+Repo da co [`.gitignore`](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\.gitignore) de tranh day len:
+
+- `datasets/`
+- `artifacts/`
+- `mlruns/`
+- `.conda/`
+- cac file model nhu `*.pth`, `*.npy`, `*.pt`
+
+Neu ban muon tao repo moi:
 
 ```powershell
-.\.conda\reid-mlops\python.exe src\train.py --config configs\baseline.yaml
+git init
+git add .
+git status
 ```
 
-Hoac:
+Hay kiem tra `git status` truoc khi commit de chac rang dataset va checkpoint khong bi add.
 
-```powershell
-.\.conda\reid-mlops\python.exe src\evaluate.py --config configs\baseline.yaml --checkpoint artifacts\checkpoints\best_model.pth
-```
+## 11. Huong phat trien tiep
 
-## 10. Ghi chu quan trong
+- Train full `dadnet.yaml` va so sanh voi `baseline.yaml`
+- Them ablation:
+  `baseline`
+  `baseline + CFT`
+  `baseline + CFT + DEM`
+- Ghi bang so sanh `Rank-1`, `Rank-5`, `Rank-10`, `mAP`
+- Neu can, tach rieng model moi thanh `dadnet_reid.py`
 
-- Nen chay `baseline_smoke.yaml` truoc khi train full de phat hien loi som.
-- Lan dau train voi `pretrained: true`, `torchvision` co the tai trong so `ResNet50` ve `artifacts/cache/torch`.
-- Neu khong co GPU, code van chay tren CPU nhung se cham hon rat nhieu.
-- Neu muon doi dataset hoac batch size, sua trong file config YAML.
-
-## Nguon tham khao cap nhat
+## Tai lieu tham khao
 
 - [PyTorch Start Locally](https://docs.pytorch.org/get-started/locally/)
 - [MLflow Quickstart](https://mlflow.org/docs/latest/ml/getting-started/quickstart/)

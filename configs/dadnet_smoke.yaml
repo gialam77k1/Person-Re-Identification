@@ -1,8 +1,9 @@
 project_name: person-reid-mlops
-experiment_name: market1501-baseline
+experiment_name: market1501-dadnet
 seed: 42
 device: auto
 num_workers: 2
+
 data:
   root: datasets/Market-1501-v15.09.15
   train_dir: datasets/Market-1501-v15.09.15/bounding_box_train
@@ -13,11 +14,15 @@ data:
   batch_size: 16
   eval_batch_size: 32
   instances_per_identity: 4
+
 model:
-  variant: baseline
+  variant: dadnet
   backbone: resnet50
   pretrained: true
   embedding_dim: 512
+  attention_reduction: 8
+  dem_dropout: 0.0
+
 train:
   epochs: 1
   learning_rate: 0.0003
@@ -25,11 +30,13 @@ train:
   ce_weight: 1.0
   triplet_weight: 1.0
   triplet_margin: 0.3
-  label_smoothing: 0.0
+  label_smoothing: 0.1
   amp: true
+
 logging:
   enable_mlflow: false
   mlruns_dir: mlruns
+
 artifacts:
   root: artifacts
   checkpoints_dir: artifacts/checkpoints

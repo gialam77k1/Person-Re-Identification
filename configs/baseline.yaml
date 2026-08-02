@@ -16,6 +16,7 @@ data:
   instances_per_identity: 4
 
 model:
+  variant: baseline
   backbone: resnet50
   pretrained: true
   embedding_dim: 512

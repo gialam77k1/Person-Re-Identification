@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 from src.common.config import load_config
 from src.common.utils import configure_torch_home, infer_device, load_checkpoint, resolve_path, save_json
 from src.data.dataset import Market1501Dataset, build_transforms
-from src.models.reid_model import ReIDModel
+from src.models.reid_model import build_model_from_config
 from src.reid.evaluation import extract_features
 
 
@@ -41,9 +41,9 @@ def main() -> None:
         pin_memory=True,
     )
 
-    model = ReIDModel(
+    model = build_model_from_config(
+        config,
         num_classes=train_dataset.num_classes,
-        embedding_dim=config["model"]["embedding_dim"],
         pretrained=False,
     ).to(device)
     load_checkpoint(model, args.checkpoint, device)
