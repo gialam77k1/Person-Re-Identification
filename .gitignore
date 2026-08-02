@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+.conda/
+env/
+ENV/
+
+# Local data and experiment outputs
+datasets/
+artifacts/
+mlruns/
+
+# Model and binary artifacts
+*.pth
+*.pt
+*.onnx
+*.npy
+*.npz
+*.pkl
+*.joblib
+
+# Logs and local databases
+*.log
+*.sqlite
+*.db
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

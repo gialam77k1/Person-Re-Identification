@@ -1,0 +1,9 @@
+# PyTorch should be installed first based on your hardware (CPU/CUDA).
+# See README.md for the exact command.
+torch
+torchvision
+mlflow>=3.10,<4.0
+numpy>=2.0,<3.0
+Pillow>=10.0,<12.0
+PyYAML>=6.0,<7.0
+tqdm>=4.66,<5.0
