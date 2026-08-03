@@ -156,8 +156,14 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
 
 
 def run_evaluation(model, query_loader, gallery_loader, device, config):
-    query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device)
-    gallery_features, gallery_pid, gallery_cam, _ = extract_features(model, gallery_loader, device)
+    flip_test = config["evaluation"].get("flip_test", False)
+    query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device, flip_test=flip_test)
+    gallery_features, gallery_pid, gallery_cam, _ = extract_features(
+        model,
+        gallery_loader,
+        device,
+        flip_test=flip_test,
+    )
     distance_matrix = compute_distance_matrix(query_features, gallery_features)
     if config["evaluation"].get("use_rerank", False):
         distance_matrix = re_rank_distance_matrix(
@@ -201,6 +207,20 @@ def build_optimizer(config: dict, model: torch.nn.Module) -> torch.optim.Optimiz
 
 
 def build_scheduler(config: dict, optimizer: torch.optim.Optimizer):
+    scheduler_type = config["train"].get("scheduler_type", "cosine").lower()
+    if scheduler_type == "plateau":
+        return (
+            torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode="max",
+                factor=config["train"].get("lr_reduce_factor", 0.5),
+                patience=config["train"].get("lr_reduce_patience", 5),
+                threshold=config["train"].get("lr_reduce_threshold", 1e-3),
+                min_lr=config["train"].get("min_lr", 1e-6),
+            ),
+            "metric",
+        )
+
     warmup_epochs = config["train"].get("warmup_epochs", 0)
 
     def lr_lambda(epoch: int) -> float:
@@ -215,7 +235,7 @@ def build_scheduler(config: dict, optimizer: torch.optim.Optimizer):
         cosine = 0.5 * (1.0 + torch.cos(torch.tensor(progress * torch.pi)).item())
         return min_lr_scale + (1.0 - min_lr_scale) * cosine
 
-    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda), "epoch"
 
 
 def main() -> None:
@@ -248,7 +268,7 @@ def main() -> None:
         label_smoothing=config["train"]["label_smoothing"],
     )
     optimizer = build_optimizer(config, model)
-    scheduler = build_scheduler(config, optimizer)
+    scheduler, scheduler_step_mode = build_scheduler(config, optimizer)
     scaler = amp.GradScaler(device.type, enabled=use_amp)
 
     mlflow_active = maybe_init_mlflow(config)
@@ -263,23 +283,34 @@ def main() -> None:
                 "learning_rate": config["train"]["learning_rate"],
                 "weight_decay": config["train"]["weight_decay"],
                 "backbone_lr_factor": config["train"].get("backbone_lr_factor", 0.1),
+                "scheduler_type": config["train"].get("scheduler_type", "cosine"),
+                "lr_reduce_factor": config["train"].get("lr_reduce_factor", 0.5),
+                "lr_reduce_patience": config["train"].get("lr_reduce_patience", 5),
+                "min_lr": config["train"].get("min_lr", 1e-6),
                 "warmup_epochs": config["train"].get("warmup_epochs", 0),
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
                 "model_variant": config["model"].get("variant", "baseline"),
+                "flip_test": config["evaluation"].get("flip_test", False),
                 "use_rerank": config["evaluation"].get("use_rerank", False),
                 "device": str(device),
             }
         )
 
     best_map = float("-inf")
+    early_stopping = config["train"].get("early_stopping", {})
+    early_stopping_enabled = bool(early_stopping.get("enabled", False))
+    early_stopping_patience = int(early_stopping.get("patience", 10))
+    early_stopping_min_delta = float(early_stopping.get("min_delta", 0.0))
+    early_stopping_monitor = early_stopping.get("monitor", "mAP")
+    best_monitored_metric = float("-inf")
+    bad_epochs = 0
     history = []
 
     try:
         for epoch in range(1, config["train"]["epochs"] + 1):
             train_metrics = train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, use_amp)
             eval_metrics = run_evaluation(model, query_loader, gallery_loader, device, config)
-            scheduler.step()
 
             epoch_metrics = {
                 "epoch": epoch,
@@ -302,10 +333,29 @@ def main() -> None:
             last_checkpoint = Path(config["artifacts"]["checkpoints_dir"]) / "last_model.pth"
             save_checkpoint(model, optimizer, scheduler, epoch, epoch_metrics, last_checkpoint)
 
+            current_monitored_metric = float(epoch_metrics[early_stopping_monitor])
+            if scheduler_step_mode == "metric":
+                scheduler.step(current_monitored_metric)
+            else:
+                scheduler.step()
+
             if epoch_metrics["mAP"] > best_map:
                 best_map = epoch_metrics["mAP"]
                 best_checkpoint = Path(config["artifacts"]["checkpoints_dir"]) / "best_model.pth"
                 save_checkpoint(model, optimizer, scheduler, epoch, epoch_metrics, best_checkpoint)
+
+            if current_monitored_metric > (best_monitored_metric + early_stopping_min_delta):
+                best_monitored_metric = current_monitored_metric
+                bad_epochs = 0
+            else:
+                bad_epochs += 1
+
+            if early_stopping_enabled and bad_epochs >= early_stopping_patience:
+                print(
+                    f"Early stopping triggered at epoch {epoch} "
+                    f"after {bad_epochs} epochs without improvement in {early_stopping_monitor}."
+                )
+                break
 
         summary = {
             "best_epoch": max(history, key=lambda item: item["mAP"])["epoch"],

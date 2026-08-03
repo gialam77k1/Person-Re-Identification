@@ -63,8 +63,14 @@ def main() -> None:
     ).to(device)
     checkpoint = load_checkpoint(model, args.checkpoint, device)
 
-    query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device)
-    gallery_features, gallery_pid, gallery_cam, _ = extract_features(model, gallery_loader, device)
+    flip_test = config["evaluation"].get("flip_test", False)
+    query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device, flip_test=flip_test)
+    gallery_features, gallery_pid, gallery_cam, _ = extract_features(
+        model,
+        gallery_loader,
+        device,
+        flip_test=flip_test,
+    )
     distance_matrix = compute_distance_matrix(query_features, gallery_features)
     if config["evaluation"].get("use_rerank", False):
         distance_matrix = re_rank_distance_matrix(
@@ -79,6 +85,7 @@ def main() -> None:
     results = {
         "checkpoint": str(Path(args.checkpoint).resolve()),
         "loaded_epoch": checkpoint.get("epoch"),
+        "flip_test": bool(flip_test),
         "use_rerank": bool(config["evaluation"].get("use_rerank", False)),
         "rank1": float(cmc[0]),
         "rank5": float(cmc[4]),

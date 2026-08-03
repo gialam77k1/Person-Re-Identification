@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 
 @torch.no_grad()
-def extract_features(model, loader, device):
+def extract_features(model, loader, device, flip_test: bool = False):
     model.eval()
     features = []
     person_ids = []
@@ -17,6 +17,10 @@ def extract_features(model, loader, device):
     for batch in tqdm(loader, desc="Extract", leave=True, dynamic_ncols=True, disable=False):
         images = batch["image"].to(device)
         _, embeddings = model(images)
+        if flip_test:
+            flipped_images = torch.flip(images, dims=[3])
+            _, flipped_embeddings = model(flipped_images)
+            embeddings = 0.5 * (embeddings + flipped_embeddings)
         embeddings = F.normalize(embeddings, p=2, dim=1)
         features.append(embeddings.cpu())
         person_ids.extend(batch["pid"].tolist())
