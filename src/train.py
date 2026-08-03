@@ -121,7 +121,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
     correct = 0
     total = 0
 
-    progress = tqdm(loader, desc="Train", leave=False)
+    progress = tqdm(loader, desc="Train", leave=True, dynamic_ncols=True, disable=False)
     for batch in progress:
         images = batch["image"].to(device, non_blocking=True)
         labels = batch["pid"].to(device, non_blocking=True)

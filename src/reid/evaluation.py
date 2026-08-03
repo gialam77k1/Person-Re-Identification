@@ -14,7 +14,7 @@ def extract_features(model, loader, device):
     camera_ids = []
     paths = []
 
-    for batch in tqdm(loader, desc="Extract", leave=False):
+    for batch in tqdm(loader, desc="Extract", leave=True, dynamic_ncols=True, disable=False):
         images = batch["image"].to(device)
         _, embeddings = model(images)
         embeddings = F.normalize(embeddings, p=2, dim=1)
