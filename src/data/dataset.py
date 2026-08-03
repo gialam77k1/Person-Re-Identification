@@ -129,22 +129,48 @@ def np_random_choice(items: list[int], size: int) -> list[int]:
     return expanded[:size]
 
 
-def build_transforms(height: int, width: int):
+def build_transforms(
+    height: int,
+    width: int,
+    color_jitter: bool = False,
+    random_erasing: bool = False,
+    random_grayscale_p: float = 0.0,
+):
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225],
     )
 
-    train_transform = transforms.Compose(
+    train_transforms = [
+        transforms.Resize((height, width)),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.Pad(10),
+        transforms.RandomCrop((height, width)),
+    ]
+    if color_jitter:
+        train_transforms.append(
+            transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1, hue=0.05)
+        )
+    if random_grayscale_p > 0.0:
+        train_transforms.append(transforms.RandomGrayscale(p=random_grayscale_p))
+
+    train_transforms.extend(
         [
-            transforms.Resize((height, width)),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.Pad(10),
-            transforms.RandomCrop((height, width)),
             transforms.ToTensor(),
             normalize,
         ]
     )
+    if random_erasing:
+        train_transforms.append(
+            transforms.RandomErasing(
+                p=0.5,
+                scale=(0.02, 0.2),
+                ratio=(0.3, 3.3),
+                value="random",
+            )
+        )
+
+    train_transform = transforms.Compose(train_transforms)
 
     test_transform = transforms.Compose(
         [

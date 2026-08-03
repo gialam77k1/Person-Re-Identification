@@ -26,7 +26,12 @@ from src.common.utils import (
 )
 from src.data.dataset import Market1501Dataset, RandomIdentitySampler, build_transforms
 from src.models.reid_model import build_model_from_config
-from src.reid.evaluation import compute_distance_matrix, evaluate_market1501, extract_features
+from src.reid.evaluation import (
+    compute_distance_matrix,
+    evaluate_market1501,
+    extract_features,
+    re_rank_distance_matrix,
+)
 from src.reid.losses import ReIDLoss
 
 
@@ -68,6 +73,9 @@ def build_loaders(config: dict):
     train_transform, test_transform = build_transforms(
         config["data"]["image_height"],
         config["data"]["image_width"],
+        color_jitter=config["augmentation"].get("color_jitter", False),
+        random_erasing=config["augmentation"].get("random_erasing", False),
+        random_grayscale_p=config["augmentation"].get("random_grayscale_p", 0.0),
     )
 
     train_dataset = Market1501Dataset(config["data"]["train_dir"], transform=train_transform, relabel=True)
@@ -147,10 +155,18 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
     }
 
 
-def run_evaluation(model, query_loader, gallery_loader, device):
+def run_evaluation(model, query_loader, gallery_loader, device, config):
     query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device)
     gallery_features, gallery_pid, gallery_cam, _ = extract_features(model, gallery_loader, device)
     distance_matrix = compute_distance_matrix(query_features, gallery_features)
+    if config["evaluation"].get("use_rerank", False):
+        distance_matrix = re_rank_distance_matrix(
+            query_features,
+            gallery_features,
+            k1=config["evaluation"].get("rerank_k1", 20),
+            k2=config["evaluation"].get("rerank_k2", 6),
+            lambda_value=config["evaluation"].get("rerank_lambda", 0.3),
+        )
     cmc, mean_ap = evaluate_market1501(distance_matrix, query_pid, gallery_pid, query_cam, gallery_cam)
     return {
         "rank1": float(cmc[0]),
@@ -158,6 +174,48 @@ def run_evaluation(model, query_loader, gallery_loader, device):
         "rank10": float(cmc[9]),
         "mAP": mean_ap,
     }
+
+
+def build_optimizer(config: dict, model: torch.nn.Module) -> torch.optim.Optimizer:
+    base_lr = config["train"]["learning_rate"]
+    backbone_lr_factor = config["train"].get("backbone_lr_factor", 0.1)
+    weight_decay = config["train"]["weight_decay"]
+
+    backbone_params = []
+    head_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if "backbone" in name:
+            backbone_params.append(param)
+        else:
+            head_params.append(param)
+
+    return torch.optim.AdamW(
+        [
+            {"params": backbone_params, "lr": base_lr * backbone_lr_factor},
+            {"params": head_params, "lr": base_lr},
+        ],
+        weight_decay=weight_decay,
+    )
+
+
+def build_scheduler(config: dict, optimizer: torch.optim.Optimizer):
+    warmup_epochs = config["train"].get("warmup_epochs", 0)
+
+    def lr_lambda(epoch: int) -> float:
+        total_epochs = max(1, config["train"]["epochs"])
+        if warmup_epochs > 0 and epoch < warmup_epochs:
+            return float(epoch + 1) / float(warmup_epochs)
+
+        cosine_epochs = max(1, total_epochs - warmup_epochs)
+        progress = (epoch - warmup_epochs) / cosine_epochs
+        progress = min(max(progress, 0.0), 1.0)
+        min_lr_scale = config["train"].get("min_lr_scale", 0.01)
+        cosine = 0.5 * (1.0 + torch.cos(torch.tensor(progress * torch.pi)).item())
+        return min_lr_scale + (1.0 - min_lr_scale) * cosine
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
 
 def main() -> None:
@@ -189,12 +247,8 @@ def main() -> None:
         triplet_margin=config["train"]["triplet_margin"],
         label_smoothing=config["train"]["label_smoothing"],
     )
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=config["train"]["learning_rate"],
-        weight_decay=config["train"]["weight_decay"],
-    )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["train"]["epochs"])
+    optimizer = build_optimizer(config, model)
+    scheduler = build_scheduler(config, optimizer)
     scaler = amp.GradScaler(device.type, enabled=use_amp)
 
     mlflow_active = maybe_init_mlflow(config)
@@ -208,9 +262,12 @@ def main() -> None:
                 "epochs": config["train"]["epochs"],
                 "learning_rate": config["train"]["learning_rate"],
                 "weight_decay": config["train"]["weight_decay"],
+                "backbone_lr_factor": config["train"].get("backbone_lr_factor", 0.1),
+                "warmup_epochs": config["train"].get("warmup_epochs", 0),
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
                 "model_variant": config["model"].get("variant", "baseline"),
+                "use_rerank": config["evaluation"].get("use_rerank", False),
                 "device": str(device),
             }
         )
@@ -221,7 +278,7 @@ def main() -> None:
     try:
         for epoch in range(1, config["train"]["epochs"] + 1):
             train_metrics = train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, use_amp)
-            eval_metrics = run_evaluation(model, query_loader, gallery_loader, device)
+            eval_metrics = run_evaluation(model, query_loader, gallery_loader, device, config)
             scheduler.step()
 
             epoch_metrics = {

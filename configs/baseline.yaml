@@ -24,12 +24,26 @@ model:
 train:
   epochs: 30
   learning_rate: 0.0003
+  backbone_lr_factor: 0.1
   weight_decay: 0.0005
   ce_weight: 1.0
   triplet_weight: 1.0
   triplet_margin: 0.3
   label_smoothing: 0.0
+  warmup_epochs: 3
+  min_lr_scale: 0.01
   amp: true
+
+augmentation:
+  color_jitter: false
+  random_erasing: false
+  random_grayscale_p: 0.0
+
+evaluation:
+  use_rerank: false
+  rerank_k1: 20
+  rerank_k2: 6
+  rerank_lambda: 0.3
 
 logging:
   enable_mlflow: true

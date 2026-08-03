@@ -15,7 +15,12 @@ from src.common.config import load_config
 from src.common.utils import configure_torch_home, infer_device, load_checkpoint, save_json
 from src.data.dataset import Market1501Dataset, build_transforms
 from src.models.reid_model import build_model_from_config
-from src.reid.evaluation import compute_distance_matrix, evaluate_market1501, extract_features
+from src.reid.evaluation import (
+    compute_distance_matrix,
+    evaluate_market1501,
+    extract_features,
+    re_rank_distance_matrix,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,11 +66,20 @@ def main() -> None:
     query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device)
     gallery_features, gallery_pid, gallery_cam, _ = extract_features(model, gallery_loader, device)
     distance_matrix = compute_distance_matrix(query_features, gallery_features)
+    if config["evaluation"].get("use_rerank", False):
+        distance_matrix = re_rank_distance_matrix(
+            query_features,
+            gallery_features,
+            k1=config["evaluation"].get("rerank_k1", 20),
+            k2=config["evaluation"].get("rerank_k2", 6),
+            lambda_value=config["evaluation"].get("rerank_lambda", 0.3),
+        )
     cmc, mean_ap = evaluate_market1501(distance_matrix, query_pid, gallery_pid, query_cam, gallery_cam)
 
     results = {
         "checkpoint": str(Path(args.checkpoint).resolve()),
         "loaded_epoch": checkpoint.get("epoch"),
+        "use_rerank": bool(config["evaluation"].get("use_rerank", False)),
         "rank1": float(cmc[0]),
         "rank5": float(cmc[4]),
         "rank10": float(cmc[9]),
