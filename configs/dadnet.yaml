@@ -9,10 +9,10 @@ data:
   train_dir: datasets/Market-1501-v15.09.15/bounding_box_train
   query_dir: datasets/Market-1501-v15.09.15/query
   gallery_dir: datasets/Market-1501-v15.09.15/bounding_box_test
-  image_height: 256
+  image_height: 384
   image_width: 128
-  batch_size: 16
-  eval_batch_size: 32
+  batch_size: 12
+  eval_batch_size: 16
   instances_per_identity: 4
 
 model:
@@ -45,12 +45,12 @@ train:
     monitor: mAP
 
 augmentation:
-  color_jitter: true
+  color_jitter: false
   random_erasing: true
   random_grayscale_p: 0.0
 
 evaluation:
-  use_rerank: true
+  use_rerank: false
   rerank_k1: 20
   rerank_k2: 6
   rerank_lambda: 0.3
