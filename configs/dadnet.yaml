@@ -22,7 +22,7 @@ model:
   embedding_dim: 512
   attention_reduction: 4
   position_attention_reduction: 16
-  use_se_block: false
+  use_se_block: true
   se_reduction: 16
   dem_dropout: 0.0
 
