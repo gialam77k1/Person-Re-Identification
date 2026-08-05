@@ -11,7 +11,7 @@ data:
   gallery_dir: datasets/Market-1501-v15.09.15/bounding_box_test
   image_height: 256
   image_width: 128
-  batch_size: 16
+  batch_size: 24
   eval_batch_size: 32
   instances_per_identity: 4
 
@@ -25,30 +25,25 @@ model:
   use_se_block: false
   se_reduction: 16
   dem_dropout: 0.0
-  use_local_branch: true
-  num_parts: 3
-  local_branch_dropout: 0.0
 
 train:
   epochs: 50
-  learning_rate: 0.00025
+  learning_rate: 0.0003
   backbone_lr_factor: 0.1
   weight_decay: 0.0005
   ce_weight: 1.0
-  triplet_weight: 1.0
-  triplet_margin: 0.35
+  triplet_weight: 1.2
+  triplet_margin: 0.4
   center_loss_weight: 0.0
   center_loss_lr: 0.25
-  label_smoothing: 0.05
-  scheduler_type: plateau
-  lr_reduce_factor: 0.5
-  lr_reduce_patience: 5
-  lr_reduce_threshold: 0.001
-  min_lr: 0.000001
+  label_smoothing: 0.02
+  scheduler_type: cosine
+  warmup_epochs: 5
+  min_lr_scale: 0.02
   amp: true
   early_stopping:
     enabled: true
-    patience: 10
+    patience: 12
     min_delta: 0.001
     monitor: mAP
 
