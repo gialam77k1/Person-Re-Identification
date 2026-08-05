@@ -20,8 +20,14 @@ model:
   backbone: resnet50
   pretrained: true
   embedding_dim: 512
-  attention_reduction: 8
+  attention_reduction: 4
+  position_attention_reduction: 16
+  use_se_block: false
+  se_reduction: 16
   dem_dropout: 0.0
+  use_local_branch: true
+  num_parts: 3
+  local_branch_dropout: 0.0
 
 train:
   epochs: 50
@@ -31,6 +37,8 @@ train:
   ce_weight: 1.0
   triplet_weight: 1.0
   triplet_margin: 0.35
+  center_loss_weight: 0.0
+  center_loss_lr: 0.25
   label_smoothing: 0.05
   scheduler_type: plateau
   lr_reduce_factor: 0.5
@@ -54,6 +62,7 @@ evaluation:
   rerank_k1: 20
   rerank_k2: 6
   rerank_lambda: 0.3
+  flip_test: false
 
 logging:
   enable_mlflow: true

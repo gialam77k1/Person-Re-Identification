@@ -30,8 +30,11 @@ Input
 Input
   -> ResNet50 Backbone
   -> CFT Attention Module
+  -> Position-Aware Attention
+  -> Optional Local-Part Branch (3 stripes)
   -> Global Average Pooling
   -> DEM (Distinguishability Enhancement Module)
+  -> Global-Local Fusion
   -> BatchNorm
   -> Classifier
 ```
@@ -40,6 +43,7 @@ Luu y:
 
 - Ban `DADNet` trong repo nay la phien ban `inspired by` so do kien truc, khong phai ban tai hien full paper 100%.
 - Muc tieu la giu pipeline gon, de train, de so sanh voi baseline trong do an/capstone.
+- Ban hien tai uu tien giam nham lan giua quan ao, tui xach, ba lo bang cach bo sung `local-part branch` o head thay vi nhan them attention qua sau.
 
 ## 2. Cau truc du an
 

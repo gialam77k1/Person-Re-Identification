@@ -76,6 +76,53 @@ class CFTAttentionModule(nn.Module):
         return self.refine(attended) + features
 
 
+class PositionAwareAttentionModule(nn.Module):
+    def __init__(self, channels: int = 2048, reduction: int = 32) -> None:
+        super().__init__()
+        reduced_channels = max(32, channels // reduction)
+        self.shared_projection = nn.Sequential(
+            nn.Conv2d(channels, reduced_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(reduced_channels),
+            nn.ReLU(inplace=True),
+        )
+        self.height_gate = nn.Conv2d(reduced_channels, channels, kernel_size=1, bias=False)
+        self.width_gate = nn.Conv2d(reduced_channels, channels, kernel_size=1, bias=False)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        height_context = features.mean(dim=3, keepdim=True)
+        width_context = features.mean(dim=2, keepdim=True).permute(0, 1, 3, 2)
+
+        combined = torch.cat([height_context, width_context], dim=2)
+        projected = self.shared_projection(combined)
+        height_tokens, width_tokens = torch.split(
+            projected,
+            [height_context.size(2), width_context.size(2)],
+            dim=2,
+        )
+        width_tokens = width_tokens.permute(0, 1, 3, 2)
+
+        height_attention = torch.sigmoid(self.height_gate(height_tokens))
+        width_attention = torch.sigmoid(self.width_gate(width_tokens))
+        return features * height_attention * width_attention + features
+
+
+class SEBlock(nn.Module):
+    def __init__(self, channels: int = 2048, reduction: int = 16) -> None:
+        super().__init__()
+        reduced_channels = max(32, channels // reduction)
+        self.squeeze = nn.AdaptiveAvgPool2d(1)
+        self.excitation = nn.Sequential(
+            nn.Conv2d(channels, reduced_channels, kernel_size=1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(reduced_channels, channels, kernel_size=1, bias=False),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        scale = self.excitation(self.squeeze(features))
+        return features * scale + features
+
+
 class DistinguishabilityEnhancementModule(nn.Module):
     def __init__(self, input_dim: int = 2048, embedding_dim: int = 512, dropout: float = 0.1) -> None:
         super().__init__()
@@ -102,6 +149,51 @@ class DistinguishabilityEnhancementModule(nn.Module):
         return self.bn(enhanced)
 
 
+class LocalPartBranch(nn.Module):
+    def __init__(
+        self,
+        channels: int = 2048,
+        embedding_dim: int = 512,
+        num_parts: int = 3,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.num_parts = max(2, num_parts)
+        self.pool = nn.AdaptiveAvgPool2d((self.num_parts, 1))
+        self.part_projection = nn.Sequential(
+            nn.Linear(channels, embedding_dim),
+            nn.BatchNorm1d(embedding_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+        )
+        self.fusion = nn.Sequential(
+            nn.Linear(embedding_dim * self.num_parts, embedding_dim),
+            nn.BatchNorm1d(embedding_dim),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        pooled_parts = self.pool(features).flatten(3).squeeze(-1)
+        projected_parts = []
+        for index in range(self.num_parts):
+            projected_parts.append(self.part_projection(pooled_parts[:, :, index]))
+        return self.fusion(torch.cat(projected_parts, dim=1))
+
+
+class GlobalLocalFusion(nn.Module):
+    def __init__(self, embedding_dim: int = 512, dropout: float = 0.0) -> None:
+        super().__init__()
+        self.projection = nn.Sequential(
+            nn.Linear(embedding_dim * 2, embedding_dim),
+            nn.BatchNorm1d(embedding_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, global_embedding: torch.Tensor, local_embedding: torch.Tensor) -> torch.Tensor:
+        return self.projection(torch.cat([global_embedding, local_embedding], dim=1))
+
+
 class DADNetReIDModel(nn.Module):
     def __init__(
         self,
@@ -109,26 +201,57 @@ class DADNetReIDModel(nn.Module):
         embedding_dim: int = 512,
         pretrained: bool = True,
         attention_reduction: int = 16,
+        position_attention_reduction: int = 32,
+        use_se_block: bool = False,
+        se_reduction: int = 16,
         dem_dropout: float = 0.1,
+        use_local_branch: bool = False,
+        num_parts: int = 3,
+        local_branch_dropout: float = 0.0,
     ) -> None:
         super().__init__()
 
         backbone = build_resnet50_backbone(pretrained)
         self.backbone = nn.Sequential(*list(backbone.children())[:-2])
         self.cft = CFTAttentionModule(channels=2048, reduction=attention_reduction)
+        self.position_attention = PositionAwareAttentionModule(
+            channels=2048,
+            reduction=position_attention_reduction,
+        )
+        self.se_block = SEBlock(channels=2048, reduction=se_reduction) if use_se_block else nn.Identity()
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.dem = DistinguishabilityEnhancementModule(
             input_dim=2048,
             embedding_dim=embedding_dim,
             dropout=dem_dropout,
         )
+        self.local_branch = (
+            LocalPartBranch(
+                channels=2048,
+                embedding_dim=embedding_dim,
+                num_parts=num_parts,
+                dropout=local_branch_dropout,
+            )
+            if use_local_branch
+            else None
+        )
+        self.global_local_fusion = (
+            GlobalLocalFusion(embedding_dim=embedding_dim, dropout=local_branch_dropout)
+            if use_local_branch
+            else nn.Identity()
+        )
         self.classifier = nn.Linear(embedding_dim, num_classes)
 
     def forward(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         features = self.backbone(inputs)
         attended = self.cft(features)
+        attended = self.position_attention(attended)
+        attended = self.se_block(attended)
         pooled = torch.flatten(self.pool(attended), 1)
         embedding = self.dem(pooled)
+        if self.local_branch is not None:
+            local_embedding = self.local_branch(attended)
+            embedding = self.global_local_fusion(embedding, local_embedding)
         logits = self.classifier(embedding)
         return logits, embedding
 
@@ -152,7 +275,13 @@ def build_model_from_config(config: dict[str, Any], num_classes: int, pretrained
             embedding_dim=model_config["embedding_dim"],
             pretrained=pretrained,
             attention_reduction=model_config.get("attention_reduction", 16),
+            position_attention_reduction=model_config.get("position_attention_reduction", 32),
+            use_se_block=model_config.get("use_se_block", False),
+            se_reduction=model_config.get("se_reduction", 16),
             dem_dropout=model_config.get("dem_dropout", 0.1),
+            use_local_branch=model_config.get("use_local_branch", False),
+            num_parts=model_config.get("num_parts", 3),
+            local_branch_dropout=model_config.get("local_branch_dropout", 0.0),
         )
 
     raise ValueError(f"Unsupported model variant: {variant}")
