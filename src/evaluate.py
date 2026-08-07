@@ -71,27 +71,71 @@ def main() -> None:
         device,
         flip_test=flip_test,
     )
-    distance_matrix = compute_distance_matrix(query_features, gallery_features)
-    if config["evaluation"].get("use_rerank", False):
-        distance_matrix = re_rank_distance_matrix(
-            query_features,
-            gallery_features,
-            k1=config["evaluation"].get("rerank_k1", 20),
-            k2=config["evaluation"].get("rerank_k2", 6),
-            lambda_value=config["evaluation"].get("rerank_lambda", 0.3),
-        )
-    cmc, mean_ap = evaluate_market1501(distance_matrix, query_pid, gallery_pid, query_cam, gallery_cam)
+    base_distance_matrix = compute_distance_matrix(query_features, gallery_features)
+    base_cmc, base_mean_ap, base_mean_inp, valid_queries = evaluate_market1501(
+        base_distance_matrix,
+        query_pid,
+        gallery_pid,
+        query_cam,
+        gallery_cam,
+    )
 
     results = {
         "checkpoint": str(Path(args.checkpoint).resolve()),
         "loaded_epoch": checkpoint.get("epoch"),
         "flip_test": bool(flip_test),
         "use_rerank": bool(config["evaluation"].get("use_rerank", False)),
-        "rank1": float(cmc[0]),
-        "rank5": float(cmc[4]),
-        "rank10": float(cmc[9]),
-        "mAP": float(mean_ap),
+        "valid_queries": int(valid_queries),
+        "rank1_base": float(base_cmc[0]),
+        "rank5_base": float(base_cmc[4]),
+        "rank10_base": float(base_cmc[9]),
+        "rank20_base": float(base_cmc[19]),
+        "mAP_base": float(base_mean_ap),
+        "mINP_base": float(base_mean_inp),
     }
+
+    if config["evaluation"].get("use_rerank", False):
+        rerank_distance_matrix = re_rank_distance_matrix(
+            query_features,
+            gallery_features,
+            k1=config["evaluation"].get("rerank_k1", 20),
+            k2=config["evaluation"].get("rerank_k2", 6),
+            lambda_value=config["evaluation"].get("rerank_lambda", 0.3),
+        )
+        rerank_cmc, rerank_mean_ap, rerank_mean_inp, _ = evaluate_market1501(
+            rerank_distance_matrix,
+            query_pid,
+            gallery_pid,
+            query_cam,
+            gallery_cam,
+        )
+        results.update(
+            {
+                "rank1_rerank": float(rerank_cmc[0]),
+                "rank5_rerank": float(rerank_cmc[4]),
+                "rank10_rerank": float(rerank_cmc[9]),
+                "rank20_rerank": float(rerank_cmc[19]),
+                "mAP_rerank": float(rerank_mean_ap),
+                "mINP_rerank": float(rerank_mean_inp),
+                "rank1": float(rerank_cmc[0]),
+                "rank5": float(rerank_cmc[4]),
+                "rank10": float(rerank_cmc[9]),
+                "rank20": float(rerank_cmc[19]),
+                "mAP": float(rerank_mean_ap),
+                "mINP": float(rerank_mean_inp),
+            }
+        )
+    else:
+        results.update(
+            {
+                "rank1": float(base_cmc[0]),
+                "rank5": float(base_cmc[4]),
+                "rank10": float(base_cmc[9]),
+                "rank20": float(base_cmc[19]),
+                "mAP": float(base_mean_ap),
+                "mINP": float(base_mean_inp),
+            }
+        )
     print(results)
 
     output_path = Path(config["artifacts"]["metrics_dir"]) / "evaluation_latest.json"

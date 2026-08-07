@@ -118,6 +118,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
     running_loss = 0.0
     running_ce = 0.0
     running_triplet = 0.0
+    running_center = 0.0
     correct = 0
     total = 0
 
@@ -129,7 +130,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
         optimizer.zero_grad(set_to_none=True)
         with amp.autocast(device_type=device.type, enabled=use_amp):
             logits, embeddings = model(images)
-            loss, ce_loss, triplet_loss = criterion(logits, embeddings, labels)
+            loss, ce_loss, triplet_loss, center_loss = criterion(logits, embeddings, labels)
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -138,6 +139,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
         running_loss += float(loss.item())
         running_ce += float(ce_loss.item())
         running_triplet += float(triplet_loss.item())
+        running_center += float(center_loss.item())
         predictions = logits.argmax(dim=1)
         correct += int((predictions == labels).sum().item())
         total += labels.size(0)
@@ -151,6 +153,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
         "train_loss": running_loss / len(loader),
         "train_ce_loss": running_ce / len(loader),
         "train_triplet_loss": running_triplet / len(loader),
+        "train_center_loss": running_center / len(loader),
         "train_accuracy": correct / max(1, total),
     }
 
@@ -164,25 +167,60 @@ def run_evaluation(model, query_loader, gallery_loader, device, config):
         device,
         flip_test=flip_test,
     )
-    distance_matrix = compute_distance_matrix(query_features, gallery_features)
+    base_distance_matrix = compute_distance_matrix(query_features, gallery_features)
+    cmc, mean_ap, mean_inp, valid_queries = evaluate_market1501(
+        base_distance_matrix,
+        query_pid,
+        gallery_pid,
+        query_cam,
+        gallery_cam,
+    )
+    results = {
+        "rank1": float(cmc[0]),
+        "rank5": float(cmc[4]),
+        "rank10": float(cmc[9]),
+        "rank20": float(cmc[19]),
+        "mAP": mean_ap,
+        "mINP": mean_inp,
+        "valid_queries": int(valid_queries),
+    }
+
     if config["evaluation"].get("use_rerank", False):
-        distance_matrix = re_rank_distance_matrix(
+        rerank_distance_matrix = re_rank_distance_matrix(
             query_features,
             gallery_features,
             k1=config["evaluation"].get("rerank_k1", 20),
             k2=config["evaluation"].get("rerank_k2", 6),
             lambda_value=config["evaluation"].get("rerank_lambda", 0.3),
         )
-    cmc, mean_ap = evaluate_market1501(distance_matrix, query_pid, gallery_pid, query_cam, gallery_cam)
-    return {
-        "rank1": float(cmc[0]),
-        "rank5": float(cmc[4]),
-        "rank10": float(cmc[9]),
-        "mAP": mean_ap,
-    }
+        rerank_cmc, rerank_mean_ap, rerank_mean_inp, _ = evaluate_market1501(
+            rerank_distance_matrix,
+            query_pid,
+            gallery_pid,
+            query_cam,
+            gallery_cam,
+        )
+        results.update(
+            {
+                "rank1_rerank": float(rerank_cmc[0]),
+                "rank5_rerank": float(rerank_cmc[4]),
+                "rank10_rerank": float(rerank_cmc[9]),
+                "rank20_rerank": float(rerank_cmc[19]),
+                "mAP_rerank": rerank_mean_ap,
+                "mINP_rerank": rerank_mean_inp,
+            }
+        )
+        results["rank1"] = results["rank1_rerank"]
+        results["rank5"] = results["rank5_rerank"]
+        results["rank10"] = results["rank10_rerank"]
+        results["rank20"] = results["rank20_rerank"]
+        results["mAP"] = results["mAP_rerank"]
+        results["mINP"] = results["mINP_rerank"]
+
+    return results
 
 
-def build_optimizer(config: dict, model: torch.nn.Module) -> torch.optim.Optimizer:
+def build_optimizer(config: dict, model: torch.nn.Module, criterion: ReIDLoss) -> torch.optim.Optimizer:
     base_lr = config["train"]["learning_rate"]
     backbone_lr_factor = config["train"].get("backbone_lr_factor", 0.1)
     weight_decay = config["train"]["weight_decay"]
@@ -197,13 +235,20 @@ def build_optimizer(config: dict, model: torch.nn.Module) -> torch.optim.Optimiz
         else:
             head_params.append(param)
 
-    return torch.optim.AdamW(
-        [
-            {"params": backbone_params, "lr": base_lr * backbone_lr_factor},
-            {"params": head_params, "lr": base_lr},
-        ],
-        weight_decay=weight_decay,
-    )
+    parameter_groups = [
+        {"params": backbone_params, "lr": base_lr * backbone_lr_factor},
+        {"params": head_params, "lr": base_lr},
+    ]
+    if criterion.center is not None:
+        parameter_groups.append(
+            {
+                "params": criterion.center.parameters(),
+                "lr": config["train"].get("center_loss_lr", 0.25),
+                "weight_decay": 0.0,
+            }
+        )
+
+    return torch.optim.AdamW(parameter_groups, weight_decay=weight_decay)
 
 
 def build_scheduler(config: dict, optimizer: torch.optim.Optimizer):
@@ -262,12 +307,15 @@ def main() -> None:
     ).to(device)
 
     criterion = ReIDLoss(
+        num_classes=train_dataset.num_classes,
+        embedding_dim=config["model"]["embedding_dim"],
         ce_weight=config["train"]["ce_weight"],
         triplet_weight=config["train"]["triplet_weight"],
         triplet_margin=config["train"]["triplet_margin"],
         label_smoothing=config["train"]["label_smoothing"],
+        center_loss_weight=config["train"].get("center_loss_weight", 0.0),
     )
-    optimizer = build_optimizer(config, model)
+    optimizer = build_optimizer(config, model, criterion)
     scheduler, scheduler_step_mode = build_scheduler(config, optimizer)
     scaler = amp.GradScaler(device.type, enabled=use_amp)
 
@@ -283,6 +331,8 @@ def main() -> None:
                 "learning_rate": config["train"]["learning_rate"],
                 "weight_decay": config["train"]["weight_decay"],
                 "backbone_lr_factor": config["train"].get("backbone_lr_factor", 0.1),
+                "center_loss_weight": config["train"].get("center_loss_weight", 0.0),
+                "center_loss_lr": config["train"].get("center_loss_lr", 0.25),
                 "scheduler_type": config["train"].get("scheduler_type", "cosine"),
                 "lr_reduce_factor": config["train"].get("lr_reduce_factor", 0.5),
                 "lr_reduce_patience": config["train"].get("lr_reduce_patience", 5),
@@ -324,7 +374,8 @@ def main() -> None:
                 f"Epoch {epoch}/{config['train']['epochs']} "
                 f"| loss={epoch_metrics['train_loss']:.4f} "
                 f"| rank1={epoch_metrics['rank1'] * 100:.2f}% "
-                f"| mAP={epoch_metrics['mAP'] * 100:.2f}%"
+                f"| mAP={epoch_metrics['mAP'] * 100:.2f}% "
+                f"| mINP={epoch_metrics['mINP'] * 100:.2f}%"
             )
 
             if mlflow_active:
@@ -362,7 +413,9 @@ def main() -> None:
             "best_rank1": max(history, key=lambda item: item["mAP"])["rank1"],
             "best_rank5": max(history, key=lambda item: item["mAP"])["rank5"],
             "best_rank10": max(history, key=lambda item: item["mAP"])["rank10"],
+            "best_rank20": max(history, key=lambda item: item["mAP"])["rank20"],
             "best_mAP": max(history, key=lambda item: item["mAP"])["mAP"],
+            "best_mINP": max(history, key=lambda item: item["mAP"])["mINP"],
             "history": history,
         }
         metrics_path = Path(config["artifacts"]["metrics_dir"]) / "metrics_v1.json"

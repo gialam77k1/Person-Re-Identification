@@ -100,12 +100,13 @@ def evaluate_market1501(
     query_cam: np.ndarray,
     gallery_cam: np.ndarray,
     max_rank: int = 50,
-) -> tuple[np.ndarray, float]:
+) -> tuple[np.ndarray, float, float, int]:
     indices = np.argsort(distance_matrix, axis=1)
     matches = (gallery_pid[indices] == query_pid[:, np.newaxis]).astype(np.int32)
 
     all_cmc = []
     all_ap = []
+    all_inp = []
 
     for query_idx in range(distance_matrix.shape[0]):
         q_pid = query_pid[query_idx]
@@ -128,9 +129,14 @@ def evaluate_market1501(
         ap = (precision * raw_cmc).sum() / num_rel
         all_ap.append(ap)
 
+        hardest_match_rank = np.flatnonzero(raw_cmc)[-1] + 1
+        inp = num_rel / hardest_match_rank
+        all_inp.append(float(inp))
+
     if not all_cmc:
         raise RuntimeError("No valid query samples were found during evaluation.")
 
     cmc = np.asarray(all_cmc, dtype=np.float32).mean(axis=0)
     mean_ap = float(np.mean(all_ap))
-    return cmc, mean_ap
+    mean_inp = float(np.mean(all_inp))
+    return cmc, mean_ap, mean_inp, len(all_cmc)
