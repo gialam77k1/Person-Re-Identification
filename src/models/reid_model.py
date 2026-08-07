@@ -149,41 +149,26 @@ class DistinguishabilityEnhancementModule(nn.Module):
         return self.bn(enhanced)
 
 
-class LocalPartBranch(nn.Module):
-    def __init__(
-        self,
-        channels: int = 2048,
-        embedding_dim: int = 512,
-        num_parts: int = 3,
-        dropout: float = 0.0,
-    ) -> None:
+class LocalStripeBranch(nn.Module):
+    def __init__(self, channels: int = 2048, embedding_dim: int = 512, num_stripes: int = 3) -> None:
         super().__init__()
-        self.num_parts = max(2, num_parts)
-        self.pool = nn.AdaptiveAvgPool2d((self.num_parts, 1))
-        self.part_projection = nn.Sequential(
-            nn.Linear(channels, embedding_dim),
-            nn.BatchNorm1d(embedding_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
-        )
-        self.fusion = nn.Sequential(
-            nn.Linear(embedding_dim * self.num_parts, embedding_dim),
+        self.num_stripes = max(2, num_stripes)
+        self.pool = nn.AdaptiveAvgPool2d((self.num_stripes, 1))
+        self.projection = nn.Sequential(
+            nn.Linear(channels * self.num_stripes, embedding_dim),
             nn.BatchNorm1d(embedding_dim),
             nn.ReLU(inplace=True),
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        pooled_parts = self.pool(features).flatten(3).squeeze(-1)
-        projected_parts = []
-        for index in range(self.num_parts):
-            projected_parts.append(self.part_projection(pooled_parts[:, :, index]))
-        return self.fusion(torch.cat(projected_parts, dim=1))
+        pooled = self.pool(features).flatten(1)
+        return self.projection(pooled)
 
 
 class GlobalLocalFusion(nn.Module):
     def __init__(self, embedding_dim: int = 512, dropout: float = 0.0) -> None:
         super().__init__()
-        self.projection = nn.Sequential(
+        self.fusion = nn.Sequential(
             nn.Linear(embedding_dim * 2, embedding_dim),
             nn.BatchNorm1d(embedding_dim),
             nn.ReLU(inplace=True),
@@ -191,7 +176,7 @@ class GlobalLocalFusion(nn.Module):
         )
 
     def forward(self, global_embedding: torch.Tensor, local_embedding: torch.Tensor) -> torch.Tensor:
-        return self.projection(torch.cat([global_embedding, local_embedding], dim=1))
+        return self.fusion(torch.cat([global_embedding, local_embedding], dim=1))
 
 
 class DADNetReIDModel(nn.Module):
@@ -206,7 +191,7 @@ class DADNetReIDModel(nn.Module):
         se_reduction: int = 16,
         dem_dropout: float = 0.1,
         use_local_branch: bool = False,
-        num_parts: int = 3,
+        num_local_stripes: int = 3,
         local_branch_dropout: float = 0.0,
     ) -> None:
         super().__init__()
@@ -226,11 +211,10 @@ class DADNetReIDModel(nn.Module):
             dropout=dem_dropout,
         )
         self.local_branch = (
-            LocalPartBranch(
+            LocalStripeBranch(
                 channels=2048,
                 embedding_dim=embedding_dim,
-                num_parts=num_parts,
-                dropout=local_branch_dropout,
+                num_stripes=num_local_stripes,
             )
             if use_local_branch
             else None
@@ -280,7 +264,7 @@ def build_model_from_config(config: dict[str, Any], num_classes: int, pretrained
             se_reduction=model_config.get("se_reduction", 16),
             dem_dropout=model_config.get("dem_dropout", 0.1),
             use_local_branch=model_config.get("use_local_branch", False),
-            num_parts=model_config.get("num_parts", 3),
+            num_local_stripes=model_config.get("num_local_stripes", 3),
             local_branch_dropout=model_config.get("local_branch_dropout", 0.0),
         )
 

@@ -73,8 +73,11 @@ class RandomIdentitySampler(Sampler[int]):
         self.identities_per_batch = batch_size // instances_per_identity
 
         self.index_dic: dict[int, list[int]] = defaultdict(list)
+        self.index_cam_dic: dict[int, dict[int, list[int]]] = defaultdict(lambda: defaultdict(list))
         for index, label in enumerate(dataset.labels):
             self.index_dic[label].append(index)
+            camid = int(dataset.samples[index]["camid"])
+            self.index_cam_dic[label][camid].append(index)
 
         self.pids = list(self.index_dic.keys())
         self.length = self._compute_length()
@@ -94,10 +97,7 @@ class RandomIdentitySampler(Sampler[int]):
         pid_to_batches: dict[int, list[list[int]]] = {}
 
         for pid in self.pids:
-            idxs = list(self.index_dic[pid])
-            if len(idxs) < self.instances_per_identity:
-                idxs = np_random_choice(idxs, self.instances_per_identity)
-            random.shuffle(idxs)
+            idxs = self._sample_pid_indices(pid)
             chunked = [
                 idxs[i : i + self.instances_per_identity]
                 for i in range(0, len(idxs), self.instances_per_identity)
@@ -119,6 +119,46 @@ class RandomIdentitySampler(Sampler[int]):
     def __len__(self) -> int:
         return self.length
 
+    def _sample_pid_indices(self, pid: int) -> list[int]:
+        idxs = list(self.index_dic[pid])
+        if len(idxs) < self.instances_per_identity:
+            return np_random_choice(idxs, self.instances_per_identity)
+
+        camera_to_indices = {camid: list(indices) for camid, indices in self.index_cam_dic[pid].items()}
+        for indices in camera_to_indices.values():
+            random.shuffle(indices)
+
+        sampled_indices: list[int] = []
+        while True:
+            available_cams = [camid for camid, indices in camera_to_indices.items() if indices]
+            if not available_cams:
+                break
+
+            random.shuffle(available_cams)
+            group: list[int] = []
+            for camid in available_cams:
+                if len(group) >= self.instances_per_identity:
+                    break
+                group.append(camera_to_indices[camid].pop())
+
+            if len(group) < self.instances_per_identity:
+                remaining = [index for indices in camera_to_indices.values() for index in indices]
+                while len(group) < self.instances_per_identity and remaining:
+                    random.shuffle(remaining)
+                    picked = remaining.pop()
+                    group.append(picked)
+                    for indices in camera_to_indices.values():
+                        if picked in indices:
+                            indices.remove(picked)
+                            break
+
+            if len(group) == self.instances_per_identity:
+                sampled_indices.extend(group)
+            else:
+                break
+
+        return sampled_indices if sampled_indices else np_random_choice(idxs, self.instances_per_identity)
+
 
 def np_random_choice(items: list[int], size: int) -> list[int]:
     if not items:
@@ -135,6 +175,8 @@ def build_transforms(
     color_jitter: bool = False,
     random_erasing: bool = False,
     random_grayscale_p: float = 0.0,
+    random_affine_degrees: float = 0.0,
+    random_occlusion_p: float = 0.0,
 ):
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
@@ -151,6 +193,20 @@ def build_transforms(
         train_transforms.append(
             transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1, hue=0.05)
         )
+    if random_affine_degrees > 0.0:
+        train_transforms.append(
+            transforms.RandomApply(
+                [
+                    transforms.RandomAffine(
+                        degrees=random_affine_degrees,
+                        translate=(0.03, 0.03),
+                        scale=(0.95, 1.05),
+                        shear=5,
+                    )
+                ],
+                p=0.4,
+            )
+        )
     if random_grayscale_p > 0.0:
         train_transforms.append(transforms.RandomGrayscale(p=random_grayscale_p))
 
@@ -166,6 +222,15 @@ def build_transforms(
                 p=0.5,
                 scale=(0.02, 0.2),
                 ratio=(0.3, 3.3),
+                value="random",
+            )
+        )
+    if random_occlusion_p > 0.0:
+        train_transforms.append(
+            transforms.RandomErasing(
+                p=random_occlusion_p,
+                scale=(0.12, 0.28),
+                ratio=(0.8, 1.8),
                 value="random",
             )
         )
