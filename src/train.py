@@ -374,9 +374,31 @@ def main() -> None:
                 f"Epoch {epoch}/{config['train']['epochs']} "
                 f"| loss={epoch_metrics['train_loss']:.4f} "
                 f"| rank1={epoch_metrics['rank1'] * 100:.2f}% "
+                f"| rank5={epoch_metrics['rank5'] * 100:.2f}% "
+                f"| rank10={epoch_metrics['rank10'] * 100:.2f}% "
+                f"| rank20={epoch_metrics['rank20'] * 100:.2f}% "
                 f"| mAP={epoch_metrics['mAP'] * 100:.2f}% "
                 f"| mINP={epoch_metrics['mINP'] * 100:.2f}%"
             )
+            if config["evaluation"].get("use_rerank", False):
+                print(
+                    f"  Base metrics    "
+                    f"| rank1={epoch_metrics['rank1_base'] * 100:.2f}% "
+                    f"| rank5={epoch_metrics['rank5_base'] * 100:.2f}% "
+                    f"| rank10={epoch_metrics['rank10_base'] * 100:.2f}% "
+                    f"| rank20={epoch_metrics['rank20_base'] * 100:.2f}% "
+                    f"| mAP={epoch_metrics['mAP_base'] * 100:.2f}% "
+                    f"| mINP={epoch_metrics['mINP_base'] * 100:.2f}%"
+                )
+                print(
+                    f"  Rerank metrics  "
+                    f"| rank1={epoch_metrics['rank1_rerank'] * 100:.2f}% "
+                    f"| rank5={epoch_metrics['rank5_rerank'] * 100:.2f}% "
+                    f"| rank10={epoch_metrics['rank10_rerank'] * 100:.2f}% "
+                    f"| rank20={epoch_metrics['rank20_rerank'] * 100:.2f}% "
+                    f"| mAP={epoch_metrics['mAP_rerank'] * 100:.2f}% "
+                    f"| mINP={epoch_metrics['mINP_rerank'] * 100:.2f}%"
+                )
 
             if mlflow_active:
                 mlflow.log_metrics(epoch_metrics, step=epoch)
