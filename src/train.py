@@ -183,6 +183,12 @@ def run_evaluation(model, query_loader, gallery_loader, device, config):
         "mAP": mean_ap,
         "mINP": mean_inp,
         "valid_queries": int(valid_queries),
+        "rank1_base": float(cmc[0]),
+        "rank5_base": float(cmc[4]),
+        "rank10_base": float(cmc[9]),
+        "rank20_base": float(cmc[19]),
+        "mAP_base": mean_ap,
+        "mINP_base": mean_inp,
     }
 
     if config["evaluation"].get("use_rerank", False):
