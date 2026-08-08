@@ -5,7 +5,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torchvision.models import ResNet50_Weights, resnet50
+from torchvision.models import ResNet50_Weights, ViT_B_16_Weights, resnet50, vit_b_16
 
 
 def build_resnet50_backbone(pretrained: bool) -> nn.Module:
@@ -15,6 +15,17 @@ def build_resnet50_backbone(pretrained: bool) -> nn.Module:
     except Exception as exc:
         warnings.warn(f"Falling back to random-initialized ResNet50: {exc}")
         backbone = resnet50(weights=None)
+    return backbone
+
+
+def build_vit_b16_backbone(pretrained: bool) -> nn.Module:
+    weights = ViT_B_16_Weights.IMAGENET1K_V1 if pretrained else None
+    try:
+        backbone = vit_b_16(weights=weights)
+    except Exception as exc:
+        warnings.warn(f"Falling back to random-initialized ViT-B/16: {exc}")
+        backbone = vit_b_16(weights=None)
+    backbone.heads = nn.Identity()
     return backbone
 
 
@@ -35,6 +46,33 @@ class ReIDModel(nn.Module):
             nn.Linear(2048, embedding_dim),
             nn.BatchNorm1d(embedding_dim),
             nn.ReLU(inplace=True),
+        )
+        self.classifier = nn.Linear(embedding_dim, num_classes)
+
+    def forward(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        features = self.backbone(inputs)
+        embedding = self.embedding(features)
+        logits = self.classifier(embedding)
+        return logits, embedding
+
+
+class ViTReIDModel(nn.Module):
+    def __init__(
+        self,
+        num_classes: int,
+        embedding_dim: int = 512,
+        pretrained: bool = True,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+
+        self.backbone = build_vit_b16_backbone(pretrained)
+        vit_feature_dim = 768
+        self.embedding = nn.Sequential(
+            nn.Linear(vit_feature_dim, embedding_dim),
+            nn.BatchNorm1d(embedding_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
         )
         self.classifier = nn.Linear(embedding_dim, num_classes)
 
@@ -266,6 +304,14 @@ def build_model_from_config(config: dict[str, Any], num_classes: int, pretrained
             use_local_branch=model_config.get("use_local_branch", False),
             num_local_stripes=model_config.get("num_local_stripes", 3),
             local_branch_dropout=model_config.get("local_branch_dropout", 0.0),
+        )
+
+    if variant == "vit":
+        return ViTReIDModel(
+            num_classes=num_classes,
+            embedding_dim=model_config["embedding_dim"],
+            pretrained=pretrained,
+            dropout=model_config.get("dropout", 0.1),
         )
 
     raise ValueError(f"Unsupported model variant: {variant}")
