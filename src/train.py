@@ -76,6 +76,8 @@ def build_loaders(config: dict):
         color_jitter=config["augmentation"].get("color_jitter", False),
         random_erasing=config["augmentation"].get("random_erasing", False),
         random_grayscale_p=config["augmentation"].get("random_grayscale_p", 0.0),
+        random_affine_degrees=config["augmentation"].get("random_affine_degrees", 0.0),
+        random_occlusion_p=config["augmentation"].get("random_occlusion_p", 0.0),
     )
 
     train_dataset = Market1501Dataset(config["data"]["train_dir"], transform=train_transform, relabel=True)
@@ -113,7 +115,7 @@ def build_loaders(config: dict):
     return train_dataset, train_loader, query_loader, gallery_loader
 
 
-def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp):
+def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp, grad_clip_norm: float | None = None):
     model.train()
     running_loss = 0.0
     running_ce = 0.0
@@ -133,6 +135,9 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
             loss, ce_loss, triplet_loss, center_loss = criterion(logits, embeddings, labels)
 
         scaler.scale(loss).backward()
+        if grad_clip_norm is not None and grad_clip_norm > 0:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
         scaler.step(optimizer)
         scaler.update()
 
@@ -344,6 +349,7 @@ def main() -> None:
                 "lr_reduce_patience": config["train"].get("lr_reduce_patience", 5),
                 "min_lr": config["train"].get("min_lr", 1e-6),
                 "warmup_epochs": config["train"].get("warmup_epochs", 0),
+                "grad_clip_norm": config["train"].get("grad_clip_norm", 0.0),
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
                 "model_variant": config["model"].get("variant", "baseline"),
@@ -365,7 +371,16 @@ def main() -> None:
 
     try:
         for epoch in range(1, config["train"]["epochs"] + 1):
-            train_metrics = train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, use_amp)
+            train_metrics = train_one_epoch(
+                model,
+                train_loader,
+                criterion,
+                optimizer,
+                scaler,
+                device,
+                use_amp,
+                grad_clip_norm=config["train"].get("grad_clip_norm"),
+            )
             eval_metrics = run_evaluation(model, query_loader, gallery_loader, device, config)
 
             epoch_metrics = {

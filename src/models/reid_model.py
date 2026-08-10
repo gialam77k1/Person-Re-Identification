@@ -63,22 +63,83 @@ class ViTReIDModel(nn.Module):
         embedding_dim: int = 512,
         pretrained: bool = True,
         dropout: float = 0.1,
+        use_local_branch: bool = True,
+        num_local_stripes: int = 4,
+        local_branch_dropout: float = 0.1,
     ) -> None:
         super().__init__()
 
         self.backbone = build_vit_b16_backbone(pretrained)
         vit_feature_dim = 768
-        self.embedding = nn.Sequential(
+        self.use_local_branch = use_local_branch
+        self.num_local_stripes = max(2, num_local_stripes)
+
+        self.cls_embedding = nn.Sequential(
+            nn.LayerNorm(vit_feature_dim),
             nn.Linear(vit_feature_dim, embedding_dim),
+            nn.BatchNorm1d(embedding_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+        self.patch_embedding = nn.Sequential(
+            nn.LayerNorm(vit_feature_dim),
+            nn.Linear(vit_feature_dim, embedding_dim),
+            nn.BatchNorm1d(embedding_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+
+        if self.use_local_branch:
+            self.local_embedding = nn.Sequential(
+                nn.LayerNorm(vit_feature_dim * self.num_local_stripes),
+                nn.Linear(vit_feature_dim * self.num_local_stripes, embedding_dim),
+                nn.BatchNorm1d(embedding_dim),
+                nn.GELU(),
+                nn.Dropout(local_branch_dropout),
+            )
+            fusion_input_dim = embedding_dim * 3
+        else:
+            self.local_embedding = None
+            fusion_input_dim = embedding_dim * 2
+
+        self.fusion = nn.Sequential(
+            nn.Linear(fusion_input_dim, embedding_dim),
             nn.BatchNorm1d(embedding_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
         )
         self.classifier = nn.Linear(embedding_dim, num_classes)
 
+    def _forward_tokens(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        tokens = self.backbone._process_input(inputs)
+        batch_size = tokens.shape[0]
+        class_token = self.backbone.class_token.expand(batch_size, -1, -1)
+        tokens = torch.cat([class_token, tokens], dim=1)
+        encoded = self.backbone.encoder(tokens)
+        return encoded[:, 0], encoded[:, 1:]
+
     def forward(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        features = self.backbone(inputs)
-        embedding = self.embedding(features)
+        cls_token, patch_tokens = self._forward_tokens(inputs)
+        cls_embedding = self.cls_embedding(cls_token)
+        patch_embedding = self.patch_embedding(patch_tokens.mean(dim=1))
+
+        embeddings = [cls_embedding, patch_embedding]
+        if self.use_local_branch and self.local_embedding is not None:
+            grid_size = int(patch_tokens.size(1) ** 0.5)
+            patch_grid = patch_tokens.transpose(1, 2).reshape(
+                patch_tokens.size(0),
+                patch_tokens.size(2),
+                grid_size,
+                grid_size,
+            )
+            stripe_features = torch.flatten(
+                nn.functional.adaptive_avg_pool2d(patch_grid, (self.num_local_stripes, 1)),
+                1,
+            )
+            local_embedding = self.local_embedding(stripe_features)
+            embeddings.append(local_embedding)
+
+        embedding = self.fusion(torch.cat(embeddings, dim=1))
         logits = self.classifier(embedding)
         return logits, embedding
 
@@ -312,6 +373,9 @@ def build_model_from_config(config: dict[str, Any], num_classes: int, pretrained
             embedding_dim=model_config["embedding_dim"],
             pretrained=pretrained,
             dropout=model_config.get("dropout", 0.1),
+            use_local_branch=model_config.get("use_local_branch", True),
+            num_local_stripes=model_config.get("num_local_stripes", 4),
+            local_branch_dropout=model_config.get("local_branch_dropout", 0.1),
         )
 
     raise ValueError(f"Unsupported model variant: {variant}")
