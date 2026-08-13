@@ -23,6 +23,7 @@ from src.common.utils import (
     save_checkpoint,
     save_json,
     seed_everything,
+    tee_output,
 )
 from src.data.dataset import RandomIdentitySampler, build_dataset_splits, build_transforms
 from src.models.reid_model import build_model_from_config
@@ -312,6 +313,14 @@ def main() -> None:
     for key in ("root", "checkpoints_dir", "metrics_dir", "embeddings_dir", "logs_dir"):
         if key in config["artifacts"]:
             ensure_dir(config["artifacts"][key])
+
+    log_path = Path(config["artifacts"]["logs_dir"]) / "train.log"
+    with tee_output(log_path):
+        run_training(config)
+
+
+def run_training(config: dict) -> None:
+    print(f"Logging console output to {Path(config['artifacts']['logs_dir']) / 'train.log'}")
 
     device = infer_device(config["device"])
     use_amp = bool(config["train"]["amp"] and device.type == "cuda")

@@ -12,7 +12,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.common.config import load_runtime_config
-from src.common.utils import configure_torch_home, infer_device, load_checkpoint, resolve_path, save_json
+from src.common.utils import (
+    configure_torch_home,
+    ensure_dir,
+    infer_device,
+    load_checkpoint,
+    resolve_path,
+    save_json,
+    tee_output,
+)
 from src.data.dataset import build_dataset, build_transforms
 from src.models.reid_model import build_model_from_config
 from src.reid.evaluation import extract_features
@@ -36,6 +44,17 @@ def main() -> None:
     args = parse_args()
     config = load_runtime_config(args.config, args.set, command_name="extract")
     configure_torch_home()
+    ensure_dir(config["artifacts"]["logs_dir"])
+    ensure_dir(config["artifacts"]["embeddings_dir"])
+
+    log_path = Path(config["artifacts"]["logs_dir"]) / "extract.log"
+    with tee_output(log_path):
+        run_extract_command(config, args.checkpoint)
+
+
+def run_extract_command(config: dict, checkpoint_path: str) -> None:
+    print(f"Logging console output to {Path(config['artifacts']['logs_dir']) / 'extract.log'}")
+
     device = infer_device(config["device"])
     _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
 
@@ -53,7 +72,7 @@ def main() -> None:
         num_classes=train_dataset.num_classes,
         pretrained=False,
     ).to(device)
-    load_checkpoint(model, args.checkpoint, device)
+    load_checkpoint(model, checkpoint_path, device)
 
     features, pids, camids, paths = extract_features(model, train_loader, device)
     embeddings_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_embeddings.npy")
@@ -69,7 +88,7 @@ def main() -> None:
         "run_slug": config["runtime"]["run_slug"],
         "run_root": config["runtime"]["run_root"],
         "dataset": config["data"]["dataset"]["name"],
-        "checkpoint": str(Path(args.checkpoint).resolve()),
+        "checkpoint": str(Path(checkpoint_path).resolve()),
         "embeddings_path": str(embeddings_path),
         "pids_path": str(pids_path),
         "camids_path": str(camids_path),

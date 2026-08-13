@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.common.config import load_runtime_config
-from src.common.utils import configure_torch_home, infer_device, load_checkpoint, save_json
+from src.common.utils import configure_torch_home, ensure_dir, infer_device, load_checkpoint, save_json, tee_output
 from src.data.dataset import build_dataset_splits, build_transforms
 from src.models.reid_model import build_model_from_config
 from src.reid.evaluation import (
@@ -41,6 +41,17 @@ def main() -> None:
     args = parse_args()
     config = load_runtime_config(args.config, args.set, command_name="evaluate")
     configure_torch_home()
+    ensure_dir(config["artifacts"]["logs_dir"])
+    ensure_dir(config["artifacts"]["metrics_dir"])
+
+    log_path = Path(config["artifacts"]["logs_dir"]) / "evaluate.log"
+    with tee_output(log_path):
+        run_evaluation_command(config, args.checkpoint)
+
+
+def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
+    print(f"Logging console output to {Path(config['artifacts']['logs_dir']) / 'evaluate.log'}")
+
     device = infer_device(config["device"])
     _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
 
@@ -70,7 +81,7 @@ def main() -> None:
         num_classes=train_dataset.num_classes,
         pretrained=False,
     ).to(device)
-    checkpoint = load_checkpoint(model, args.checkpoint, device)
+    checkpoint = load_checkpoint(model, checkpoint_path, device)
 
     flip_test = config["evaluation"].get("flip_test", False)
     query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device, flip_test=flip_test)
@@ -93,7 +104,7 @@ def main() -> None:
         "run_slug": config["runtime"]["run_slug"],
         "run_root": config["runtime"]["run_root"],
         "dataset": config["data"]["dataset"]["name"],
-        "checkpoint": str(Path(args.checkpoint).resolve()),
+        "checkpoint": str(Path(checkpoint_path).resolve()),
         "loaded_epoch": checkpoint.get("epoch"),
         "flip_test": bool(flip_test),
         "use_rerank": bool(config["evaluation"].get("use_rerank", False)),
