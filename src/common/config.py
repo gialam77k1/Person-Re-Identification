@@ -35,6 +35,45 @@ def apply_config_overrides(config: dict[str, Any], overrides: dict[str, Any]) ->
     return config
 
 
+def _resolve_split_path(dataset_root: str | Path, split_path: str) -> str:
+    split = Path(split_path)
+    if split.is_absolute():
+        return str(split)
+    return str(Path(dataset_root) / split)
+
+
+def normalize_data_config(config: dict[str, Any]) -> dict[str, Any]:
+    data = config.setdefault("data", {})
+    dataset = data.setdefault("dataset", {})
+
+    dataset_name = dataset.get("name") or data.get("dataset_name") or "market1501"
+    dataset_root = dataset.get("root") or data.get("root") or "."
+
+    dataset["name"] = str(dataset_name)
+    dataset["root"] = str(dataset_root)
+    data["root"] = str(dataset_root)
+
+    splits = data.get("splits")
+    if not isinstance(splits, dict):
+        splits = {
+            "train": data.get("train_dir", "bounding_box_train"),
+            "query": data.get("query_dir", "query"),
+            "gallery": data.get("gallery_dir", "bounding_box_test"),
+        }
+    else:
+        splits = {
+            "train": splits.get("train", data.get("train_dir", "bounding_box_train")),
+            "query": splits.get("query", data.get("query_dir", "query")),
+            "gallery": splits.get("gallery", data.get("gallery_dir", "bounding_box_test")),
+        }
+
+    data["splits"] = splits
+    data["train_dir"] = _resolve_split_path(dataset_root, str(splits["train"]))
+    data["query_dir"] = _resolve_split_path(dataset_root, str(splits["query"]))
+    data["gallery_dir"] = _resolve_split_path(dataset_root, str(splits["gallery"]))
+    return config
+
+
 def parse_config_overrides(override_pairs: list[str] | None) -> dict[str, Any]:
     overrides: dict[str, Any] = {}
     for raw_override in override_pairs or []:
@@ -62,4 +101,5 @@ def load_runtime_config(
     overrides = parse_config_overrides(override_pairs)
     if overrides:
         apply_config_overrides(config, overrides)
+    normalize_data_config(config)
     return config

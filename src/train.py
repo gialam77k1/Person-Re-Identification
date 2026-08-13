@@ -341,7 +341,7 @@ def main() -> None:
     if mlflow_active:
         mlflow.log_params(
             {
-                "dataset": "Market-1501",
+                "dataset": config["data"]["dataset"]["name"],
                 "batch_size": config["data"]["batch_size"],
                 "eval_batch_size": config["data"]["eval_batch_size"],
                 "instances_per_identity": config["data"]["instances_per_identity"],

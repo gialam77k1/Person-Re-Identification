@@ -4,10 +4,13 @@ seed: 42
 device: auto
 num_workers: 2
 data:
-  root: datasets/Market-1501-v15.09.15
-  train_dir: datasets/Market-1501-v15.09.15/bounding_box_train
-  query_dir: datasets/Market-1501-v15.09.15/query
-  gallery_dir: datasets/Market-1501-v15.09.15/bounding_box_test
+  dataset:
+    name: market1501
+    root: datasets/Market-1501-v15.09.15
+  splits:
+    train: bounding_box_train
+    query: query
+    gallery: bounding_box_test
   image_height: 256
   image_width: 128
   batch_size: 16

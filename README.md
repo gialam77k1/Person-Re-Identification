@@ -125,6 +125,21 @@ Các đường dẫn đang được khai báo trong:
 - [baseline.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\baseline.yaml)
 - [dadnet.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\dadnet.yaml)
 
+Cấu trúc config dataset hiện tại đã được chuẩn hóa theo hướng:
+
+```yaml
+data:
+  dataset:
+    name: market1501
+    root: datasets/Market-1501-v15.09.15
+  splits:
+    train: bounding_box_train
+    query: query
+    gallery: bounding_box_test
+```
+
+Code vẫn tương thích ngược với config cũ dùng `train_dir`, `query_dir`, `gallery_dir`, nhưng nên ưu tiên format mới để chuẩn bị cho bước multi-dataset.
+
 ## 5. Cách chạy
 
 ### Smoke test
