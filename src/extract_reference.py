@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    config = load_runtime_config(args.config, args.set)
+    config = load_runtime_config(args.config, args.set, command_name="extract")
     configure_torch_home()
     device = infer_device(config["device"])
     _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
@@ -66,6 +66,9 @@ def main() -> None:
     np.save(camids_path, camids)
 
     manifest = {
+        "run_slug": config["runtime"]["run_slug"],
+        "run_root": config["runtime"]["run_root"],
+        "dataset": config["data"]["dataset"]["name"],
         "checkpoint": str(Path(args.checkpoint).resolve()),
         "embeddings_path": str(embeddings_path),
         "pids_path": str(pids_path),
@@ -75,6 +78,7 @@ def main() -> None:
         "first_paths": paths[:10],
     }
     save_json(manifest, Path(config["artifacts"]["embeddings_dir"]) / "reference_manifest.json")
+    save_json(config, Path(config["artifacts"]["logs_dir"]) / "effective_config.json")
     print(manifest)
 
 

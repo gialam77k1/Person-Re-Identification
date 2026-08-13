@@ -256,19 +256,21 @@ Pipeline hiện đã hỗ trợ:
 - `Re-ranking` khi evaluate
 - lưu `best_model.pth` và `last_model.pth`
 - theo dõi thí nghiệm bằng `MLflow`
+- tách artifact theo `dataset + config + command + timestamp` để tránh ghi đè giữa các run
 
 ## 7. Các file đầu ra
 
 Sau khi train hoặc evaluate, kết quả thường được lưu ở:
 
-- `artifacts/checkpoints/last_model.pth`
-- `artifacts/checkpoints/best_model.pth`
-- `artifacts/metrics/metrics_v1.json`
-- `artifacts/metrics/evaluation_latest.json`
-- `artifacts/embeddings/reference_embeddings.npy`
-- `artifacts/embeddings/reference_pids.npy`
-- `artifacts/embeddings/reference_camids.npy`
-- `artifacts/embeddings/reference_manifest.json`
+- `artifacts/<dataset>/<run-slug>/checkpoints/last_model.pth`
+- `artifacts/<dataset>/<run-slug>/checkpoints/best_model.pth`
+- `artifacts/<dataset>/<run-slug>/metrics/metrics_v1.json`
+- `artifacts/<dataset>/<run-slug>/metrics/evaluation_latest.json`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_embeddings.npy`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_pids.npy`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_camids.npy`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_manifest.json`
+- `artifacts/<dataset>/<run-slug>/logs/effective_config.json`
 
 ## 8. MLflow
 

@@ -66,7 +66,7 @@ def maybe_init_mlflow(config: dict) -> bool:
             artifact_location=artifact_location.as_uri(),
         )
     mlflow.set_experiment(config["experiment_name"])
-    mlflow.start_run(run_name="baseline-v1")
+    mlflow.start_run(run_name=config["runtime"]["run_slug"])
     mlflow.log_artifact(config["config_path"])
     return True
 
@@ -305,7 +305,7 @@ def build_scheduler(config: dict, optimizer: torch.optim.Optimizer):
 
 def main() -> None:
     args = parse_args()
-    config = load_runtime_config(args.config, args.set)
+    config = load_runtime_config(args.config, args.set, command_name="train")
     seed_everything(config["seed"])
     configure_torch_home()
 
@@ -340,10 +340,14 @@ def main() -> None:
     scaler = amp.GradScaler(device.type, enabled=use_amp)
 
     mlflow_active = maybe_init_mlflow(config)
+    effective_config_path = Path(config["artifacts"]["logs_dir"]) / "effective_config.json"
+    save_json(config, effective_config_path)
     if mlflow_active:
+        mlflow.log_artifact(str(effective_config_path))
         mlflow.log_params(
             {
                 "dataset": config["data"]["dataset"]["name"],
+                "run_slug": config["runtime"]["run_slug"],
                 "batch_size": config["data"]["batch_size"],
                 "eval_batch_size": config["data"]["eval_batch_size"],
                 "instances_per_identity": config["data"]["instances_per_identity"],
@@ -461,6 +465,9 @@ def main() -> None:
                 break
 
         summary = {
+            "run_slug": config["runtime"]["run_slug"],
+            "run_root": config["runtime"]["run_root"],
+            "dataset": config["data"]["dataset"]["name"],
             "best_epoch": max(history, key=lambda item: item["mAP"])["epoch"],
             "best_rank1": max(history, key=lambda item: item["mAP"])["rank1"],
             "best_rank5": max(history, key=lambda item: item["mAP"])["rank5"],

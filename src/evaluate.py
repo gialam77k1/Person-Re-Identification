@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    config = load_runtime_config(args.config, args.set)
+    config = load_runtime_config(args.config, args.set, command_name="evaluate")
     configure_torch_home()
     device = infer_device(config["device"])
     _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
@@ -90,6 +90,9 @@ def main() -> None:
     )
 
     results = {
+        "run_slug": config["runtime"]["run_slug"],
+        "run_root": config["runtime"]["run_root"],
+        "dataset": config["data"]["dataset"]["name"],
         "checkpoint": str(Path(args.checkpoint).resolve()),
         "loaded_epoch": checkpoint.get("epoch"),
         "flip_test": bool(flip_test),
@@ -149,6 +152,7 @@ def main() -> None:
 
     output_path = Path(config["artifacts"]["metrics_dir"]) / "evaluation_latest.json"
     save_json(results, output_path)
+    save_json(config, Path(config["artifacts"]["logs_dir"]) / "effective_config.json")
 
 
 if __name__ == "__main__":

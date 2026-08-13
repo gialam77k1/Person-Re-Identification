@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,19 @@ def apply_config_overrides(config: dict[str, Any], overrides: dict[str, Any]) ->
         target[keys[-1]] = value
 
     return config
+
+
+def _slugify(value: str) -> str:
+    normalized = []
+    for char in value.lower():
+        if char.isalnum():
+            normalized.append(char)
+        else:
+            normalized.append("-")
+    slug = "".join(normalized).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug or "run"
 
 
 def _resolve_split_path(dataset_root: str | Path, split_path: str) -> str:
@@ -92,6 +106,32 @@ def normalize_data_config(config: dict[str, Any]) -> dict[str, Any]:
         f"Unsupported data.source_type '{source_type}'. "
         "Currently supported: image_folder"
     )
+
+
+def normalize_artifact_config(config: dict[str, Any], command_name: str) -> dict[str, Any]:
+    artifacts = config.setdefault("artifacts", {})
+    artifact_root = Path(str(artifacts.get("root", "artifacts")))
+    dataset_slug = _slugify(config["data"]["dataset"]["name"])
+    config_slug = _slugify(Path(config["config_path"]).stem)
+    command_slug = _slugify(command_name)
+    run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_slug = f"{dataset_slug}-{config_slug}-{command_slug}-{run_id}"
+    run_root = artifact_root / dataset_slug / run_slug
+
+    artifacts["root"] = str(artifact_root)
+    artifacts["run_root"] = str(run_root)
+    artifacts["checkpoints_dir"] = str(run_root / "checkpoints")
+    artifacts["metrics_dir"] = str(run_root / "metrics")
+    artifacts["embeddings_dir"] = str(run_root / "embeddings")
+    artifacts["logs_dir"] = str(run_root / "logs")
+
+    runtime = config.setdefault("runtime", {})
+    runtime["command"] = command_name
+    runtime["dataset_slug"] = dataset_slug
+    runtime["config_slug"] = config_slug
+    runtime["run_id"] = run_id
+    runtime["run_slug"] = run_slug
+    runtime["run_root"] = str(run_root)
     return config
 
 
@@ -117,10 +157,12 @@ def parse_config_overrides(override_pairs: list[str] | None) -> dict[str, Any]:
 def load_runtime_config(
     config_path: str | Path,
     override_pairs: list[str] | None = None,
+    command_name: str = "run",
 ) -> dict[str, Any]:
     config = load_config(config_path)
     overrides = parse_config_overrides(override_pairs)
     if overrides:
         apply_config_overrides(config, overrides)
     normalize_data_config(config)
+    normalize_artifact_config(config, command_name)
     return config
