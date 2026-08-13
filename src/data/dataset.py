@@ -66,21 +66,107 @@ class Market1501Dataset(ImageFolderReIDDataset):
     pass
 
 
-DATASET_REGISTRY = {
+class MSMT17Dataset(Dataset):
+    SPLIT_DIRS = {
+        "train": "train",
+        "query": "test",
+        "gallery": "test",
+    }
+    DEFAULT_LIST_FILES = {
+        "train": "list_train.txt",
+        "query": "list_query.txt",
+        "gallery": "list_gallery.txt",
+    }
+
+    def __init__(
+        self,
+        root: str | Path,
+        split: str,
+        transform=None,
+        relabel: bool = False,
+        list_file: str | Path | None = None,
+    ) -> None:
+        self.root = resolve_path(root)
+        self.split = split
+        self.transform = transform
+        self.relabel = relabel
+        self.samples: list[dict[str, int | str]] = []
+
+        if split not in self.SPLIT_DIRS:
+            raise ValueError(f"Unsupported MSMT17 split '{split}'. Expected one of: train, query, gallery")
+
+        split_dir = self.root / self.SPLIT_DIRS[split]
+        list_path = resolve_path(list_file) if list_file is not None else self.root / self.DEFAULT_LIST_FILES[split]
+
+        pid_container = set()
+        raw_samples: list[tuple[Path, int, int]] = []
+        for line in list_path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            relative_path_str, pid_str = stripped.split()
+            pid = int(pid_str)
+            if pid == -1:
+                continue
+
+            relative_path = Path(relative_path_str)
+            image_path = split_dir / relative_path
+            name_parts = relative_path.stem.split("_")
+            if len(name_parts) < 3:
+                raise ValueError(f"Invalid MSMT17 filename format: {relative_path}")
+            camid = int(name_parts[2]) - 1
+
+            pid_container.add(pid)
+            raw_samples.append((image_path, pid, camid))
+
+        self.pid2label = {pid: idx for idx, pid in enumerate(sorted(pid_container))}
+        for image_path, pid, camid in raw_samples:
+            mapped_pid = self.pid2label[pid] if relabel else pid
+            self.samples.append(
+                {
+                    "img_path": str(image_path),
+                    "pid": mapped_pid,
+                    "camid": camid,
+                }
+            )
+
+        self.num_classes = len(pid_container)
+        self.labels = [int(sample["pid"]) for sample in self.samples]
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, index: int) -> dict[str, object]:
+        sample = self.samples[index]
+        image = Image.open(sample["img_path"]).convert("RGB")
+        if self.transform is not None:
+            image = self.transform(image)
+
+        return {
+            "image": image,
+            "pid": int(sample["pid"]),
+            "camid": int(sample["camid"]),
+            "path": str(sample["img_path"]),
+        }
+
+
+IMAGE_FOLDER_DATASET_REGISTRY = {
     "market1501": ImageFolderReIDDataset,
     "market-1501": ImageFolderReIDDataset,
     "dukemtmc": ImageFolderReIDDataset,
     "dukemtmc-reid": ImageFolderReIDDataset,
-    "msmt17": ImageFolderReIDDataset,
 }
 
 
 def get_dataset_class(dataset_name: str):
     dataset_key = dataset_name.strip().lower()
-    if dataset_key not in DATASET_REGISTRY:
-        supported = ", ".join(sorted(DATASET_REGISTRY))
+    if dataset_key == "msmt17":
+        return MSMT17Dataset
+    if dataset_key not in IMAGE_FOLDER_DATASET_REGISTRY:
+        supported = ", ".join(sorted([*IMAGE_FOLDER_DATASET_REGISTRY, "msmt17"]))
         raise ValueError(f"Unsupported dataset '{dataset_name}'. Supported datasets: {supported}")
-    return DATASET_REGISTRY[dataset_key]
+    return IMAGE_FOLDER_DATASET_REGISTRY[dataset_key]
 
 
 def build_dataset(
@@ -98,6 +184,19 @@ def build_dataset(
 
     dataset_name = config["data"]["dataset"]["name"]
     dataset_class = get_dataset_class(dataset_name)
+    dataset_key = dataset_name.strip().lower()
+    if dataset_key == "msmt17":
+        location = config["data"].get("location", {})
+        list_files = location.get("list_files", {})
+        list_file = list_files.get(split) if isinstance(list_files, dict) else None
+        return dataset_class(
+            location.get("root", config["data"]["root"]),
+            split=split,
+            transform=transform,
+            relabel=relabel,
+            list_file=list_file,
+        )
+
     split_to_dir = {
         "train": config["data"]["train_dir"],
         "query": config["data"]["query_dir"],

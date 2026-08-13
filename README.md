@@ -156,6 +156,14 @@ Sau này nếu chuyển sang MLOps đầy đủ hơn, chỗ này có thể mở 
 - `dataset.version`
 - `dataset.uri`
 
+Với `MSMT17`, pipeline hiện tại giữ nguyên protocol gốc bằng cách đọc trực tiếp:
+
+- `list_train.txt`
+- `list_query.txt`
+- `list_gallery.txt`
+
+thay vì ép phải đổi dữ liệu vật lý sang `bounding_box_train/query/bounding_box_test`.
+
 ## 5. Cách chạy
 
 ### Smoke test
@@ -181,6 +189,7 @@ Baseline:
 ```powershell
 conda activate C:\tmp\reid-mlops
 python .\src\train.py --config .\configs\baseline.yaml
+python .\src\train.py --config .\configs\baseline_msmt17.yaml
 ```
 
 DADNet-inspired:
