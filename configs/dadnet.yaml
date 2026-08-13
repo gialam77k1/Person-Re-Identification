@@ -1,5 +1,5 @@
 project_name: person-reid-mlops
-experiment_name: market1501-baseline
+experiment_name: market1501-dadnet
 seed: 42
 device: auto
 num_workers: 2
@@ -14,41 +14,57 @@ data:
       train: bounding_box_train
       query: query
       gallery: bounding_box_test
-  image_height: 256
-  image_width: 128
-  batch_size: 16
+  image_height: 224
+  image_width: 224
+  batch_size: 8
   eval_batch_size: 32
   instances_per_identity: 4
 
 model:
-  variant: baseline
-  backbone: resnet50
+  variant: vit
+  backbone: vit_b_16
   pretrained: true
   embedding_dim: 512
+  dropout: 0.1
+  use_local_branch: true
+  num_local_stripes: 4
+  local_branch_dropout: 0.1
 
 train:
-  epochs: 30
-  learning_rate: 0.0003
-  backbone_lr_factor: 0.1
+  epochs: 50
+  learning_rate: 0.00005
+  backbone_lr_factor: 0.5
   weight_decay: 0.0005
   ce_weight: 1.0
-  triplet_weight: 1.0
-  triplet_margin: 0.3
-  label_smoothing: 0.0
-  warmup_epochs: 3
-  min_lr_scale: 0.01
+  triplet_weight: 1.2
+  triplet_margin: 0.35
+  center_loss_weight: 0.0
+  center_loss_lr: 0.25
+  label_smoothing: 0.02
+  scheduler_type: cosine
+  warmup_epochs: 5
+  min_lr_scale: 0.02
+  grad_clip_norm: 1.0
   amp: true
+  early_stopping:
+    enabled: true
+    patience: 12
+    min_delta: 0.001
+    monitor: mAP
 
 augmentation:
-  color_jitter: false
-  random_erasing: false
+  color_jitter: true
+  random_erasing: true
   random_grayscale_p: 0.0
+  random_affine_degrees: 5.0
+  random_occlusion_p: 0.15
 
 evaluation:
-  use_rerank: false
+  use_rerank: true
   rerank_k1: 20
   rerank_k2: 6
   rerank_lambda: 0.3
+  flip_test: false
 
 logging:
   enable_mlflow: true

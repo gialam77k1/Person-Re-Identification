@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import random
+import sys
 from pathlib import Path
+from typing import IO
 from typing import Any
 
 import numpy as np
@@ -46,6 +49,42 @@ def configure_torch_home() -> Path:
     os.environ["TORCH_HOME"] = str(torch_home)
     torch.hub.set_dir(str(torch_home / "hub"))
     return torch_home
+
+
+class TeeStream:
+    def __init__(self, *streams: IO[str]) -> None:
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        for stream in self._streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for stream in self._streams:
+            stream.flush()
+
+    def isatty(self) -> bool:
+        return any(getattr(stream, "isatty", lambda: False)() for stream in self._streams)
+
+
+@contextlib.contextmanager
+def tee_output(path_like: str | Path):
+    log_path = resolve_path(path_like)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    with log_path.open("a", encoding="utf-8") as handle:
+        sys.stdout = TeeStream(original_stdout, handle)
+        sys.stderr = TeeStream(original_stderr, handle)
+        try:
+            yield log_path
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
 
 
 def save_json(payload: dict[str, Any], path_like: str | Path) -> Path:

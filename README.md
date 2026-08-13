@@ -1,223 +1,391 @@
-# Person Re-Identification MLOps Baseline
+# Person Re-Identification với ResNet50 và DADNet-inspired
 
-Capstone này triển khai baseline cho bài toán person re-identification trên bộ dữ liệu `Market-1501` bằng `PyTorch`, có hỗ trợ:
+Dự án này xây dựng pipeline `Person Re-Identification` bằng `PyTorch` trên bộ dữ liệu `Market-1501`. Mục tiêu là huấn luyện một mô hình nhận diện lại người giữa các camera khác nhau, đồng thời hỗ trợ theo dõi thí nghiệm, lưu checkpoint và đánh giá theo các chỉ số phổ biến như `Rank-1` và `mAP`.
 
-- Huấn luyện mô hình ReID với `ResNet50`
-- Đánh giá theo `Rank-1`, `Rank-5`, `Rank-10`, `mAP`
-- Lưu checkpoint và metric
-- Theo dõi thí nghiệm bằng `MLflow`
-- Trích xuất embedding tham chiếu để phục vụ các bước nhận dạng tiếp theo
+Hiện tại repo có 2 hướng chính:
 
-## 1. Yêu cầu hệ thống
+- `Baseline`: `ResNet50 -> Embedding -> Classifier`
+- `DADNet-inspired`: thêm attention và head tăng khả năng phân biệt đặc trưng
 
-Cập nhật theo trạng thái hiện tại ngày **2026-08-02**.
+## 1. Tổng quan kiến trúc
 
-- Hệ điều hành: Windows 10/11
-- Python: **3.10 - 3.12**
-- Khuyến nghị: **Python 3.10** để tương thích tốt với cả `PyTorch` và `MLflow`
-- `pip` đã được cập nhật
-
-Luu y:
-
-- `PyTorch` tren Windows hien tai chi ho tro Python `3.9 - 3.12`.
-- `MLflow` hien tai yeu cau Python `3.10+`.
-- Giao cua an toan nhat cho project nay la **Python 3.10 hoac 3.11**.
-
-## 2. Cau truc du an
+### Baseline
 
 ```text
-KLTN/
-|- configs/
-|  |- baseline.yaml
-|  |- baseline_smoke.yaml
-|- datasets/
-|  |- Market-1501-v15.09.15/
-|- artifacts/
-|- mlruns/
-|- src/
-|  |- train.py
-|  |- evaluate.py
-|  |- extract_reference.py
-|- requirements.txt
-|- README.md
+Input
+  -> ResNet50 Backbone
+  -> Global Average Pooling
+  -> Linear(2048 -> 512)
+  -> BatchNorm
+  -> ReLU
+  -> Classifier
 ```
 
-## 3. Setup moi truong
+### DADNet-inspired
 
-### Cach 1: Dung `venv` (khuyen nghi, don gian)
+```text
+Input
+  -> ResNet50 Backbone
+  -> CFT Attention Module
+  -> Position-Aware Attention
+  -> Global Average Pooling
+  -> DEM (Distinguishability Enhancement Module)
+  -> Classifier
+```
 
-Mo PowerShell tai thu muc project:
+Ghi chú:
+
+- Đây là phiên bản `inspired by DADNet`, không phải bản tái hiện nguyên gốc 100% từ paper.
+- Backbone hiện tại vẫn là `ResNet50`.
+- Các thử nghiệm gần đây tập trung vào `loss`, `batch strategy`, `scheduler`, `re-ranking` và tinh chỉnh attention nhẹ thay vì thay backbone.
+
+## 2. Cấu trúc dự án
+
+```text
+Person-Re-Identification/
+├─ configs/
+│  ├─ dadnet.yaml
+│  ├─ dadnet_smoke.yaml
+│  ├─ baseline.yaml
+│  └─ baseline_smoke.yaml
+├─ datasets/
+│  └─ Market-1501-v15.09.15/
+├─ artifacts/
+├─ mlruns/
+├─ src/
+│  ├─ train.py
+│  ├─ evaluate.py
+│  ├─ extract_reference.py
+│  ├─ common/
+│  ├─ data/
+│  ├─ models/
+│  └─ reid/
+├─ requirements.txt
+├─ .gitignore
+└─ README.md
+```
+
+## 3. Yêu cầu môi trường
+
+- Windows 10/11
+- Python `3.10` khuyến nghị
+- GPU NVIDIA là tùy chọn nhưng rất nên có nếu train full
+
+Môi trường đã được xác nhận chạy trong máy hiện tại:
 
 ```powershell
-cd "C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\KLTN"
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+conda activate C:\tmp\reid-mlops
 ```
 
-Neu PowerShell chan script, chay tam:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-### Cach 2: Dung `conda`
+Nếu muốn tạo môi trường mới từ đầu:
 
 ```powershell
 conda create -n reid-mlops python=3.10 -y
 conda activate reid-mlops
 python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-## 4. Cai thu vien
+Kiểm tra nhanh sau khi cài:
 
-### Buoc 1: Cai PyTorch
+```powershell
+python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('torchvision =', torchvision.__version__); print('cuda =', torch.cuda.is_available())"
+```
 
-#### Neu chi chay CPU
+Nếu chạy CPU:
 
 ```powershell
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
-#### Neu chay NVIDIA GPU
-
-Chon lenh dung voi phien ban CUDA cua may tai trang chinh thuc cua PyTorch:
+Tham khảo cài đặt GPU:
 
 - [PyTorch Start Locally](https://docs.pytorch.org/get-started/locally/)
 
-Vi du voi CUDA 12.4, lenh thuong co dang:
+## 4. Dataset
 
-```powershell
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-```
+Repo hiện chạy local, vì vậy bạn chỉ cần có dataset trên máy và truyền đúng `DatasetRoot`.
 
-Neu ban khong chac may dang dung CUDA nao, uu tien cai ban `CPU` truoc de project chay on dinh.
+### 4.1. Dataset mặc định
 
-### Buoc 2: Cai cac thu vien con lai
-
-```powershell
-pip install -r requirements.txt
-```
-
-## 5. Kiem tra cai dat
-
-```powershell
-python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('cuda =', torch.cuda.is_available())"
-```
-
-Neu khong bao loi la moi truong da san sang.
-
-## 6. Dataset
-
-Project dang duoc cau hinh de chay voi `Market-1501` tai:
+Thư mục dữ liệu mặc định trong config:
 
 ```text
 datasets/Market-1501-v15.09.15/
 ```
 
-Trong file [configs/baseline.yaml](C:/Users/Gia%20Lam/Desktop/IUH%20Data/Năm%205%20-%20Kỳ%201/KLTN/configs/baseline.yaml) duong dan mac dinh la:
-
-```yaml
-data:
-  root: datasets/Market-1501-v15.09.15
-  train_dir: datasets/Market-1501-v15.09.15/bounding_box_train
-  query_dir: datasets/Market-1501-v15.09.15/query
-  gallery_dir: datasets/Market-1501-v15.09.15/bounding_box_test
-```
-
-Ban can dam bao trong thu muc dataset co du 3 folder:
+Với `Market-1501` hoặc `DukeMTMC-reID`, dataset root cần có đủ:
 
 - `bounding_box_train`
 - `query`
 - `bounding_box_test`
 
-## 7. Cach chay project
+Ví dụ:
 
-### 7.1. Chay smoke test 1 epoch
-
-Dung de kiem tra pipeline truoc khi train full:
-
-```powershell
-python src\train.py --config configs\baseline_smoke.yaml
+```text
+datasets/dukemtmc/
+├─ bounding_box_train/
+├─ query/
+└─ bounding_box_test/
 ```
 
-### 7.2. Train day du
+Với `MSMT17`, root cần giữ nguyên protocol gốc:
 
-```powershell
-python src\train.py --config configs\baseline.yaml
-```
+- `list_train.txt`
+- `list_query.txt`
+- `list_gallery.txt`
+- thư mục ảnh tương ứng của `MSMT17`
 
-Ket qua se duoc luu tai:
+Các đường dẫn mẫu đang được khai báo trong:
 
-- `artifacts/checkpoints/last_model.pth`
-- `artifacts/checkpoints/best_model.pth`
-- `artifacts/metrics/metrics_v1.json`
+- [baseline.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\baseline.yaml)
+- [dadnet.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\dadnet.yaml)
 
-### 7.3. Danh gia checkpoint
+### 4.2. Schema config dataset
 
-```powershell
-python src\evaluate.py --config configs\baseline.yaml --checkpoint artifacts\checkpoints\best_model.pth
-```
-
-File ket qua danh gia se duoc luu tai:
-
-- `artifacts/metrics/evaluation_latest.json`
-
-### 7.4. Trich xuat reference embeddings
-
-```powershell
-python src\extract_reference.py --config configs\baseline.yaml --checkpoint artifacts\checkpoints\best_model.pth
-```
-
-Ket qua se duoc luu tai:
-
-- `artifacts/embeddings/reference_embeddings.npy`
-- `artifacts/embeddings/reference_pids.npy`
-- `artifacts/embeddings/reference_camids.npy`
-- `artifacts/embeddings/reference_manifest.json`
-
-## 8. Theo doi MLflow
-
-File config hien tai dang bat MLflow trong [configs/baseline.yaml](C:/Users/Gia%20Lam/Desktop/IUH%20Data/Năm%205%20-%20Kỳ%201/KLTN/configs/baseline.yaml) voi:
+Cấu trúc config dataset hiện tại đã được chuẩn hóa theo hướng:
 
 ```yaml
-logging:
-  enable_mlflow: true
-  tracking_uri: sqlite:///mlruns/mlflow.db
+data:
+  source_type: image_folder
+  dataset:
+    name: market1501
+  location:
+    root: datasets/Market-1501-v15.09.15
+    splits:
+      train: bounding_box_train
+      query: query
+      gallery: bounding_box_test
 ```
 
-De mo giao dien MLflow UI:
+Code vẫn tương thích ngược với config cũ dùng `train_dir`, `query_dir`, `gallery_dir`, nhưng nên ưu tiên format mới để chuẩn bị cho bước manifest/version sau này.
+
+Ý nghĩa của schema mới:
+
+- `source_type`: kiểu nguồn dữ liệu, hiện tại hỗ trợ `image_folder`
+- `dataset.name`: tên logic của dataset để log/so sánh thí nghiệm
+- `location.root`: nơi chứa dữ liệu
+- `location.splits`: mô tả split train/query/gallery
+
+Sau này nếu chuyển sang MLOps đầy đủ hơn, chỗ này có thể mở rộng tiếp sang:
+
+- `source_type: manifest`
+- `location.manifest_path`
+- `dataset.version`
+- `dataset.uri`
+
+Với `MSMT17`, pipeline hiện tại giữ nguyên protocol gốc bằng cách đọc trực tiếp:
+
+- `list_train.txt`
+- `list_query.txt`
+- `list_gallery.txt`
+
+thay vì ép phải đổi dữ liệu vật lý sang `bounding_box_train/query/bounding_box_test`.
+
+## 5. Cách chạy
+
+### 5.1. Chạy nhanh nhất để train local
+
+Kích hoạt môi trường:
+
+```powershell
+conda activate C:\tmp\reid-mlops
+```
+
+Train một run mới với `Market-1501`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_train.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Train rồi evaluate luôn trong cùng một run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Ví dụ với `DukeMTMC-reID`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName dukemtmc-reid -DatasetRoot "datasets/dukemtmc"
+```
+
+Ví dụ với `MSMT17`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName msmt17 -DatasetRoot "datasets/MSMT17_V1"
+```
+
+### 5.2. Nếu muốn chạy trực tiếp bằng Python
+
+Train trực tiếp:
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=market1501 --set data.location.root="datasets/Market-1501-v15.09.15"
+```
+
+Train trực tiếp với Duke:
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=dukemtmc-reid --set data.location.root="datasets/dukemtmc"
+```
+
+Train trực tiếp với MSMT17:
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
+```
+
+### 5.3. Smoke test
+
+```powershell
+conda activate C:\tmp\reid-mlops
+python .\src\train.py --config .\configs\dadnet_smoke.yaml
+python .\src\train.py --config .\configs\baseline_smoke.yaml
+```
+
+### 5.4. Override nhanh từ CLI
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --set train.learning_rate=0.00003 --set logging.enable_mlflow=false
+```
+
+Giá trị sau dấu `=` được parse theo YAML, nên có thể dùng được với:
+
+- số như `32`, `0.0001`
+- boolean như `true`, `false`
+- list như `"[1, 2, 3]"` nếu cần mở rộng sau này
+
+Một số ví dụ hay dùng:
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set train.learning_rate=0.00003 --set train.scheduler_type=cosine
+python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --set train.triplet_margin=0.4
+python .\src\train.py --config .\configs\dadnet.yaml --set augmentation.random_erasing=false --set augmentation.color_jitter=false
+```
+
+### 5.5. Evaluate checkpoint
+
+Nếu bạn đã có `best_model.pth`, có thể evaluate riêng:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\artifacts\market1501\...\checkpoints\best_model.pth"
+```
+
+Hoặc gọi Python trực tiếp:
+
+```powershell
+python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint ".\artifacts\market1501\...\checkpoints\best_model.pth" --set data.dataset.name=market1501 --set data.location.root="datasets/Market-1501-v15.09.15"
+```
+
+### 5.6. Trích xuất embedding tham chiếu
+
+```powershell
+python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth
+python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=dukemtmc-reid --set data.location.root="datasets/dukemtmc"
+python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
+```
+
+## 6. Những gì đang có trong bản hiện tại
+
+Pipeline hiện đã hỗ trợ:
+
+- `RandomIdentitySampler`
+- `AMP` khi có CUDA
+- `Early stopping`
+- `ReduceLROnPlateau` hoặc `Cosine scheduler + warmup`
+- `Label smoothing`
+- `Triplet loss`
+- `Center loss` tùy chọn
+- `Color jitter` và `Random erasing`
+- `Re-ranking` khi evaluate
+- lưu `best_model.pth` và `last_model.pth`
+- theo dõi thí nghiệm bằng `MLflow`
+- tách artifact theo `dataset + config + command + timestamp` để tránh ghi đè giữa các run
+
+## 7. Các file đầu ra
+
+Sau khi train hoặc evaluate, kết quả thường được lưu ở:
+
+- `artifacts/<dataset>/<run-slug>/checkpoints/last_model.pth`
+- `artifacts/<dataset>/<run-slug>/checkpoints/best_model.pth`
+- `artifacts/<dataset>/<run-slug>/metrics/metrics_v1.json`
+- `artifacts/<dataset>/<run-slug>/metrics/evaluation_latest.json`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_embeddings.npy`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_pids.npy`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_camids.npy`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_manifest.json`
+- `artifacts/<dataset>/<run-slug>/logs/effective_config.json`
+
+Nếu chạy qua `run_local_pipeline.ps1` thì thường bạn sẽ quan tâm nhất tới:
+
+- `artifacts/<dataset>/<run-slug>/checkpoints/best_model.pth`
+- `artifacts/<dataset>/<run-slug>/metrics/metrics_v1.json`
+- `artifacts/<dataset>/<run-slug>/metrics/evaluation_latest.json`
+- `artifacts/<dataset>/<run-slug>/logs/train.log`
+- `artifacts/<dataset>/<run-slug>/logs/evaluate.log`
+
+## 8. MLflow
+
+Mở giao diện MLflow:
 
 ```powershell
 mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
 ```
 
-Sau do mo trinh duyet tai:
+Sau đó truy cập:
 
 - [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-## 9. Su dung moi truong co san trong repo
+## 9. Local Automation
 
-Neu ban da co moi truong noi bo tai `.conda/reid-mlops`, co the chay truc tiep:
+Repo hiện dùng local runner để train và evaluate ngay trên máy.
+
+Ba script chính:
+
+- `scripts/run_local_train.ps1`: chỉ train
+- `scripts/run_local_evaluate.ps1`: chỉ evaluate
+- `scripts/run_local_pipeline.ps1`: train rồi evaluate trong cùng một run
+
+`run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
+
+- tự tạo `run_slug`
+- train và evaluate dùng chung một `run_root`
+- log và artifact nằm chung một chỗ
+- phù hợp để sau này gọi từ pipeline local/MLOps
+
+## 10. Git và push code
+
+Repo đã có [`.gitignore`](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\.gitignore) để tránh đẩy lên:
+
+- `datasets/`
+- `artifacts/`
+- `mlruns/`
+- file mô hình như `*.pth`, `*.pt`, `*.npy`
+
+Nếu `git` báo lỗi `dubious ownership`, chạy:
 
 ```powershell
-.\.conda\reid-mlops\python.exe src\train.py --config configs\baseline.yaml
+git config --global --add safe.directory "C:/Users/Gia Lam/Desktop/IUH Data/Năm 5 - Kỳ 1/Person-Re-Identification"
 ```
 
-Hoac:
+Quy trình cơ bản:
 
 ```powershell
-.\.conda\reid-mlops\python.exe src\evaluate.py --config configs\baseline.yaml --checkpoint artifacts\checkpoints\best_model.pth
+git status
+git add .
+git commit -m "Your commit message"
+git push origin <ten-branch>
 ```
 
-## 10. Ghi chu quan trong
+## 11. Hướng phát triển tiếp
 
-- Nen chay `baseline_smoke.yaml` truoc khi train full de phat hien loi som.
-- Lan dau train voi `pretrained: true`, `torchvision` co the tai trong so `ResNet50` ve `artifacts/cache/torch`.
-- Neu khong co GPU, code van chay tren CPU nhung se cham hon rat nhieu.
-- Neu muon doi dataset hoac batch size, sua trong file config YAML.
+- So sánh lại `dadnet.yaml` với `baseline.yaml`
+- So riêng `before rerank` và `after rerank`
+- Tối ưu thêm `sampler`, `triplet margin`, `scheduler step`
+- Nếu cần, tách riêng mô hình DADNet sang file chuyên biệt thay vì để chung trong [reid_model.py](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\src\models\reid_model.py)
 
-## Nguon tham khao cap nhat
+## 12. Tài liệu tham khảo
 
 - [PyTorch Start Locally](https://docs.pytorch.org/get-started/locally/)
 - [MLflow Quickstart](https://mlflow.org/docs/latest/ml/getting-started/quickstart/)

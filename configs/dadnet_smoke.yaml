@@ -1,8 +1,9 @@
 project_name: person-reid-mlops
-experiment_name: market1501-baseline
+experiment_name: market1501-dadnet
 seed: 42
 device: auto
 num_workers: 2
+
 data:
   dataset:
     name: market1501
@@ -16,31 +17,35 @@ data:
   batch_size: 16
   eval_batch_size: 32
   instances_per_identity: 4
+
 model:
-  variant: baseline
+  variant: dadnet
   backbone: resnet50
   pretrained: true
   embedding_dim: 512
+  attention_reduction: 8
+  dem_dropout: 0.0
+
 train:
   epochs: 1
   learning_rate: 0.0003
-  backbone_lr_factor: 0.1
+  backbone_lr_factor: 0.2
   weight_decay: 0.0005
   ce_weight: 1.0
   triplet_weight: 1.0
   triplet_margin: 0.3
-  label_smoothing: 0.0
+  label_smoothing: 0.1
   warmup_epochs: 0
   min_lr_scale: 0.01
   amp: true
 
 augmentation:
-  color_jitter: false
-  random_erasing: false
-  random_grayscale_p: 0.0
+  color_jitter: true
+  random_erasing: true
+  random_grayscale_p: 0.1
 
 evaluation:
-  use_rerank: false
+  use_rerank: true
   rerank_k1: 20
   rerank_k2: 6
   rerank_lambda: 0.3
@@ -48,6 +53,7 @@ evaluation:
 logging:
   enable_mlflow: false
   mlruns_dir: mlruns
+
 artifacts:
   root: artifacts
   checkpoints_dir: artifacts/checkpoints
