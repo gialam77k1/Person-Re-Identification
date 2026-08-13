@@ -24,7 +24,7 @@ from src.common.utils import (
     save_json,
     seed_everything,
 )
-from src.data.dataset import Market1501Dataset, RandomIdentitySampler, build_transforms
+from src.data.dataset import RandomIdentitySampler, build_dataset_splits, build_transforms
 from src.models.reid_model import build_model_from_config
 from src.reid.evaluation import (
     compute_distance_matrix,
@@ -87,9 +87,11 @@ def build_loaders(config: dict):
         random_occlusion_p=config["augmentation"].get("random_occlusion_p", 0.0),
     )
 
-    train_dataset = Market1501Dataset(config["data"]["train_dir"], transform=train_transform, relabel=True)
-    query_dataset = Market1501Dataset(config["data"]["query_dir"], transform=test_transform, relabel=False)
-    gallery_dataset = Market1501Dataset(config["data"]["gallery_dir"], transform=test_transform, relabel=False)
+    train_dataset, query_dataset, gallery_dataset = build_dataset_splits(
+        config,
+        train_transform=train_transform,
+        test_transform=test_transform,
+    )
 
     sampler = RandomIdentitySampler(
         train_dataset,

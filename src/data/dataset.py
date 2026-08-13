@@ -12,7 +12,7 @@ from torchvision import transforms
 from src.common.utils import resolve_path
 
 
-class Market1501Dataset(Dataset):
+class ImageFolderReIDDataset(Dataset):
     def __init__(self, folder: str | Path, transform=None, relabel: bool = False) -> None:
         self.folder = resolve_path(folder)
         self.transform = transform
@@ -62,8 +62,58 @@ class Market1501Dataset(Dataset):
         }
 
 
+class Market1501Dataset(ImageFolderReIDDataset):
+    pass
+
+
+DATASET_REGISTRY = {
+    "market1501": ImageFolderReIDDataset,
+    "market-1501": ImageFolderReIDDataset,
+    "dukemtmc": ImageFolderReIDDataset,
+    "dukemtmc-reid": ImageFolderReIDDataset,
+    "msmt17": ImageFolderReIDDataset,
+}
+
+
+def get_dataset_class(dataset_name: str):
+    dataset_key = dataset_name.strip().lower()
+    if dataset_key not in DATASET_REGISTRY:
+        supported = ", ".join(sorted(DATASET_REGISTRY))
+        raise ValueError(f"Unsupported dataset '{dataset_name}'. Supported datasets: {supported}")
+    return DATASET_REGISTRY[dataset_key]
+
+
+def build_dataset(
+    config: dict,
+    split: str,
+    transform=None,
+    relabel: bool = False,
+):
+    dataset_name = config["data"]["dataset"]["name"]
+    dataset_class = get_dataset_class(dataset_name)
+    split_to_dir = {
+        "train": config["data"]["train_dir"],
+        "query": config["data"]["query_dir"],
+        "gallery": config["data"]["gallery_dir"],
+    }
+    if split not in split_to_dir:
+        raise ValueError(f"Unsupported split '{split}'. Expected one of: train, query, gallery")
+    return dataset_class(split_to_dir[split], transform=transform, relabel=relabel)
+
+
+def build_dataset_splits(
+    config: dict,
+    train_transform=None,
+    test_transform=None,
+):
+    train_dataset = build_dataset(config, "train", transform=train_transform, relabel=True)
+    query_dataset = build_dataset(config, "query", transform=test_transform, relabel=False)
+    gallery_dataset = build_dataset(config, "gallery", transform=test_transform, relabel=False)
+    return train_dataset, query_dataset, gallery_dataset
+
+
 class RandomIdentitySampler(Sampler[int]):
-    def __init__(self, dataset: Market1501Dataset, batch_size: int, instances_per_identity: int) -> None:
+    def __init__(self, dataset: ImageFolderReIDDataset, batch_size: int, instances_per_identity: int) -> None:
         if batch_size % instances_per_identity != 0:
             raise ValueError("batch_size must be divisible by instances_per_identity")
 

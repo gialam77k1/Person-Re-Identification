@@ -140,6 +140,12 @@ data:
 
 Code vẫn tương thích ngược với config cũ dùng `train_dir`, `query_dir`, `gallery_dir`, nhưng nên ưu tiên format mới để chuẩn bị cho bước multi-dataset.
 
+Hiện tại code đã dùng dataset factory theo `data.dataset.name`, nên các bước tiếp theo có thể mở rộng chung cho:
+
+- `market1501`
+- `dukemtmc-reid`
+- `msmt17`
+
 ## 5. Cách chạy
 
 ### Smoke test

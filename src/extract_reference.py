@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 
 from src.common.config import load_runtime_config
 from src.common.utils import configure_torch_home, infer_device, load_checkpoint, resolve_path, save_json
-from src.data.dataset import Market1501Dataset, build_transforms
+from src.data.dataset import build_dataset, build_transforms
 from src.models.reid_model import build_model_from_config
 from src.reid.evaluation import extract_features
 
@@ -39,7 +39,7 @@ def main() -> None:
     device = infer_device(config["device"])
     _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
 
-    train_dataset = Market1501Dataset(config["data"]["train_dir"], transform=test_transform, relabel=True)
+    train_dataset = build_dataset(config, "train", transform=test_transform, relabel=True)
     train_loader = DataLoader(
         train_dataset,
         batch_size=config["data"]["eval_batch_size"],
