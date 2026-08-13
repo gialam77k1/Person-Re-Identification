@@ -284,7 +284,37 @@ Sau đó truy cập:
 
 - [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-## 9. Git và push code
+## 9. Kaggle
+
+Repo hiện có sẵn bộ script để tự động:
+
+- chuẩn bị bundle code từ repo hiện tại
+- push kernel lên Kaggle
+- chờ kernel chạy xong
+- kéo artifact về local
+
+Thiết lập nhanh:
+
+```powershell
+Copy-Item .\kaggle_setup\my_kernel\job-config.template.json .\kaggle_setup\my_kernel\job-config.json
+```
+
+Sau đó sửa `job-config.json` cho đúng:
+
+- `kernel_id`
+- `dataset_name`
+- `kaggle_dataset_root`
+- `dataset_sources`
+
+Chạy tự động:
+
+```powershell
+.\scripts\run_kaggle_kernel.ps1
+```
+
+Chi tiết hơn xem [kaggle_setup/README.md](E:/IUH%20Data/N%C4%83m%205%20-%20K%E1%BB%B3%201/Person-Re-Identification/kaggle_setup/README.md).
+
+## 10. Git và push code
 
 Repo đã có [`.gitignore`](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\.gitignore) để tránh đẩy lên:
 
@@ -308,14 +338,14 @@ git commit -m "Your commit message"
 git push origin <ten-branch>
 ```
 
-## 10. Hướng phát triển tiếp
+## 11. Hướng phát triển tiếp
 
 - So sánh lại `dadnet.yaml` với `baseline.yaml`
 - So riêng `before rerank` và `after rerank`
 - Tối ưu thêm `sampler`, `triplet margin`, `scheduler step`
 - Nếu cần, tách riêng mô hình DADNet sang file chuyên biệt thay vì để chung trong [reid_model.py](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\src\models\reid_model.py)
 
-## 11. Tài liệu tham khảo
+## 12. Tài liệu tham khảo
 
 - [PyTorch Start Locally](https://docs.pytorch.org/get-started/locally/)
 - [MLflow Quickstart](https://mlflow.org/docs/latest/ml/getting-started/quickstart/)
