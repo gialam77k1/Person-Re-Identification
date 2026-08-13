@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.common.config import load_config
+from src.common.config import load_runtime_config
 from src.common.utils import configure_torch_home, infer_device, load_checkpoint, save_json
 from src.data.dataset import Market1501Dataset, build_transforms
 from src.models.reid_model import build_model_from_config
@@ -27,12 +27,19 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/baseline.yaml")
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Override config values, for example --set evaluation.use_rerank=true",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    config = load_config(args.config)
+    config = load_runtime_config(args.config, args.set)
     configure_torch_home()
     device = infer_device(config["device"])
     _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])

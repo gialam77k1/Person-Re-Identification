@@ -161,6 +161,20 @@ python .\src\train.py --config .\configs\dadnet.yaml
 
 Tại thời điểm hiện tại, `dadnet.yaml` là file cấu hình chính đang được tinh chỉnh trực tiếp để thử phá plateau của metric.
 
+Có thể override nhanh cấu hình từ CLI mà không cần sửa YAML:
+
+```powershell
+python .\src\train.py --config .\configs\baseline.yaml --set data.batch_size=32 --set train.learning_rate=0.0001 --set logging.enable_mlflow=false
+python .\src\evaluate.py --config .\configs\dadnet_eval_final.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set evaluation.use_rerank=true
+python .\src\extract_reference.py --config .\configs\baseline.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.eval_batch_size=64
+```
+
+Giá trị sau dấu `=` được parse theo YAML, nên có thể dùng được với:
+
+- số như `32`, `0.0001`
+- boolean như `true`, `false`
+- list như `"[1, 2, 3]"` nếu cần mở rộng sau này
+
 ### Các config thử nghiệm riêng
 
 Loss-focused:

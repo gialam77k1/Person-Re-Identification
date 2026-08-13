@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.common.config import load_config
+from src.common.config import load_runtime_config
 from src.common.utils import (
     configure_torch_home,
     ensure_dir,
@@ -38,6 +38,13 @@ from src.reid.losses import ReIDLoss
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/baseline.yaml")
+    parser.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Override config values, for example --set data.batch_size=32",
+    )
     return parser.parse_args()
 
 
@@ -296,7 +303,7 @@ def build_scheduler(config: dict, optimizer: torch.optim.Optimizer):
 
 def main() -> None:
     args = parse_args()
-    config = load_config(args.config)
+    config = load_runtime_config(args.config, args.set)
     seed_everything(config["seed"])
     configure_torch_home()
 
