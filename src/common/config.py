@@ -42,18 +42,14 @@ def _resolve_split_path(dataset_root: str | Path, split_path: str) -> str:
     return str(Path(dataset_root) / split)
 
 
-def normalize_data_config(config: dict[str, Any]) -> dict[str, Any]:
-    data = config.setdefault("data", {})
-    dataset = data.setdefault("dataset", {})
+def _normalize_image_folder_location(data: dict[str, Any], dataset: dict[str, Any]) -> None:
+    location = data.setdefault("location", {})
+    location_root = location.get("root") or dataset.get("root") or data.get("root") or "."
 
-    dataset_name = dataset.get("name") or data.get("dataset_name") or "market1501"
-    dataset_root = dataset.get("root") or data.get("root") or "."
+    splits = location.get("splits")
+    if not isinstance(splits, dict):
+        splits = data.get("splits")
 
-    dataset["name"] = str(dataset_name)
-    dataset["root"] = str(dataset_root)
-    data["root"] = str(dataset_root)
-
-    splits = data.get("splits")
     if not isinstance(splits, dict):
         splits = {
             "train": data.get("train_dir", "bounding_box_train"),
@@ -67,10 +63,35 @@ def normalize_data_config(config: dict[str, Any]) -> dict[str, Any]:
             "gallery": splits.get("gallery", data.get("gallery_dir", "bounding_box_test")),
         }
 
+    location["root"] = str(location_root)
+    location["splits"] = splits
+    dataset["root"] = str(location_root)
+    data["root"] = str(location_root)
     data["splits"] = splits
-    data["train_dir"] = _resolve_split_path(dataset_root, str(splits["train"]))
-    data["query_dir"] = _resolve_split_path(dataset_root, str(splits["query"]))
-    data["gallery_dir"] = _resolve_split_path(dataset_root, str(splits["gallery"]))
+    data["train_dir"] = _resolve_split_path(location_root, str(splits["train"]))
+    data["query_dir"] = _resolve_split_path(location_root, str(splits["query"]))
+    data["gallery_dir"] = _resolve_split_path(location_root, str(splits["gallery"]))
+
+
+def normalize_data_config(config: dict[str, Any]) -> dict[str, Any]:
+    data = config.setdefault("data", {})
+    dataset = data.setdefault("dataset", {})
+
+    dataset_name = dataset.get("name") or data.get("dataset_name") or "market1501"
+    source_type = str(data.get("source_type") or dataset.get("source_type") or "image_folder")
+
+    dataset["name"] = str(dataset_name)
+    dataset["source_type"] = source_type
+    data["source_type"] = source_type
+
+    if source_type == "image_folder":
+        _normalize_image_folder_location(data, dataset)
+        return config
+
+    raise ValueError(
+        f"Unsupported data.source_type '{source_type}'. "
+        "Currently supported: image_folder"
+    )
     return config
 
 

@@ -89,6 +89,13 @@ def build_dataset(
     transform=None,
     relabel: bool = False,
 ):
+    source_type = config["data"].get("source_type", "image_folder")
+    if source_type != "image_folder":
+        raise ValueError(
+            f"Unsupported data.source_type '{source_type}' for dataset loading. "
+            "Currently supported: image_folder"
+        )
+
     dataset_name = config["data"]["dataset"]["name"]
     dataset_class = get_dataset_class(dataset_name)
     split_to_dir = {

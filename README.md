@@ -129,22 +129,32 @@ Cấu trúc config dataset hiện tại đã được chuẩn hóa theo hướng
 
 ```yaml
 data:
+  source_type: image_folder
   dataset:
     name: market1501
+  location:
     root: datasets/Market-1501-v15.09.15
-  splits:
-    train: bounding_box_train
-    query: query
-    gallery: bounding_box_test
+    splits:
+      train: bounding_box_train
+      query: query
+      gallery: bounding_box_test
 ```
 
-Code vẫn tương thích ngược với config cũ dùng `train_dir`, `query_dir`, `gallery_dir`, nhưng nên ưu tiên format mới để chuẩn bị cho bước multi-dataset.
+Code vẫn tương thích ngược với config cũ dùng `train_dir`, `query_dir`, `gallery_dir`, nhưng nên ưu tiên format mới để chuẩn bị cho bước manifest/version sau này.
 
-Hiện tại code đã dùng dataset factory theo `data.dataset.name`, nên các bước tiếp theo có thể mở rộng chung cho:
+Ý nghĩa của schema mới:
 
-- `market1501`
-- `dukemtmc-reid`
-- `msmt17`
+- `source_type`: kiểu nguồn dữ liệu, hiện tại hỗ trợ `image_folder`
+- `dataset.name`: tên logic của dataset để log/so sánh thí nghiệm
+- `location.root`: nơi chứa dữ liệu
+- `location.splits`: mô tả split train/query/gallery
+
+Sau này nếu chuyển sang MLOps đầy đủ hơn, chỗ này có thể mở rộng tiếp sang:
+
+- `source_type: manifest`
+- `location.manifest_path`
+- `dataset.version`
+- `dataset.uri`
 
 ## 5. Cách chạy
 
