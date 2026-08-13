@@ -5,13 +5,15 @@ device: auto
 num_workers: 2
 
 data:
+  source_type: image_folder
   dataset:
     name: market1501
+  location:
     root: datasets/Market-1501-v15.09.15
-  splits:
-    train: bounding_box_train
-    query: query
-    gallery: bounding_box_test
+    splits:
+      train: bounding_box_train
+      query: query
+      gallery: bounding_box_test
   image_height: 224
   image_width: 224
   batch_size: 8
