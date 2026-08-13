@@ -37,7 +37,7 @@ from src.reid.losses import ReIDLoss
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/baseline.yaml")
+    parser.add_argument("--config", default="configs/dadnet.yaml")
     parser.add_argument(
         "--set",
         action="append",

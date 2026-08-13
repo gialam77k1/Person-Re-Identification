@@ -44,14 +44,10 @@ Ghi chú:
 ```text
 Person-Re-Identification/
 ├─ configs/
-│  ├─ baseline.yaml
-│  ├─ baseline_smoke.yaml
 │  ├─ dadnet.yaml
 │  ├─ dadnet_smoke.yaml
-│  ├─ dadnet_loss_tuned.yaml
-│  ├─ dadnet_batch_tuned.yaml
-│  ├─ dadnet_scheduler_tuned.yaml
-│  └─ dadnet_eval_final.yaml
+│  ├─ baseline.yaml
+│  └─ baseline_smoke.yaml
 ├─ datasets/
 │  └─ Market-1501-v15.09.15/
 ├─ artifacts/
@@ -168,18 +164,10 @@ thay vì ép phải đổi dữ liệu vật lý sang `bounding_box_train/query/
 
 ### Smoke test
 
-Baseline:
-
-```powershell
-conda activate C:\tmp\reid-mlops
-python .\src\train.py --config .\configs\baseline_smoke.yaml
-```
-
-DADNet-inspired:
-
 ```powershell
 conda activate C:\tmp\reid-mlops
 python .\src\train.py --config .\configs\dadnet_smoke.yaml
+python .\src\train.py --config .\configs\baseline_smoke.yaml
 ```
 
 ### Train chính
@@ -213,7 +201,7 @@ Có thể override nhanh cấu hình từ CLI mà không cần sửa YAML:
 
 ```powershell
 python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --set train.learning_rate=0.00003 --set logging.enable_mlflow=false
-python .\src\evaluate.py --config .\configs\dadnet_eval_final.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set evaluation.use_rerank=true
+python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set evaluation.use_rerank=true
 python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.eval_batch_size=64
 ```
 
@@ -223,30 +211,14 @@ Giá trị sau dấu `=` được parse theo YAML, nên có thể dùng được
 - boolean như `true`, `false`
 - list như `"[1, 2, 3]"` nếu cần mở rộng sau này
 
-### Các config thử nghiệm riêng
+### Tinh chỉnh nhanh bằng override
 
-Loss-focused:
-
-```powershell
-python .\src\train.py --config .\configs\dadnet_loss_tuned.yaml
-```
-
-Batch-focused:
+Thay vì giữ nhiều file config gần giống nhau, nên ưu tiên override trực tiếp:
 
 ```powershell
-python .\src\train.py --config .\configs\dadnet_batch_tuned.yaml
-```
-
-Scheduler-focused:
-
-```powershell
-python .\src\train.py --config .\configs\dadnet_scheduler_tuned.yaml
-```
-
-Config đánh giá cuối:
-
-```powershell
-python .\src\evaluate.py --config .\configs\dadnet_eval_final.yaml --checkpoint .\artifacts\checkpoints\best_model.pth
+python .\src\train.py --config .\configs\dadnet.yaml --set train.learning_rate=0.00003 --set train.scheduler_type=cosine
+python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --set train.triplet_margin=0.4
+python .\src\train.py --config .\configs\dadnet.yaml --set augmentation.random_erasing=false --set augmentation.color_jitter=false
 ```
 
 ### Đánh giá checkpoint
@@ -337,11 +309,6 @@ git push origin <ten-branch>
 ## 10. Hướng phát triển tiếp
 
 - So sánh lại `dadnet.yaml` với `baseline.yaml`
-- Thử ablation sạch giữa:
-  `dadnet.yaml`
-  `dadnet_loss_tuned.yaml`
-  `dadnet_batch_tuned.yaml`
-  `dadnet_scheduler_tuned.yaml`
 - So riêng `before rerank` và `after rerank`
 - Tối ưu thêm `sampler`, `triplet margin`, `scheduler step`
 - Nếu cần, tách riêng mô hình DADNet sang file chuyên biệt thay vì để chung trong [reid_model.py](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\src\models\reid_model.py)
