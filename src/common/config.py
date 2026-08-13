@@ -114,9 +114,19 @@ def normalize_artifact_config(config: dict[str, Any], command_name: str) -> dict
     dataset_slug = _slugify(config["data"]["dataset"]["name"])
     config_slug = _slugify(Path(config["config_path"]).stem)
     command_slug = _slugify(command_name)
-    run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_slug = f"{dataset_slug}-{config_slug}-{command_slug}-{run_id}"
-    run_root = artifact_root / dataset_slug / run_slug
+    runtime = config.setdefault("runtime", {})
+
+    requested_run_root = artifacts.get("run_root") or runtime.get("run_root")
+    requested_run_slug = runtime.get("run_slug")
+
+    if requested_run_root:
+        run_root = Path(str(requested_run_root))
+        run_slug = str(requested_run_slug or run_root.name)
+        run_id = str(runtime.get("run_id") or "external")
+    else:
+        run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        run_slug = str(requested_run_slug or f"{dataset_slug}-{config_slug}-{command_slug}-{run_id}")
+        run_root = artifact_root / dataset_slug / run_slug
 
     artifacts["root"] = str(artifact_root)
     artifacts["run_root"] = str(run_root)
@@ -125,7 +135,6 @@ def normalize_artifact_config(config: dict[str, Any], command_name: str) -> dict
     artifacts["embeddings_dir"] = str(run_root / "embeddings")
     artifacts["logs_dir"] = str(run_root / "logs")
 
-    runtime = config.setdefault("runtime", {})
     runtime["command"] = command_name
     runtime["dataset_slug"] = dataset_slug
     runtime["config_slug"] = config_slug

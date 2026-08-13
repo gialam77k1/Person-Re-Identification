@@ -11,9 +11,8 @@ venv/
 env/
 ENV/
 .local/
-.kaggle/
-kaggle_outputs/
 kaggle_setup/my_kernel/build/
+kaggle_setup/my_kernel/build-*/
 kaggle_setup/my_kernel/job-config.json
 
 # Local data and experiment outputs

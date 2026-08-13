@@ -77,19 +77,19 @@ Môi trường đã được xác nhận chạy trong máy hiện tại:
 conda activate C:\tmp\reid-mlops
 ```
 
-Kiểm tra nhanh:
-
-```powershell
-python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('torchvision =', torchvision.__version__); print('cuda =', torch.cuda.is_available())"
-```
-
-Nếu muốn tạo môi trường mới:
+Nếu muốn tạo môi trường mới từ đầu:
 
 ```powershell
 conda create -n reid-mlops python=3.10 -y
 conda activate reid-mlops
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+```
+
+Kiểm tra nhanh sau khi cài:
+
+```powershell
+python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('torchvision =', torchvision.__version__); print('cuda =', torch.cuda.is_available())"
 ```
 
 Nếu chạy CPU:
@@ -104,22 +104,44 @@ Tham khảo cài đặt GPU:
 
 ## 4. Dataset
 
-Thư mục dữ liệu mặc định:
+Repo hiện chạy local, vì vậy bạn chỉ cần có dataset trên máy và truyền đúng `DatasetRoot`.
+
+### 4.1. Dataset mặc định
+
+Thư mục dữ liệu mặc định trong config:
 
 ```text
 datasets/Market-1501-v15.09.15/
 ```
 
-Cần có đủ các thư mục:
+Với `Market-1501` hoặc `DukeMTMC-reID`, dataset root cần có đủ:
 
 - `bounding_box_train`
 - `query`
 - `bounding_box_test`
 
-Các đường dẫn đang được khai báo trong:
+Ví dụ:
+
+```text
+datasets/dukemtmc/
+├─ bounding_box_train/
+├─ query/
+└─ bounding_box_test/
+```
+
+Với `MSMT17`, root cần giữ nguyên protocol gốc:
+
+- `list_train.txt`
+- `list_query.txt`
+- `list_gallery.txt`
+- thư mục ảnh tương ứng của `MSMT17`
+
+Các đường dẫn mẫu đang được khai báo trong:
 
 - [baseline.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\baseline.yaml)
 - [dadnet.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\dadnet.yaml)
+
+### 4.2. Schema config dataset
 
 Cấu trúc config dataset hiện tại đã được chuẩn hóa theo hướng:
 
@@ -162,7 +184,59 @@ thay vì ép phải đổi dữ liệu vật lý sang `bounding_box_train/query/
 
 ## 5. Cách chạy
 
-### Smoke test
+### 5.1. Chạy nhanh nhất để train local
+
+Kích hoạt môi trường:
+
+```powershell
+conda activate C:\tmp\reid-mlops
+```
+
+Train một run mới với `Market-1501`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_train.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Train rồi evaluate luôn trong cùng một run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Ví dụ với `DukeMTMC-reID`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName dukemtmc-reid -DatasetRoot "datasets/dukemtmc"
+```
+
+Ví dụ với `MSMT17`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName msmt17 -DatasetRoot "datasets/MSMT17_V1"
+```
+
+### 5.2. Nếu muốn chạy trực tiếp bằng Python
+
+Train trực tiếp:
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=market1501 --set data.location.root="datasets/Market-1501-v15.09.15"
+```
+
+Train trực tiếp với Duke:
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=dukemtmc-reid --set data.location.root="datasets/dukemtmc"
+```
+
+Train trực tiếp với MSMT17:
+
+```powershell
+python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
+```
+
+### 5.3. Smoke test
 
 ```powershell
 conda activate C:\tmp\reid-mlops
@@ -170,39 +244,10 @@ python .\src\train.py --config .\configs\dadnet_smoke.yaml
 python .\src\train.py --config .\configs\baseline_smoke.yaml
 ```
 
-### Train chính
-
-Config chính hiện tại:
-
-```powershell
-conda activate C:\tmp\reid-mlops
-python .\src\train.py --config .\configs\dadnet.yaml
-```
-
-Theo hướng MLOps, nên ưu tiên dùng `1 config chung + override` thay vì tách nhiều config gần giống nhau.
-
-Với repo này, `dadnet.yaml` là config chung chính đang dùng. Có thể đổi dataset bằng `--set`:
-
-```powershell
-python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=market1501 --set data.location.root="datasets/Market-1501-v15.09.15"
-python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=dukemtmc-reid --set data.location.root="datasets/dukemtmc"
-python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
-```
-
-Với `MSMT17`, adapter sẽ tự đọc:
-
-- `list_train.txt`
-- `list_query.txt`
-- `list_gallery.txt`
-
-nên vẫn giữ đúng protocol gốc dù đang dùng chung `dadnet.yaml`.
-
-Có thể override nhanh cấu hình từ CLI mà không cần sửa YAML:
+### 5.4. Override nhanh từ CLI
 
 ```powershell
 python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --set train.learning_rate=0.00003 --set logging.enable_mlflow=false
-python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set evaluation.use_rerank=true
-python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.eval_batch_size=64
 ```
 
 Giá trị sau dấu `=` được parse theo YAML, nên có thể dùng được với:
@@ -211,9 +256,7 @@ Giá trị sau dấu `=` được parse theo YAML, nên có thể dùng được
 - boolean như `true`, `false`
 - list như `"[1, 2, 3]"` nếu cần mở rộng sau này
 
-### Tinh chỉnh nhanh bằng override
-
-Thay vì giữ nhiều file config gần giống nhau, nên ưu tiên override trực tiếp:
+Một số ví dụ hay dùng:
 
 ```powershell
 python .\src\train.py --config .\configs\dadnet.yaml --set train.learning_rate=0.00003 --set train.scheduler_type=cosine
@@ -221,19 +264,21 @@ python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --
 python .\src\train.py --config .\configs\dadnet.yaml --set augmentation.random_erasing=false --set augmentation.color_jitter=false
 ```
 
-### Đánh giá checkpoint
+### 5.5. Evaluate checkpoint
 
-Config chung `dadnet.yaml`:
+Nếu bạn đã có `best_model.pth`, có thể evaluate riêng:
 
 ```powershell
-python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth
-python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=dukemtmc-reid --set data.location.root="datasets/dukemtmc"
-python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\artifacts\market1501\...\checkpoints\best_model.pth"
 ```
 
-### Trích xuất embedding tham chiếu
+Hoặc gọi Python trực tiếp:
 
-Config chung `dadnet.yaml`:
+```powershell
+python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint ".\artifacts\market1501\...\checkpoints\best_model.pth" --set data.dataset.name=market1501 --set data.location.root="datasets/Market-1501-v15.09.15"
+```
+
+### 5.6. Trích xuất embedding tham chiếu
 
 ```powershell
 python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth
@@ -272,6 +317,14 @@ Sau khi train hoặc evaluate, kết quả thường được lưu ở:
 - `artifacts/<dataset>/<run-slug>/embeddings/reference_manifest.json`
 - `artifacts/<dataset>/<run-slug>/logs/effective_config.json`
 
+Nếu chạy qua `run_local_pipeline.ps1` thì thường bạn sẽ quan tâm nhất tới:
+
+- `artifacts/<dataset>/<run-slug>/checkpoints/best_model.pth`
+- `artifacts/<dataset>/<run-slug>/metrics/metrics_v1.json`
+- `artifacts/<dataset>/<run-slug>/metrics/evaluation_latest.json`
+- `artifacts/<dataset>/<run-slug>/logs/train.log`
+- `artifacts/<dataset>/<run-slug>/logs/evaluate.log`
+
 ## 8. MLflow
 
 Mở giao diện MLflow:
@@ -284,35 +337,22 @@ Sau đó truy cập:
 
 - [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-## 9. Kaggle
+## 9. Local Automation
 
-Repo hiện có sẵn bộ script để tự động:
+Repo hiện dùng local runner để train và evaluate ngay trên máy.
 
-- chuẩn bị bundle code từ repo hiện tại
-- push kernel lên Kaggle
-- chờ kernel chạy xong
-- kéo artifact về local
+Ba script chính:
 
-Thiết lập nhanh:
+- `scripts/run_local_train.ps1`: chỉ train
+- `scripts/run_local_evaluate.ps1`: chỉ evaluate
+- `scripts/run_local_pipeline.ps1`: train rồi evaluate trong cùng một run
 
-```powershell
-Copy-Item .\kaggle_setup\my_kernel\job-config.template.json .\kaggle_setup\my_kernel\job-config.json
-```
+`run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
-Sau đó sửa `job-config.json` cho đúng:
-
-- `kernel_id`
-- `dataset_name`
-- `kaggle_dataset_root`
-- `dataset_sources`
-
-Chạy tự động:
-
-```powershell
-.\scripts\run_kaggle_kernel.ps1
-```
-
-Chi tiết hơn xem [kaggle_setup/README.md](E:/IUH%20Data/N%C4%83m%205%20-%20K%E1%BB%B3%201/Person-Re-Identification/kaggle_setup/README.md).
+- tự tạo `run_slug`
+- train và evaluate dùng chung một `run_root`
+- log và artifact nằm chung một chỗ
+- phù hợp để sau này gọi từ pipeline local/MLOps
 
 ## 10. Git và push code
 
