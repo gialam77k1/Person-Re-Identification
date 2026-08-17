@@ -376,6 +376,46 @@ Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
 - max batch size: `16`
 - preferred batch size: `4, 8, 16`
 
+### 5.10. Chay Triton local bang Docker Compose
+
+Tao file env rieng cho Triton:
+
+```powershell
+Copy-Item .\.env.triton.example .\.env.triton
+```
+
+Sau do sua gia tri `TRITON_MODEL_REPOSITORY` trong `.env.triton` tro toi model repository vua tao.
+
+Kiem tra nhanh file env can co:
+
+```text
+TRITON_IMAGE=nvcr.io/nvidia/tritonserver:24.08-py3
+TRITON_MODEL_REPOSITORY=E:/.../artifacts/triton/triton-repository-<timestamp>/model_repository
+```
+
+Chay Triton local:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_triton_local.ps1 -Detach
+```
+
+Dung server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop_triton_local.ps1
+```
+
+Compose hien tai map 3 cong mac dinh cua Triton:
+
+- HTTP: `8000`
+- gRPC: `8001`
+- Metrics: `8002`
+
+Sau khi server len, co the kiem tra health qua:
+
+- [http://localhost:8000/v2/health/live](http://localhost:8000/v2/health/live)
+- [http://localhost:8000/v2/health/ready](http://localhost:8000/v2/health/ready)
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -440,6 +480,8 @@ Ba script chính:
 - `scripts/run_imported_model_pipeline.ps1`: dùng checkpoint đã train sẵn để evaluate + extract trên local
 - `scripts/run_local_export_onnx.ps1`: export checkpoint sang ONNX embedding model
 - `scripts/run_prepare_triton_model.ps1`: dong goi ONNX thanh Triton model repository
+- `scripts/run_triton_local.ps1`: chay Triton local bang Docker Compose
+- `scripts/stop_triton_local.ps1`: dung Triton local
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
