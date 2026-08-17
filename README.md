@@ -416,6 +416,29 @@ Sau khi server len, co the kiem tra health qua:
 - [http://localhost:8000/v2/health/live](http://localhost:8000/v2/health/live)
 - [http://localhost:8000/v2/health/ready](http://localhost:8000/v2/health/ready)
 
+### 5.11. Goi infer local de lay embedding tu Triton
+
+Sau khi Triton da chay, co the gui 1 anh vao model `reid_embedding` bang:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_triton_infer.ps1 -ImagePath ".\datasets\Market-1501-v15.09.15\query\0001_c1s1_001051_00.jpg"
+```
+
+Client nay:
+
+- preprocess anh dung voi pipeline test cua repo
+- resize ve `224 x 224`
+- normalize theo `ImageNet mean/std`
+- goi HTTP infer toi Triton
+- luu `embedding` ra file `.npy`
+- luu manifest JSON de phuc vu buoc vector search sau nay
+
+Ket qua mac dinh duoc luu trong:
+
+- `artifacts/inference/local-triton/<image-stem>_embedding.npy`
+- `artifacts/inference/local-triton/<image-stem>_infer_manifest.json`
+- `artifacts/inference/local-triton/triton_infer.log`
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -482,6 +505,7 @@ Ba script chính:
 - `scripts/run_prepare_triton_model.ps1`: dong goi ONNX thanh Triton model repository
 - `scripts/run_triton_local.ps1`: chay Triton local bang Docker Compose
 - `scripts/stop_triton_local.ps1`: dung Triton local
+- `scripts/run_triton_infer.ps1`: gui anh qua Triton va lay embedding
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
