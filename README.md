@@ -317,6 +317,32 @@ Script này sẽ:
 - tạo một run local mới trong `artifacts/<dataset>/<run-slug>/`
 - lưu lại `evaluate.log`, `extract.log`, `evaluation_latest.json` và bộ `reference_embeddings`
 
+### 5.8. Export checkpoint sang ONNX
+
+Cài thêm dependency export nếu máy chưa có:
+
+```powershell
+conda activate C:\tmp\reid-mlops
+pip install onnx
+pip install onnxscript
+```
+
+Export một checkpoint local sang ONNX embedding model:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_export_onnx.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\model\checkpoints\best_model.pth"
+```
+
+Kết quả sẽ nằm trong:
+
+- `artifacts/<dataset>/<run-slug>/exports/model_embedding.onnx`
+- `artifacts/<dataset>/<run-slug>/exports/onnx_export_manifest.json`
+- `artifacts/<dataset>/<run-slug>/logs/export_onnx.log`
+
+Model ONNX này trả về trực tiếp `embeddings`, phù hợp cho bước so khớp đặc trưng trong hệ thống ReID và là đầu vào tự nhiên cho giai đoạn serving sau này.
+
+Ghi chú: với stack `PyTorch 2.11` hiện tại trong dự án, nên dùng `opset 18` để tránh lỗi convert version khi exporter tự sinh graph ONNX mới.
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -379,6 +405,7 @@ Ba script chính:
 - `scripts/run_local_extract.ps1`: chỉ extract reference embeddings
 - `scripts/run_local_pipeline.ps1`: train rồi evaluate trong cùng một run
 - `scripts/run_imported_model_pipeline.ps1`: dùng checkpoint đã train sẵn để evaluate + extract trên local
+- `scripts/run_local_export_onnx.ps1`: export checkpoint sang ONNX embedding model
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
