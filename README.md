@@ -458,6 +458,50 @@ Ket qua mac dinh duoc luu trong:
 - `artifacts/inference/local-triton/<image-stem>_infer_manifest.json`
 - `artifacts/inference/local-triton/triton_infer.log`
 
+### 5.12. Qdrant local cho vector search
+
+Tao file env:
+
+```powershell
+Copy-Item .\.env.qdrant.example .\.env.qdrant
+```
+
+Chay Qdrant local:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_local.ps1 -Detach
+```
+
+Dung Qdrant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop_qdrant_local.ps1
+```
+
+Tao collection `reid_reference`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_create_collection.ps1
+```
+
+Neu da co bo `reference_embeddings.npy`, `reference_pids.npy`, `reference_camids.npy` thi upsert vao Qdrant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_upsert_reference.ps1 -EmbeddingsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_embeddings.npy" -PidsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_pids.npy" -CamidsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_camids.npy"
+```
+
+Sau khi Triton da sinh `embedding.npy`, co the query top-k nhu sau:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_query_embedding.ps1 -EmbeddingPath ".\artifacts\inference\local-triton\0001_c1s1_001051_00_embedding.npy"
+```
+
+Phan nay la cau noi dau tien cho retrieval:
+
+- Triton sinh `embedding`
+- Qdrant luu `reference embeddings`
+- query embedding di tim top-k match gan nhat
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -525,6 +569,11 @@ Ba script chính:
 - `scripts/run_triton_local.ps1`: chay Triton local bang Docker Compose
 - `scripts/stop_triton_local.ps1`: dung Triton local
 - `scripts/run_triton_infer.ps1`: gui anh qua Triton va lay embedding
+- `scripts/run_qdrant_local.ps1`: chay Qdrant local bang Docker Compose
+- `scripts/stop_qdrant_local.ps1`: dung Qdrant local
+- `scripts/run_qdrant_create_collection.ps1`: tao collection vector search
+- `scripts/run_qdrant_upsert_reference.ps1`: import reference embeddings vao Qdrant
+- `scripts/run_qdrant_query_embedding.ps1`: query top-k bang embedding tu Triton
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
