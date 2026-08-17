@@ -367,14 +367,21 @@ Script nay se:
 - sinh `config.pbtxt` cho `images -> embeddings`
 - bat `dynamic_batching`
 - luu `triton_model_manifest.json` de sau nay noi tiep sang serving
+- mac dinh dung `KIND_CPU` de de test local; co the doi sang `KIND_GPU` khi dong goi cho may co CUDA/Triton GPU on dinh
 
 Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
 
 - input: `3 x 224 x 224`
 - output: `512-dim embeddings`
 - model name: `reid_embedding`
-- max batch size: `16`
-- preferred batch size: `4, 8, 16`
+- max batch size local mac dinh: `0`
+- preferred batch size `4, 8, 16` chi nen bat khi ban export duoc ONNX dang dynamic-batch that su
+
+Neu muon dong goi ban cho GPU, co the goi them:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_prepare_triton_model.ps1 -OnnxPath "<duong-dan-onnx>" -InstanceKind KIND_GPU
+```
 
 ### 5.10. Chay Triton local bang Docker Compose
 
@@ -391,6 +398,7 @@ Kiem tra nhanh file env can co:
 ```text
 TRITON_IMAGE=nvcr.io/nvidia/tritonserver:24.08-py3
 TRITON_MODEL_REPOSITORY=E:/.../artifacts/triton/triton-repository-<timestamp>/model_repository
+TRITON_NVIDIA_VISIBLE_DEVICES=void
 ```
 
 Chay Triton local:
@@ -410,6 +418,17 @@ Compose hien tai map 3 cong mac dinh cua Triton:
 - HTTP: `8000`
 - gRPC: `8001`
 - Metrics: `8002`
+
+Ban local mac dinh dang chay theo huong CPU-safe:
+
+- `TRITON_NVIDIA_VISIBLE_DEVICES=void`
+- khong ep Docker Compose phai dat reservation GPU
+
+Neu sau nay ban deploy tren may CUDA on dinh va muon dung GPU, co the doi:
+
+```text
+TRITON_NVIDIA_VISIBLE_DEVICES=0
+```
 
 Sau khi server len, co the kiem tra health qua:
 

@@ -4,11 +4,12 @@ param(
     [string]$OnnxPath,
     [string]$ModelName = "reid_embedding",
     [string]$ModelVersion = "1",
-    [int]$MaxBatchSize = 16,
+    [int]$MaxBatchSize = 0,
     [int]$InputHeight = 224,
     [int]$InputWidth = 224,
     [int]$EmbeddingDim = 512,
     [string]$PreferredBatchSizes = "4,8,16",
+    [string]$InstanceKind = "KIND_CPU",
     [string]$OutputRoot = ""
 )
 
@@ -34,7 +35,8 @@ $arguments = @(
     "--input-height", "$InputHeight",
     "--input-width", "$InputWidth",
     "--embedding-dim", "$EmbeddingDim",
-    "--preferred-batch-sizes", $PreferredBatchSizes
+    "--preferred-batch-sizes", $PreferredBatchSizes,
+    "--instance-kind", $InstanceKind
 )
 
 Write-Output "Preparing Triton model repository:"
