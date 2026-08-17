@@ -502,6 +502,39 @@ Phan nay la cau noi dau tien cho retrieval:
 - Qdrant luu `reference embeddings`
 - query embedding di tim top-k match gan nhat
 
+### 5.13. Evaluate deployment quality qua Triton
+
+Sau khi Triton da chay, co the tinh `Rank-1`, `Rank-5`, `Rank-10`, `Rank-20`, `mAP`, `mINP` tren query set bang command sau:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Neu muon smoke test nhanh tren mot phan query set:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -MaxQueries 100
+```
+
+Neu muon smoke test nhanh nhung van dam bao gallery co dung identity de soat pipeline:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -MaxQueries 20 -GalleryMatchQueryPidsOnly
+```
+
+Lenh nay se:
+
+- dua tung anh query qua Triton de sinh embedding
+- dua tung anh gallery qua Triton de sinh embedding
+- tinh metric retrieval theo chuan Market1501
+- luu `deployment_retrieval_evaluate.log` va `deployment_retrieval_latest.json`
+
+Luu y:
+
+- command nay dung cho benchmark deployment quality
+- collection Qdrant `reid_reference` hien tai dang phu hop cho database retrieval local, khong phai gallery benchmark cua Market-1501
+- vi vay, de danh gia `Rank-1` va `mAP` dung nghia, can dung gallery split chuan
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -574,6 +607,7 @@ Ba script chính:
 - `scripts/run_qdrant_create_collection.ps1`: tao collection vector search
 - `scripts/run_qdrant_upsert_reference.ps1`: import reference embeddings vao Qdrant
 - `scripts/run_qdrant_query_embedding.ps1`: query top-k bang embedding tu Triton
+- `scripts/run_deployment_retrieval_evaluate.ps1`: danh gia chat luong deployment bang Triton tren query/gallery benchmark
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
