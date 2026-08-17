@@ -343,6 +343,39 @@ Model ONNX này trả về trực tiếp `embeddings`, phù hợp cho bước so
 
 Ghi chú: với stack `PyTorch 2.11` hiện tại trong dự án, nên dùng `opset 18` để tránh lỗi convert version khi exporter tự sinh graph ONNX mới.
 
+### 5.9. Dong goi ONNX thanh Triton model repository
+
+Sau khi da co file ONNX, co the tao cau truc model repository cho Triton bang:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_prepare_triton_model.ps1 -OnnxPath ".\artifacts\market1501\market1501-dadnet-export-onnx-20260817-162230\exports\model_embedding.onnx"
+```
+
+Ket qua se duoc tao theo cau truc:
+
+```text
+artifacts/triton/triton-repository-<timestamp>/model_repository/
+└─ reid_embedding/
+   ├─ config.pbtxt
+   └─ 1/
+      └─ model.onnx
+```
+
+Script nay se:
+
+- copy file ONNX vao dung cau truc Triton
+- sinh `config.pbtxt` cho `images -> embeddings`
+- bat `dynamic_batching`
+- luu `triton_model_manifest.json` de sau nay noi tiep sang serving
+
+Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
+
+- input: `3 x 224 x 224`
+- output: `512-dim embeddings`
+- model name: `reid_embedding`
+- max batch size: `16`
+- preferred batch size: `4, 8, 16`
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -406,6 +439,7 @@ Ba script chính:
 - `scripts/run_local_pipeline.ps1`: train rồi evaluate trong cùng một run
 - `scripts/run_imported_model_pipeline.ps1`: dùng checkpoint đã train sẵn để evaluate + extract trên local
 - `scripts/run_local_export_onnx.ps1`: export checkpoint sang ONNX embedding model
+- `scripts/run_prepare_triton_model.ps1`: dong goi ONNX thanh Triton model repository
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
