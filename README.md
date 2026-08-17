@@ -286,6 +286,37 @@ python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\
 python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
 ```
 
+Hoặc dùng script local:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_extract.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\artifacts\market1501\...\checkpoints\best_model.pth"
+```
+
+### 5.7. Dùng lại model đã train sẵn từ Kaggle hoặc nguồn ngoài
+
+Nếu bạn đã có một thư mục model như:
+
+```text
+model/
+├─ checkpoints/
+│  └─ best_model.pth
+├─ logs/
+└─ metrics/
+```
+
+thì có thể chạy lại `evaluate` và `extract reference embeddings` trên máy local bằng:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_imported_model_pipeline.ps1 -ModelRoot ".\model" -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Script này sẽ:
+
+- dùng checkpoint từ `model/checkpoints/best_model.pth`
+- không ghi đè artifact gốc trong thư mục `model/`
+- tạo một run local mới trong `artifacts/<dataset>/<run-slug>/`
+- lưu lại `evaluate.log`, `extract.log`, `evaluation_latest.json` và bộ `reference_embeddings`
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -345,7 +376,9 @@ Ba script chính:
 
 - `scripts/run_local_train.ps1`: chỉ train
 - `scripts/run_local_evaluate.ps1`: chỉ evaluate
+- `scripts/run_local_extract.ps1`: chỉ extract reference embeddings
 - `scripts/run_local_pipeline.ps1`: train rồi evaluate trong cùng một run
+- `scripts/run_imported_model_pipeline.ps1`: dùng checkpoint đã train sẵn để evaluate + extract trên local
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 
