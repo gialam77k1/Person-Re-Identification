@@ -1,0 +1,24 @@
+services:
+  triton-server:
+    image: ${TRITON_IMAGE:-nvcr.io/nvidia/tritonserver:24.08-py3}
+    container_name: ${TRITON_CONTAINER_NAME:-reid-triton-server}
+    shm_size: ${TRITON_SHM_SIZE:-1g}
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${TRITON_NVIDIA_VISIBLE_DEVICES:-void}
+    ports:
+      - "${TRITON_HTTP_PORT:-8000}:8000"
+      - "${TRITON_GRPC_PORT:-8001}:8001"
+      - "${TRITON_METRICS_PORT:-8002}:8002"
+    volumes:
+      - ${TRITON_MODEL_REPOSITORY}:/models:ro
+    command:
+      - tritonserver
+      - --model-repository=/models
+      - --strict-model-config=false
+      - --log-verbose=${TRITON_LOG_VERBOSE:-0}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v2/health/ready"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s

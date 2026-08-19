@@ -286,6 +286,255 @@ python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\
 python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
 ```
 
+Hoặc dùng script local:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_extract.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\artifacts\market1501\...\checkpoints\best_model.pth"
+```
+
+### 5.7. Dùng lại model đã train sẵn từ Kaggle hoặc nguồn ngoài
+
+Nếu bạn đã có một thư mục model như:
+
+```text
+model/
+├─ checkpoints/
+│  └─ best_model.pth
+├─ logs/
+└─ metrics/
+```
+
+thì có thể chạy lại `evaluate` và `extract reference embeddings` trên máy local bằng:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_imported_model_pipeline.ps1 -ModelRoot ".\model" -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Script này sẽ:
+
+- dùng checkpoint từ `model/checkpoints/best_model.pth`
+- không ghi đè artifact gốc trong thư mục `model/`
+- tạo một run local mới trong `artifacts/<dataset>/<run-slug>/`
+- lưu lại `evaluate.log`, `extract.log`, `evaluation_latest.json` và bộ `reference_embeddings`
+
+### 5.8. Export checkpoint sang ONNX
+
+Cài thêm dependency export nếu máy chưa có:
+
+```powershell
+conda activate C:\tmp\reid-mlops
+pip install onnx
+pip install onnxscript
+```
+
+Export một checkpoint local sang ONNX embedding model:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_export_onnx.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\model\checkpoints\best_model.pth"
+```
+
+Kết quả sẽ nằm trong:
+
+- `artifacts/<dataset>/<run-slug>/exports/model_embedding.onnx`
+- `artifacts/<dataset>/<run-slug>/exports/onnx_export_manifest.json`
+- `artifacts/<dataset>/<run-slug>/logs/export_onnx.log`
+
+Model ONNX này trả về trực tiếp `embeddings`, phù hợp cho bước so khớp đặc trưng trong hệ thống ReID và là đầu vào tự nhiên cho giai đoạn serving sau này.
+
+Ghi chú: với stack `PyTorch 2.11` hiện tại trong dự án, nên dùng `opset 18` để tránh lỗi convert version khi exporter tự sinh graph ONNX mới.
+
+### 5.9. Dong goi ONNX thanh Triton model repository
+
+Sau khi da co file ONNX, co the tao cau truc model repository cho Triton bang:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_prepare_triton_model.ps1 -OnnxPath ".\artifacts\market1501\market1501-dadnet-export-onnx-20260817-162230\exports\model_embedding.onnx"
+```
+
+Ket qua se duoc tao theo cau truc:
+
+```text
+artifacts/triton/triton-repository-<timestamp>/model_repository/
+└─ reid_embedding/
+   ├─ config.pbtxt
+   └─ 1/
+      └─ model.onnx
+```
+
+Script nay se:
+
+- copy file ONNX vao dung cau truc Triton
+- sinh `config.pbtxt` cho `images -> embeddings`
+- bat `dynamic_batching`
+- luu `triton_model_manifest.json` de sau nay noi tiep sang serving
+- mac dinh dung `KIND_CPU` de de test local; co the doi sang `KIND_GPU` khi dong goi cho may co CUDA/Triton GPU on dinh
+
+Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
+
+- input: `3 x 224 x 224`
+- output: `512-dim embeddings`
+- model name: `reid_embedding`
+- max batch size local mac dinh: `0`
+- preferred batch size `4, 8, 16` chi nen bat khi ban export duoc ONNX dang dynamic-batch that su
+
+Neu muon dong goi ban cho GPU, co the goi them:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_prepare_triton_model.ps1 -OnnxPath "<duong-dan-onnx>" -InstanceKind KIND_GPU
+```
+
+### 5.10. Chay Triton local bang Docker Compose
+
+Tao file env rieng cho Triton:
+
+```powershell
+Copy-Item .\.env.triton.example .\.env.triton
+```
+
+Sau do sua gia tri `TRITON_MODEL_REPOSITORY` trong `.env.triton` tro toi model repository vua tao.
+
+Kiem tra nhanh file env can co:
+
+```text
+TRITON_IMAGE=nvcr.io/nvidia/tritonserver:24.08-py3
+TRITON_MODEL_REPOSITORY=E:/.../artifacts/triton/triton-repository-<timestamp>/model_repository
+TRITON_NVIDIA_VISIBLE_DEVICES=void
+```
+
+Chay Triton local:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_triton_local.ps1 -Detach
+```
+
+Dung server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop_triton_local.ps1
+```
+
+Compose hien tai map 3 cong mac dinh cua Triton:
+
+- HTTP: `8000`
+- gRPC: `8001`
+- Metrics: `8002`
+
+Ban local mac dinh dang chay theo huong CPU-safe:
+
+- `TRITON_NVIDIA_VISIBLE_DEVICES=void`
+- khong ep Docker Compose phai dat reservation GPU
+
+Neu sau nay ban deploy tren may CUDA on dinh va muon dung GPU, co the doi:
+
+```text
+TRITON_NVIDIA_VISIBLE_DEVICES=0
+```
+
+Sau khi server len, co the kiem tra health qua:
+
+- [http://localhost:8000/v2/health/live](http://localhost:8000/v2/health/live)
+- [http://localhost:8000/v2/health/ready](http://localhost:8000/v2/health/ready)
+
+### 5.11. Goi infer local de lay embedding tu Triton
+
+Sau khi Triton da chay, co the gui 1 anh vao model `reid_embedding` bang:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_triton_infer.ps1 -ImagePath ".\datasets\Market-1501-v15.09.15\query\0001_c1s1_001051_00.jpg"
+```
+
+Client nay:
+
+- preprocess anh dung voi pipeline test cua repo
+- resize ve `224 x 224`
+- normalize theo `ImageNet mean/std`
+- goi HTTP infer toi Triton
+- luu `embedding` ra file `.npy`
+- luu manifest JSON de phuc vu buoc vector search sau nay
+
+Ket qua mac dinh duoc luu trong:
+
+- `artifacts/inference/local-triton/<image-stem>_embedding.npy`
+- `artifacts/inference/local-triton/<image-stem>_infer_manifest.json`
+- `artifacts/inference/local-triton/triton_infer.log`
+
+### 5.12. Qdrant local cho vector search
+
+Tao file env:
+
+```powershell
+Copy-Item .\.env.qdrant.example .\.env.qdrant
+```
+
+Chay Qdrant local:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_local.ps1 -Detach
+```
+
+Dung Qdrant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop_qdrant_local.ps1
+```
+
+Tao collection `reid_reference`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_create_collection.ps1
+```
+
+Neu da co bo `reference_embeddings.npy`, `reference_pids.npy`, `reference_camids.npy` thi upsert vao Qdrant:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_upsert_reference.ps1 -EmbeddingsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_embeddings.npy" -PidsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_pids.npy" -CamidsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_camids.npy"
+```
+
+Sau khi Triton da sinh `embedding.npy`, co the query top-k nhu sau:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_query_embedding.ps1 -EmbeddingPath ".\artifacts\inference\local-triton\0001_c1s1_001051_00_embedding.npy"
+```
+
+Phan nay la cau noi dau tien cho retrieval:
+
+- Triton sinh `embedding`
+- Qdrant luu `reference embeddings`
+- query embedding di tim top-k match gan nhat
+
+### 5.13. Evaluate deployment quality qua Triton
+
+Sau khi Triton da chay, co the tinh `Rank-1`, `Rank-5`, `Rank-10`, `Rank-20`, `mAP`, `mINP` tren query set bang command sau:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```
+
+Neu muon smoke test nhanh tren mot phan query set:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -MaxQueries 100
+```
+
+Neu muon smoke test nhanh nhung van dam bao gallery co dung identity de soat pipeline:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -MaxQueries 20 -GalleryMatchQueryPidsOnly
+```
+
+Lenh nay se:
+
+- dua tung anh query qua Triton de sinh embedding
+- dua tung anh gallery qua Triton de sinh embedding
+- tinh metric retrieval theo chuan Market1501
+- luu `deployment_retrieval_evaluate.log` va `deployment_retrieval_latest.json`
+
+Luu y:
+
+- command nay dung cho benchmark deployment quality
+- collection Qdrant `reid_reference` hien tai dang phu hop cho database retrieval local, khong phai gallery benchmark cua Market-1501
+- vi vay, de danh gia `Rank-1` va `mAP` dung nghia, can dung gallery split chuan
+
 ## 6. Những gì đang có trong bản hiện tại
 
 Pipeline hiện đã hỗ trợ:
@@ -345,7 +594,20 @@ Ba script chính:
 
 - `scripts/run_local_train.ps1`: chỉ train
 - `scripts/run_local_evaluate.ps1`: chỉ evaluate
+- `scripts/run_local_extract.ps1`: chỉ extract reference embeddings
 - `scripts/run_local_pipeline.ps1`: train rồi evaluate trong cùng một run
+- `scripts/run_imported_model_pipeline.ps1`: dùng checkpoint đã train sẵn để evaluate + extract trên local
+- `scripts/run_local_export_onnx.ps1`: export checkpoint sang ONNX embedding model
+- `scripts/run_prepare_triton_model.ps1`: dong goi ONNX thanh Triton model repository
+- `scripts/run_triton_local.ps1`: chay Triton local bang Docker Compose
+- `scripts/stop_triton_local.ps1`: dung Triton local
+- `scripts/run_triton_infer.ps1`: gui anh qua Triton va lay embedding
+- `scripts/run_qdrant_local.ps1`: chay Qdrant local bang Docker Compose
+- `scripts/stop_qdrant_local.ps1`: dung Qdrant local
+- `scripts/run_qdrant_create_collection.ps1`: tao collection vector search
+- `scripts/run_qdrant_upsert_reference.ps1`: import reference embeddings vao Qdrant
+- `scripts/run_qdrant_query_embedding.ps1`: query top-k bang embedding tu Triton
+- `scripts/run_deployment_retrieval_evaluate.ps1`: danh gia chat luong deployment bang Triton tren query/gallery benchmark
 
 `run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
 

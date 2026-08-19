@@ -133,6 +133,7 @@ def normalize_artifact_config(config: dict[str, Any], command_name: str) -> dict
     artifacts["checkpoints_dir"] = str(run_root / "checkpoints")
     artifacts["metrics_dir"] = str(run_root / "metrics")
     artifacts["embeddings_dir"] = str(run_root / "embeddings")
+    artifacts["exports_dir"] = str(run_root / "exports")
     artifacts["logs_dir"] = str(run_root / "logs")
 
     runtime["command"] = command_name
