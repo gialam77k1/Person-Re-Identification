@@ -1,0 +1,145 @@
+ROADMAP DO AN MLOPS CHO PERSON RE-IDENTIFICATION
+
+1. Muc tieu tong the
+- Xay dung he thong MLOps end-to-end cho Person Re-Identification.
+- Su dung model ReID hien tai trong repo lam module sinh embedding chinh.
+- Khong quay lai OSNet; model hien tai se dong vai tro backbone ReID cua toan he thong.
+- He thong cuoi cung can train duoc, evaluate duoc, theo doi duoc, trien khai duoc va demo duoc.
+
+2. Pham vi du lieu
+- Ho tro 3 bo dataset:
+  - Market-1501
+  - DukeMTMC-reID
+  - MSMT17
+- Chuan hoa du lieu theo cau truc train/query/gallery.
+- Tach config rieng cho tung dataset.
+- Co the dung MSMT17 nhu mot case study de minh hoa domain shift / data drift.
+
+3. Hoan thien module ReID
+- Giu model ReID hien tai lam embedding backbone chinh.
+- Tiep tuc train/evaluate tren tung dataset.
+- Metric danh gia chuan:
+  - Rank-1
+  - Rank-5
+  - Rank-10
+  - Rank-20
+  - mAP
+  - mINP
+- Tach ro metric:
+  - Base metrics
+  - Rerank metrics
+
+4. Quan ly thi nghiem theo huong MLOps
+- Dung MLflow de log:
+  - dataset
+  - config
+  - hyperparameter
+  - metric
+  - checkpoint
+  - artifact
+- Neu kip, them DVC hoac it nhat la version du lieu thu cong co tai lieu ro rang.
+
+5. Xay dung module detection
+- Tich hop YOLO pretrained.
+- Chi giu class person.
+- Crop tung bounding box nguoi de dua sang module ReID.
+- Dau ra la anh crop hoac tensor crop de dung cho pipeline retrieval.
+
+6. Xay dung vector search
+- Tich hop Qdrant.
+- Luu cac truong:
+  - embedding
+  - camera_id
+  - timestamp
+  - image_path
+  - global_person_id
+- Ho tro top-k similarity search.
+- Thiet ke threshold de:
+  - match vao nguoi da co
+  - hoac tao global_person_id moi
+
+7. Noi pipeline end-to-end
+- Luong xu ly tong the:
+  YOLO -> crop -> ReID model -> embedding -> Qdrant -> matching -> global person id
+- Neu can, them tracking don gian de tranh luu trung qua nhieu embedding trong cung camera/video.
+- Day la phan quan trong nhat de do an chuyen tu model research sang he thong.
+
+8. Xay backend he thong
+- Dung FastAPI.
+- API toi thieu:
+  - /health
+  - /search
+  - /upload-image
+  - /upload-video
+  - /history/{global_person_id}
+- Luu metadata trong PostgreSQL.
+
+9. Docker hoa he thong
+- Tao Dockerfile cho API/inference service.
+- Tao docker-compose.yml cho:
+  - FastAPI
+  - Qdrant
+  - PostgreSQL
+  - MLflow
+- Them .env.example de tai lap moi truong.
+
+10. Monitoring va test
+- Theo doi:
+  - API latency
+  - detection time
+  - embedding time
+  - search time
+  - so request loi
+- Expose Prometheus metrics.
+- Tao Grafana dashboard.
+- Viet unit test va integration test.
+
+11. CI/CD
+- Dung GitHub Actions de:
+  - chay test
+  - build Docker image
+  - kiem tra chat luong code
+- Neu con thoi gian, co the them workflow deploy don gian.
+
+12. Demo va bao cao
+- Xay dashboard hoac giao dien demo don gian.
+- Nguoi dung co the upload anh/video va xem ket qua top-k retrieval.
+- Bao cao can co:
+  - baseline vs model hien tai
+  - ket qua tren 3 dataset
+  - base vs rerank
+  - drift/domain shift voi MSMT17
+  - kien truc MLOps tong the
+
+13. Thu tu uu tien nen lam tiep
+1. Tong quat hoa pipeline ReID cho du 3 dataset.
+2. Tach config theo tung dataset.
+3. Chuan hoa MLflow + artifacts.
+4. Tich hop YOLO detection.
+5. Tich hop Qdrant.
+6. Noi pipeline end-to-end.
+7. Lam FastAPI + PostgreSQL.
+8. Docker Compose.
+9. Monitoring + tests.
+10. Demo + bao cao.
+
+14. Chia theo giai doan lon
+- Giai doan 1:
+  - Du lieu
+  - ReID baseline/cai tien
+  - Experiment tracking
+- Giai doan 2:
+  - Detection
+  - Vector search
+  - End-to-end pipeline
+- Giai doan 3:
+  - API
+  - Docker
+  - Monitoring
+  - Demo
+  - Bao cao
+
+15. Ket luan huong di hien tai
+- Model ReID hien tai la loi cua he thong.
+- Muc tieu tiep theo khong phai chi tang them mAP, ma la xay dung day du he thong MLOps xung quanh model do.
+- Toan bo do an se duoc phat trien theo huong da-dataset, co experiment tracking, vector search, API, monitoring va demo thuc te.
