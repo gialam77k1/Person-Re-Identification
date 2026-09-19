@@ -73,13 +73,13 @@ Person-Re-Identification/
 
 Môi trường đã được xác nhận chạy trong máy hiện tại:
 
-```powershell
+```bash
 conda activate C:\tmp\reid-mlops
 ```
 
 Nếu muốn tạo môi trường mới từ đầu:
 
-```powershell
+```bash
 conda create -n reid-mlops python=3.10 -y
 conda activate reid-mlops
 python -m pip install --upgrade pip
@@ -88,13 +88,13 @@ pip install -r requirements.txt
 
 Kiểm tra nhanh sau khi cài:
 
-```powershell
+```bash
 python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('torchvision =', torchvision.__version__); print('cuda =', torch.cuda.is_available())"
 ```
 
 Nếu chạy CPU:
 
-```powershell
+```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
@@ -184,70 +184,53 @@ thay vì ép phải đổi dữ liệu vật lý sang `bounding_box_train/query/
 
 ## 5. Cách chạy
 
-### 5.1. Chạy nhanh nhất để train local
+### 5.1. Kích hoạt môi trường
 
-Kích hoạt môi trường:
-
-```powershell
+```bash
 conda activate C:\tmp\reid-mlops
 ```
 
-Train một run mới với `Market-1501`:
+Hoặc nếu dùng môi trường Python khác, chỉ cần đảm bảo đã cài đủ dependency trong `requirements.txt`.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_local_train.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
-```
+### 5.2. Train model
 
-Train rồi evaluate luôn trong cùng một run:
+Train với `Market-1501`:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```bash
+python src/train.py --config configs/dadnet.yaml --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-train --set artifacts.run_root=artifacts/market1501/market1501-dadnet-train
 ```
 
 Ví dụ với `DukeMTMC-reID`:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName dukemtmc-reid -DatasetRoot "datasets/dukemtmc"
+```bash
+python src/train.py --config configs/dadnet.yaml --set data.dataset.name=dukemtmc-reid --set data.location.root=datasets/dukemtmc --set runtime.run_slug=dukemtmc-dadnet-train --set artifacts.run_root=artifacts/dukemtmc-reid/dukemtmc-dadnet-train
 ```
 
 Ví dụ với `MSMT17`:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_local_pipeline.ps1 -DatasetName msmt17 -DatasetRoot "datasets/MSMT17_V1"
+```bash
+python src/train.py --config configs/dadnet.yaml --set data.dataset.name=msmt17 --set data.location.root=datasets/MSMT17_V1 --set runtime.run_slug=msmt17-dadnet-train --set artifacts.run_root=artifacts/msmt17/msmt17-dadnet-train
 ```
 
-### 5.2. Nếu muốn chạy trực tiếp bằng Python
+### 5.3. Evaluate checkpoint
 
-Train trực tiếp:
+Nếu bạn đã có `best_model.pth`, có thể evaluate riêng:
 
-```powershell
-python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=market1501 --set data.location.root="datasets/Market-1501-v15.09.15"
+```bash
+python src/evaluate.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-eval --set artifacts.run_root=artifacts/market1501/market1501-dadnet-eval
 ```
 
-Train trực tiếp với Duke:
+### 5.4. Smoke test
 
-```powershell
-python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=dukemtmc-reid --set data.location.root="datasets/dukemtmc"
+```bash
+python src/train.py --config configs/dadnet_smoke.yaml
+python src/train.py --config configs/baseline_smoke.yaml
 ```
 
-Train trực tiếp với MSMT17:
+### 5.5. Override nhanh từ CLI
 
-```powershell
-python .\src\train.py --config .\configs\dadnet.yaml --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
-```
-
-### 5.3. Smoke test
-
-```powershell
-conda activate C:\tmp\reid-mlops
-python .\src\train.py --config .\configs\dadnet_smoke.yaml
-python .\src\train.py --config .\configs\baseline_smoke.yaml
-```
-
-### 5.4. Override nhanh từ CLI
-
-```powershell
-python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --set train.learning_rate=0.00003 --set logging.enable_mlflow=false
+```bash
+python src/train.py --config configs/dadnet.yaml --set data.batch_size=16 --set train.learning_rate=0.00003 --set logging.enable_mlflow=false
 ```
 
 Giá trị sau dấu `=` được parse theo YAML, nên có thể dùng được với:
@@ -258,38 +241,23 @@ Giá trị sau dấu `=` được parse theo YAML, nên có thể dùng được
 
 Một số ví dụ hay dùng:
 
-```powershell
-python .\src\train.py --config .\configs\dadnet.yaml --set train.learning_rate=0.00003 --set train.scheduler_type=cosine
-python .\src\train.py --config .\configs\dadnet.yaml --set data.batch_size=16 --set train.triplet_margin=0.4
-python .\src\train.py --config .\configs\dadnet.yaml --set augmentation.random_erasing=false --set augmentation.color_jitter=false
-```
-
-### 5.5. Evaluate checkpoint
-
-Nếu bạn đã có `best_model.pth`, có thể evaluate riêng:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_local_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\artifacts\market1501\...\checkpoints\best_model.pth"
-```
-
-Hoặc gọi Python trực tiếp:
-
-```powershell
-python .\src\evaluate.py --config .\configs\dadnet.yaml --checkpoint ".\artifacts\market1501\...\checkpoints\best_model.pth" --set data.dataset.name=market1501 --set data.location.root="datasets/Market-1501-v15.09.15"
+```bash
+python src/train.py --config configs/dadnet.yaml --set train.learning_rate=0.00003 --set train.scheduler_type=cosine
+python src/train.py --config configs/dadnet.yaml --set data.batch_size=16 --set train.triplet_margin=0.4
+python src/train.py --config configs/dadnet.yaml --set augmentation.random_erasing=false --set augmentation.color_jitter=false
 ```
 
 ### 5.6. Trích xuất embedding tham chiếu
 
-```powershell
-python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth
-python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=dukemtmc-reid --set data.location.root="datasets/dukemtmc"
-python .\src\extract_reference.py --config .\configs\dadnet.yaml --checkpoint .\artifacts\checkpoints\best_model.pth --set data.dataset.name=msmt17 --set data.location.root="datasets/MSMT17_V1"
+```bash
+python src/extract_reference.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-eval --set artifacts.run_root=artifacts/market1501/market1501-dadnet-eval
 ```
 
-Hoặc dùng script local:
+Ví dụ với dataset drift:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_local_extract.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\artifacts\market1501\...\checkpoints\best_model.pth"
+```bash
+python src/extract_reference.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=dukemtmc-reid --set data.location.root=datasets/dukemtmc --set runtime.run_slug=dukemtmc-dadnet-eval --set artifacts.run_root=artifacts/dukemtmc-reid/dukemtmc-dadnet-eval
+python src/extract_reference.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=msmt17 --set data.location.root=datasets/MSMT17_V1 --set runtime.run_slug=msmt17-dadnet-eval --set artifacts.run_root=artifacts/msmt17/msmt17-dadnet-eval
 ```
 
 ### 5.7. Dùng lại model đã train sẵn từ Kaggle hoặc nguồn ngoài
@@ -306,11 +274,12 @@ model/
 
 thì có thể chạy lại `evaluate` và `extract reference embeddings` trên máy local bằng:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_imported_model_pipeline.ps1 -ModelRoot ".\model" -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```bash
+python src/evaluate.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-imported --set artifacts.run_root=artifacts/market1501/market1501-dadnet-imported
+python src/extract_reference.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-imported --set artifacts.run_root=artifacts/market1501/market1501-dadnet-imported
 ```
 
-Script này sẽ:
+Các lệnh này sẽ:
 
 - dùng checkpoint từ `model/checkpoints/best_model.pth`
 - không ghi đè artifact gốc trong thư mục `model/`
@@ -321,16 +290,14 @@ Script này sẽ:
 
 Cài thêm dependency export nếu máy chưa có:
 
-```powershell
-conda activate C:\tmp\reid-mlops
-pip install onnx
-pip install onnxscript
+```bash
+pip install onnx onnxscript
 ```
 
 Export một checkpoint local sang ONNX embedding model:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_local_export_onnx.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -CheckpointPath ".\model\checkpoints\best_model.pth"
+```bash
+python src/export_onnx.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-export-onnx --set artifacts.run_root=artifacts/market1501/market1501-dadnet-export-onnx
 ```
 
 Kết quả sẽ nằm trong:
@@ -347,21 +314,21 @@ Ghi chú: với stack `PyTorch 2.11` hiện tại trong dự án, nên dùng `op
 
 Sau khi da co file ONNX, co the tao cau truc model repository cho Triton bang:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_prepare_triton_model.ps1 -OnnxPath ".\artifacts\market1501\market1501-dadnet-export-onnx-20260817-162230\exports\model_embedding.onnx"
+```bash
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-dadnet-export-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-cpu-model-repository/model_repository --model-name reid_embedding --model-version 1 --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512 --instance-kind KIND_CPU
 ```
 
 Ket qua se duoc tao theo cau truc:
 
 ```text
-artifacts/triton/triton-repository-<timestamp>/model_repository/
+artifacts/triton/local-cpu-model-repository/model_repository/
 └─ reid_embedding/
    ├─ config.pbtxt
    └─ 1/
       └─ model.onnx
 ```
 
-Script nay se:
+Lenh nay se:
 
 - copy file ONNX vao dung cau truc Triton
 - sinh `config.pbtxt` cho `images -> embeddings`
@@ -379,16 +346,16 @@ Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
 
 Neu muon dong goi ban cho GPU, co the goi them:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_prepare_triton_model.ps1 -OnnxPath "<duong-dan-onnx>" -InstanceKind KIND_GPU
+```bash
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-dadnet-export-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-gpu-model-repository/model_repository --instance-kind KIND_GPU
 ```
 
 ### 5.10. Chay Triton local bang Docker Compose
 
 Tao file env rieng cho Triton:
 
-```powershell
-Copy-Item .\.env.triton.example .\.env.triton
+```bash
+cp .env.triton.example .env.triton
 ```
 
 Sau do sua gia tri `TRITON_MODEL_REPOSITORY` trong `.env.triton` tro toi model repository vua tao.
@@ -397,20 +364,20 @@ Kiem tra nhanh file env can co:
 
 ```text
 TRITON_IMAGE=nvcr.io/nvidia/tritonserver:24.08-py3
-TRITON_MODEL_REPOSITORY=E:/.../artifacts/triton/triton-repository-<timestamp>/model_repository
+TRITON_MODEL_REPOSITORY=E:/.../artifacts/triton/local-cpu-model-repository/model_repository
 TRITON_NVIDIA_VISIBLE_DEVICES=void
 ```
 
 Chay Triton local:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_triton_local.ps1 -Detach
+```bash
+docker compose --env-file .env.triton -f docker-compose.triton.yml up -d
 ```
 
 Dung server:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\stop_triton_local.ps1
+```bash
+docker compose --env-file .env.triton -f docker-compose.triton.yml down
 ```
 
 Compose hien tai map 3 cong mac dinh cua Triton:
@@ -439,8 +406,8 @@ Sau khi server len, co the kiem tra health qua:
 
 Sau khi Triton da chay, co the gui 1 anh vao model `reid_embedding` bang:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_triton_infer.ps1 -ImagePath ".\datasets\Market-1501-v15.09.15\query\0001_c1s1_001051_00.jpg"
+```bash
+python src/triton_infer.py --image-path datasets/Market-1501-v15.09.15/query/0001_c1s1_001051_00.jpg --server-url http://localhost:8000 --model-name reid_embedding
 ```
 
 Client nay:
@@ -462,38 +429,38 @@ Ket qua mac dinh duoc luu trong:
 
 Tao file env:
 
-```powershell
-Copy-Item .\.env.qdrant.example .\.env.qdrant
+```bash
+cp .env.qdrant.example .env.qdrant
 ```
 
 Chay Qdrant local:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_local.ps1 -Detach
+```bash
+docker compose --env-file .env.qdrant -f docker-compose.qdrant.yml up -d
 ```
 
 Dung Qdrant:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\stop_qdrant_local.ps1
+```bash
+docker compose --env-file .env.qdrant -f docker-compose.qdrant.yml down
 ```
 
 Tao collection `reid_reference`:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_create_collection.ps1
+```bash
+python src/qdrant_local.py --qdrant-url http://localhost:6333 create-collection --collection-name reid_reference --vector-size 512
 ```
 
 Neu da co bo `reference_embeddings.npy`, `reference_pids.npy`, `reference_camids.npy` thi upsert vao Qdrant:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_upsert_reference.ps1 -EmbeddingsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_embeddings.npy" -PidsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_pids.npy" -CamidsPath ".\artifacts\market1501\<run-slug>\embeddings\reference_camids.npy"
+```bash
+python src/qdrant_local.py --qdrant-url http://localhost:6333 upsert-reference --collection-name reid_reference --embeddings-path artifacts/market1501/market1501-dadnet-eval/embeddings/reference_embeddings.npy --pids-path artifacts/market1501/market1501-dadnet-eval/embeddings/reference_pids.npy --camids-path artifacts/market1501/market1501-dadnet-eval/embeddings/reference_camids.npy
 ```
 
 Sau khi Triton da sinh `embedding.npy`, co the query top-k nhu sau:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_qdrant_query_embedding.ps1 -EmbeddingPath ".\artifacts\inference\local-triton\0001_c1s1_001051_00_embedding.npy"
+```bash
+python src/qdrant_local.py --qdrant-url http://localhost:6333 query-embedding --collection-name reid_reference --embedding-path artifacts/inference/local-triton/0001_c1s1_001051_00_embedding.npy
 ```
 
 Phan nay la cau noi dau tien cho retrieval:
@@ -506,20 +473,20 @@ Phan nay la cau noi dau tien cho retrieval:
 
 Sau khi Triton da chay, co the tinh `Rank-1`, `Rank-5`, `Rank-10`, `Rank-20`, `mAP`, `mINP` tren query set bang command sau:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15"
+```bash
+python src/evaluate_deployment_retrieval.py --config configs/dadnet.yaml --server-url http://localhost:8000 --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-deployment-eval --set artifacts.run_root=artifacts/market1501/market1501-deployment-eval
 ```
 
 Neu muon smoke test nhanh tren mot phan query set:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -MaxQueries 100
+```bash
+python src/evaluate_deployment_retrieval.py --config configs/dadnet.yaml --server-url http://localhost:8000 --max-queries 100 --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-deployment-smoke --set artifacts.run_root=artifacts/market1501/market1501-deployment-smoke
 ```
 
 Neu muon smoke test nhanh nhung van dam bao gallery co dung identity de soat pipeline:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_deployment_retrieval_evaluate.ps1 -DatasetName market1501 -DatasetRoot "datasets/Market-1501-v15.09.15" -MaxQueries 20 -GalleryMatchQueryPidsOnly
+```bash
+python src/evaluate_deployment_retrieval.py --config configs/dadnet.yaml --server-url http://localhost:8000 --max-queries 20 --gallery-match-query-pids-only --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-deployment-smoke-pid-gallery --set artifacts.run_root=artifacts/market1501/market1501-deployment-smoke-pid-gallery
 ```
 
 Lenh nay se:
@@ -566,7 +533,7 @@ Sau khi train hoặc evaluate, kết quả thường được lưu ở:
 - `artifacts/<dataset>/<run-slug>/embeddings/reference_manifest.json`
 - `artifacts/<dataset>/<run-slug>/logs/effective_config.json`
 
-Nếu chạy qua `run_local_pipeline.ps1` thì thường bạn sẽ quan tâm nhất tới:
+Khi chạy train/evaluate bằng các lệnh Python ở trên, bạn sẽ quan tâm nhất tới:
 
 - `artifacts/<dataset>/<run-slug>/checkpoints/best_model.pth`
 - `artifacts/<dataset>/<run-slug>/metrics/metrics_v1.json`
@@ -578,7 +545,7 @@ Nếu chạy qua `run_local_pipeline.ps1` thì thường bạn sẽ quan tâm nh
 
 Mở giao diện MLflow:
 
-```powershell
+```bash
 mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
 ```
 
@@ -586,35 +553,22 @@ Sau đó truy cập:
 
 - [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-## 9. Local Automation
+## 9. Local Commands
 
-Repo hiện dùng local runner để train và evaluate ngay trên máy.
+Repo hiện dùng trực tiếp Python scripts và Docker Compose để chạy local. Các bước quan trọng:
 
-Ba script chính:
+- `python src/train.py`: train model
+- `python src/evaluate.py`: evaluate checkpoint
+- `python src/extract_reference.py`: trích xuất reference embeddings
+- `python src/export_onnx.py`: export checkpoint sang ONNX embedding model
+- `python src/prepare_triton_model.py`: đóng gói ONNX thành Triton model repository
+- `python src/triton_infer.py`: gọi Triton và lấy embedding
+- `python src/qdrant_local.py`: tạo collection, upsert reference embeddings, query top-k trong Qdrant
+- `python src/evaluate_deployment_retrieval.py`: đánh giá chất lượng deployment qua Triton
+- `docker compose --env-file .env.triton -f docker-compose.triton.yml up -d`: chạy Triton local
+- `docker compose --env-file .env.qdrant -f docker-compose.qdrant.yml up -d`: chạy Qdrant local
 
-- `scripts/run_local_train.ps1`: chỉ train
-- `scripts/run_local_evaluate.ps1`: chỉ evaluate
-- `scripts/run_local_extract.ps1`: chỉ extract reference embeddings
-- `scripts/run_local_pipeline.ps1`: train rồi evaluate trong cùng một run
-- `scripts/run_imported_model_pipeline.ps1`: dùng checkpoint đã train sẵn để evaluate + extract trên local
-- `scripts/run_local_export_onnx.ps1`: export checkpoint sang ONNX embedding model
-- `scripts/run_prepare_triton_model.ps1`: dong goi ONNX thanh Triton model repository
-- `scripts/run_triton_local.ps1`: chay Triton local bang Docker Compose
-- `scripts/stop_triton_local.ps1`: dung Triton local
-- `scripts/run_triton_infer.ps1`: gui anh qua Triton va lay embedding
-- `scripts/run_qdrant_local.ps1`: chay Qdrant local bang Docker Compose
-- `scripts/stop_qdrant_local.ps1`: dung Qdrant local
-- `scripts/run_qdrant_create_collection.ps1`: tao collection vector search
-- `scripts/run_qdrant_upsert_reference.ps1`: import reference embeddings vao Qdrant
-- `scripts/run_qdrant_query_embedding.ps1`: query top-k bang embedding tu Triton
-- `scripts/run_deployment_retrieval_evaluate.ps1`: danh gia chat luong deployment bang Triton tren query/gallery benchmark
-
-`run_local_pipeline.ps1` là lựa chọn nên dùng hằng ngày vì:
-
-- tự tạo `run_slug`
-- train và evaluate dùng chung một `run_root`
-- log và artifact nằm chung một chỗ
-- phù hợp để sau này gọi từ pipeline local/MLOps
+Các local wrapper cũ đã được bỏ để repo tập trung vào Python/Docker, dễ chạy hơn trên nhiều môi trường.
 
 ## 10. Git và push code
 
@@ -627,13 +581,13 @@ Repo đã có [`.gitignore`](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\P
 
 Nếu `git` báo lỗi `dubious ownership`, chạy:
 
-```powershell
+```bash
 git config --global --add safe.directory "C:/Users/Gia Lam/Desktop/IUH Data/Năm 5 - Kỳ 1/Person-Re-Identification"
 ```
 
 Quy trình cơ bản:
 
-```powershell
+```bash
 git status
 git add .
 git commit -m "Your commit message"
