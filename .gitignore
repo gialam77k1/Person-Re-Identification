@@ -36,3 +36,6 @@ mlruns/
 Thumbs.db
 .idea/
 .vscode/
+
+# Local implementation notes
+THAY_DOI_STAGED_FINETUNING.md
