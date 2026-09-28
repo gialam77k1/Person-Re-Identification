@@ -6,9 +6,9 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CHECK_ONLY=false
 if [[ "${1:-}" == "--check" ]]; then
   CHECK_ONLY=true
-  RUN_SLUG="market1501-vit-staged-local"
+  RUN_SLUG="market1501-vit-bnneck-local"
 else
-  RUN_SLUG="${1:-market1501-vit-staged-local}"
+  RUN_SLUG="${1:-market1501-vit-bnneck-local}"
 fi
 CONDA_ENV="${REID_CONDA_ENV:-reid}"
 RUN_ROOT="artifacts/market1501/${RUN_SLUG}"
@@ -40,6 +40,7 @@ exec conda run --no-capture-output -n "${CONDA_ENV}" \
   --set data.dataset.name=market1501 \
   --set data.location.root=datasets/Market-1501-v15.09.15 \
   --set evaluation.use_rerank=false \
+  --set evaluation.flip_test=false \
   --set logging.enable_mlflow=true \
   --set runtime.run_slug="${RUN_SLUG}" \
   --set artifacts.run_root="${RUN_ROOT}"

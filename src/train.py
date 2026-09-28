@@ -86,6 +86,7 @@ def build_loaders(config: dict):
         random_grayscale_p=config["augmentation"].get("random_grayscale_p", 0.0),
         random_affine_degrees=config["augmentation"].get("random_affine_degrees", 0.0),
         random_occlusion_p=config["augmentation"].get("random_occlusion_p", 0.0),
+        preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
     )
 
     train_dataset, query_dataset, gallery_dataset = build_dataset_splits(
@@ -154,6 +155,7 @@ def train_one_epoch(
     running_ce = 0.0
     running_triplet = 0.0
     running_center = 0.0
+    running_auxiliary = 0.0
     correct = 0
     total = 0
 
@@ -164,8 +166,27 @@ def train_one_epoch(
 
         optimizer.zero_grad(set_to_none=True)
         with amp.autocast(device_type=device.type, enabled=use_amp):
-            logits, embeddings = model(images)
-            loss, ce_loss, triplet_loss, center_loss = criterion(logits, embeddings, labels)
+            if hasattr(model, "forward_training"):
+                outputs = model.forward_training(images)
+                logits = outputs["logits"]
+                embeddings = outputs["embedding"]
+                metric_embeddings = outputs.get("metric_embedding")
+                auxiliary_logits = outputs.get("auxiliary_logits")
+                auxiliary_embeddings = outputs.get("auxiliary_embeddings")
+            else:
+                logits, embeddings = model(images)
+                metric_embeddings = None
+                auxiliary_logits = None
+                auxiliary_embeddings = None
+
+            loss, ce_loss, triplet_loss, center_loss, auxiliary_loss = criterion(
+                logits,
+                embeddings,
+                labels,
+                metric_embeddings=metric_embeddings,
+                auxiliary_logits=auxiliary_logits,
+                auxiliary_embeddings=auxiliary_embeddings,
+            )
 
         scaler.scale(loss).backward()
         if grad_clip_norm is not None and grad_clip_norm > 0:
@@ -178,6 +199,7 @@ def train_one_epoch(
         running_ce += float(ce_loss.item())
         running_triplet += float(triplet_loss.item())
         running_center += float(center_loss.item())
+        running_auxiliary += float(auxiliary_loss.item())
         predictions = logits.argmax(dim=1)
         correct += int((predictions == labels).sum().item())
         total += labels.size(0)
@@ -192,6 +214,7 @@ def train_one_epoch(
         "train_ce_loss": running_ce / len(loader),
         "train_triplet_loss": running_triplet / len(loader),
         "train_center_loss": running_center / len(loader),
+        "train_auxiliary_loss": running_auxiliary / len(loader),
         "train_accuracy": correct / max(1, total),
     }
 
@@ -366,6 +389,8 @@ def run_training(config: dict) -> None:
         triplet_margin=config["train"]["triplet_margin"],
         label_smoothing=config["train"]["label_smoothing"],
         center_loss_weight=config["train"].get("center_loss_weight", 0.0),
+        auxiliary_loss_weight=config["train"].get("auxiliary_loss_weight", 0.0),
+        normalize_triplet_embeddings=config["train"].get("normalize_triplet_embeddings", True),
     )
     optimizer = build_optimizer(config, model, criterion)
     scheduler, scheduler_step_mode = build_scheduler(config, optimizer)
@@ -397,6 +422,10 @@ def run_training(config: dict) -> None:
                 "backbone_lr_factor": config["train"].get("backbone_lr_factor", 0.1),
                 "center_loss_weight": config["train"].get("center_loss_weight", 0.0),
                 "center_loss_lr": config["train"].get("center_loss_lr", 0.25),
+                "auxiliary_loss_weight": config["train"].get("auxiliary_loss_weight", 0.0),
+                "normalize_triplet_embeddings": config["train"].get(
+                    "normalize_triplet_embeddings", True
+                ),
                 "scheduler_type": config["train"].get("scheduler_type", "cosine"),
                 "lr_reduce_factor": config["train"].get("lr_reduce_factor", 0.5),
                 "lr_reduce_patience": config["train"].get("lr_reduce_patience", 5),

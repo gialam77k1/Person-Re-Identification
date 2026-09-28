@@ -114,6 +114,7 @@ def run_export_command(config: dict, checkpoint_path: str, output_path: str, ops
         "onnx_path": str(export_path.resolve()),
         "opset": opset,
         "input_shape": [1, 3, height, width],
+        "preserve_aspect_ratio": bool(config["data"].get("preserve_aspect_ratio", False)),
         "output_name": "embeddings",
         "embedding_dim": int(config["model"]["embedding_dim"]),
         "loaded_epoch": checkpoint.get("epoch"),

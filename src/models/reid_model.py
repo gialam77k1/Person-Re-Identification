@@ -66,6 +66,8 @@ class ViTReIDModel(nn.Module):
         use_local_branch: bool = True,
         num_local_stripes: int = 4,
         local_branch_dropout: float = 0.1,
+        use_bnneck: bool = False,
+        use_auxiliary_branch_loss: bool = False,
     ) -> None:
         super().__init__()
 
@@ -73,6 +75,8 @@ class ViTReIDModel(nn.Module):
         vit_feature_dim = 768
         self.use_local_branch = use_local_branch
         self.num_local_stripes = max(2, num_local_stripes)
+        self.use_bnneck = use_bnneck
+        self.use_auxiliary_branch_loss = use_auxiliary_branch_loss
 
         self.cls_embedding = nn.Sequential(
             nn.LayerNorm(vit_feature_dim),
@@ -102,13 +106,35 @@ class ViTReIDModel(nn.Module):
             self.local_embedding = None
             fusion_input_dim = embedding_dim * 2
 
-        self.fusion = nn.Sequential(
-            nn.Linear(fusion_input_dim, embedding_dim),
-            nn.BatchNorm1d(embedding_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
+        if self.use_bnneck:
+            self.fusion_projection = nn.Linear(fusion_input_dim, embedding_dim)
+            self.bottleneck = nn.BatchNorm1d(embedding_dim)
+            self.bottleneck.bias.requires_grad_(False)
+            self.fusion = None
+        else:
+            self.fusion_projection = None
+            self.bottleneck = None
+            self.fusion = nn.Sequential(
+                nn.Linear(fusion_input_dim, embedding_dim),
+                nn.BatchNorm1d(embedding_dim),
+                nn.ReLU(inplace=True),
+                nn.Dropout(dropout),
+            )
+        self.classifier = nn.Linear(embedding_dim, num_classes, bias=not self.use_bnneck)
+        if self.use_bnneck:
+            nn.init.normal_(self.classifier.weight, std=0.001)
+
+        num_branches = 3 if self.use_local_branch else 2
+        self.auxiliary_classifiers = (
+            nn.ModuleList(
+                [nn.Linear(embedding_dim, num_classes, bias=False) for _ in range(num_branches)]
+            )
+            if self.use_auxiliary_branch_loss
+            else None
         )
-        self.classifier = nn.Linear(embedding_dim, num_classes)
+        if self.auxiliary_classifiers is not None:
+            for auxiliary_classifier in self.auxiliary_classifiers:
+                nn.init.normal_(auxiliary_classifier.weight, std=0.001)
 
     def _forward_tokens(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         tokens = self.backbone._process_input(inputs)
@@ -118,7 +144,10 @@ class ViTReIDModel(nn.Module):
         encoded = self.backbone.encoder(tokens)
         return encoded[:, 0], encoded[:, 1:]
 
-    def forward(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _build_embeddings(
+        self,
+        inputs: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
         cls_token, patch_tokens = self._forward_tokens(inputs)
         cls_embedding = self.cls_embedding(cls_token)
         patch_embedding = self.patch_embedding(patch_tokens.mean(dim=1))
@@ -139,9 +168,41 @@ class ViTReIDModel(nn.Module):
             local_embedding = self.local_embedding(stripe_features)
             embeddings.append(local_embedding)
 
-        embedding = self.fusion(torch.cat(embeddings, dim=1))
-        logits = self.classifier(embedding)
-        return logits, embedding
+        concatenated = torch.cat(embeddings, dim=1)
+        if self.use_bnneck:
+            if self.fusion_projection is None or self.bottleneck is None:
+                raise RuntimeError("BNNeck modules were not initialized")
+            metric_embedding = self.fusion_projection(concatenated)
+            inference_embedding = self.bottleneck(metric_embedding)
+        else:
+            if self.fusion is None:
+                raise RuntimeError("Fusion module was not initialized")
+            inference_embedding = self.fusion(concatenated)
+            metric_embedding = inference_embedding
+
+        return inference_embedding, metric_embedding, embeddings
+
+    def forward(self, inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        inference_embedding, _, _ = self._build_embeddings(inputs)
+        logits = self.classifier(inference_embedding)
+        return logits, inference_embedding
+
+    def forward_training(self, inputs: torch.Tensor) -> dict[str, Any]:
+        inference_embedding, metric_embedding, branch_embeddings = self._build_embeddings(inputs)
+        logits = self.classifier(inference_embedding)
+        auxiliary_logits = []
+        if self.auxiliary_classifiers is not None:
+            auxiliary_logits = [
+                classifier(branch_embedding)
+                for classifier, branch_embedding in zip(self.auxiliary_classifiers, branch_embeddings)
+            ]
+        return {
+            "logits": logits,
+            "embedding": inference_embedding,
+            "metric_embedding": metric_embedding,
+            "auxiliary_logits": auxiliary_logits,
+            "auxiliary_embeddings": branch_embeddings if auxiliary_logits else [],
+        }
 
 
 class CFTAttentionModule(nn.Module):
@@ -376,6 +437,8 @@ def build_model_from_config(config: dict[str, Any], num_classes: int, pretrained
             use_local_branch=model_config.get("use_local_branch", True),
             num_local_stripes=model_config.get("num_local_stripes", 4),
             local_branch_dropout=model_config.get("local_branch_dropout", 0.1),
+            use_bnneck=model_config.get("use_bnneck", False),
+            use_auxiliary_branch_loss=model_config.get("use_auxiliary_branch_loss", False),
         )
 
     raise ValueError(f"Unsupported model variant: {variant}")

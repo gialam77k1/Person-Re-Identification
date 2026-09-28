@@ -53,7 +53,11 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
     print(f"Logging console output to {Path(config['artifacts']['logs_dir']) / 'evaluate.log'}")
 
     device = infer_device(config["device"])
-    _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
+    _, test_transform = build_transforms(
+        config["data"]["image_height"],
+        config["data"]["image_width"],
+        preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
+    )
 
     train_dataset, query_dataset, gallery_dataset = build_dataset_splits(
         config,

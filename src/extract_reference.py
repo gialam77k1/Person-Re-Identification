@@ -56,7 +56,11 @@ def run_extract_command(config: dict, checkpoint_path: str) -> None:
     print(f"Logging console output to {Path(config['artifacts']['logs_dir']) / 'extract.log'}")
 
     device = infer_device(config["device"])
-    _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
+    _, test_transform = build_transforms(
+        config["data"]["image_height"],
+        config["data"]["image_width"],
+        preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
+    )
 
     train_dataset = build_dataset(config, "train", transform=test_transform, relabel=True)
     train_loader = DataLoader(

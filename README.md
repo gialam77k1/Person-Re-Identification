@@ -20,12 +20,14 @@ Input 224x224
   -> CLS Token Embedding
   -> Global Patch Token Embedding
   -> 4 Local Stripe Token Embeddings
-  -> Fusion Layer
-  -> Embedding 512 chiều
+  -> Auxiliary ID + Triplet Loss cho từng nhánh
+  -> Fusion Projection
+  -> Raw Embedding 512 chiều -> normalized Triplet Loss
+  -> BNNeck Embedding
   -> Classifier
 ```
 
-Backbone được freeze trong 5 epoch đầu, sau đó unfreeze để full fine-tune trên Market-1501.
+Ảnh đầu vào được resize giữ tỷ lệ rồi pad về `224 x 224`. Backbone được freeze trong 5 epoch đầu, sau đó unfreeze để full fine-tune trên Market-1501.
 
 ### Baseline
 
@@ -214,16 +216,16 @@ Chạy nhanh bằng local runner:
 
 ```bash
 ./scripts/train_local.sh --check
-./scripts/train_local.sh market1501-vit-staged-v1
+./scripts/train_local.sh market1501-vit-bnneck-v2
 ```
 
 Lệnh Python tương đương:
 
 ```bash
-python src/train.py --config configs/dadnet.yaml --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=false --set runtime.run_slug=market1501-vit-staged-v1 --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1
+python src/train.py --config configs/dadnet.yaml --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=false --set evaluation.flip_test=false --set runtime.run_slug=market1501-vit-bnneck-v2 --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2
 ```
 
-Trong 5 epoch đầu, backbone ViT được freeze để train các ReID head. Từ epoch 6, backbone được unfreeze và pipeline chuyển sang full-model fine-tuning.
+Trong 5 epoch đầu, backbone ViT được freeze để train các ReID head. Từ epoch 6, backbone được unfreeze và pipeline chuyển sang full-model fine-tuning. Batch gồm 4 identity x 4 ảnh, đủ nhiều negative hơn cho batch-hard triplet.
 
 Ví dụ với `DukeMTMC-reID`:
 
@@ -242,7 +244,7 @@ python src/train.py --config configs/dadnet.yaml --set data.dataset.name=msmt17 
 Nếu bạn đã có `best_model.pth`, có thể evaluate riêng:
 
 ```bash
-python src/evaluate.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-staged-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=true --set runtime.run_slug=market1501-vit-staged-v1-eval --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1-eval
+python src/evaluate.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v2/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=true --set evaluation.flip_test=true --set runtime.run_slug=market1501-vit-bnneck-v2-eval --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2-eval
 ```
 
 ### 5.4. Smoke test
@@ -275,7 +277,7 @@ python src/train.py --config configs/dadnet.yaml --set augmentation.random_erasi
 ### 5.6. Trích xuất embedding tham chiếu
 
 ```bash
-python src/extract_reference.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-staged-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-staged-v1-reference --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1-reference
+python src/extract_reference.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v2/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-bnneck-v2-reference --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2-reference
 ```
 
 Ví dụ với dataset drift:
@@ -322,7 +324,7 @@ pip install onnx onnxscript
 Export một checkpoint local sang ONNX embedding model:
 
 ```bash
-python src/export_onnx.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-staged-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-staged-v1-onnx --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1-onnx
+python src/export_onnx.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v2/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-bnneck-v2-onnx --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2-onnx
 ```
 
 Kết quả sẽ nằm trong:
@@ -340,7 +342,7 @@ Ghi chú: với stack `PyTorch 2.11` hiện tại trong dự án, nên dùng `op
 Sau khi da co file ONNX, co the tao cau truc model repository cho Triton bang:
 
 ```bash
-python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-staged-v1-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-cpu-model-repository/model_repository --model-name reid_embedding --model-version 1 --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512 --instance-kind KIND_CPU
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-bnneck-v2-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-cpu-model-repository/model_repository --model-name reid_embedding --model-version 1 --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512 --instance-kind KIND_CPU
 ```
 
 Ket qua se duoc tao theo cau truc:
@@ -372,7 +374,7 @@ Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
 Neu muon dong goi ban cho GPU, co the goi them:
 
 ```bash
-python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-staged-v1-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-gpu-model-repository/model_repository --instance-kind KIND_GPU
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-bnneck-v2-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-gpu-model-repository/model_repository --instance-kind KIND_GPU
 ```
 
 ### 5.10. Chay Triton local bang Docker Compose
@@ -432,13 +434,13 @@ Sau khi server len, co the kiem tra health qua:
 Sau khi Triton da chay, co the gui 1 anh vao model `reid_embedding` bang:
 
 ```bash
-python src/triton_infer.py --image-path datasets/Market-1501-v15.09.15/query/0001_c1s1_001051_00.jpg --server-url http://localhost:8000 --model-name reid_embedding
+python src/triton_infer.py --image-path datasets/Market-1501-v15.09.15/query/0001_c1s1_001051_00.jpg --server-url http://localhost:8000 --model-name reid_embedding --preserve-aspect-ratio
 ```
 
 Client nay:
 
 - preprocess anh dung voi pipeline test cua repo
-- resize ve `224 x 224`
+- resize giữ tỷ lệ và pad về `224 x 224`
 - normalize theo `ImageNet mean/std`
 - goi HTTP infer toi Triton
 - luu `embedding` ra file `.npy`
@@ -479,7 +481,7 @@ python src/qdrant_local.py --qdrant-url http://localhost:6333 create-collection 
 Neu da co bo `reference_embeddings.npy`, `reference_pids.npy`, `reference_camids.npy` thi upsert vao Qdrant:
 
 ```bash
-python src/qdrant_local.py --qdrant-url http://localhost:6333 upsert-reference --collection-name reid_reference --embeddings-path artifacts/market1501/market1501-vit-staged-v1-reference/embeddings/reference_embeddings.npy --pids-path artifacts/market1501/market1501-vit-staged-v1-reference/embeddings/reference_pids.npy --camids-path artifacts/market1501/market1501-vit-staged-v1-reference/embeddings/reference_camids.npy
+python src/qdrant_local.py --qdrant-url http://localhost:6333 upsert-reference --collection-name reid_reference --embeddings-path artifacts/market1501/market1501-vit-bnneck-v2-reference/embeddings/reference_embeddings.npy --pids-path artifacts/market1501/market1501-vit-bnneck-v2-reference/embeddings/reference_pids.npy --camids-path artifacts/market1501/market1501-vit-bnneck-v2-reference/embeddings/reference_camids.npy
 ```
 
 Sau khi Triton da sinh `embedding.npy`, co the query top-k nhu sau:
