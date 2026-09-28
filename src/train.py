@@ -125,8 +125,31 @@ def build_loaders(config: dict):
     return train_dataset, train_loader, query_loader, gallery_loader
 
 
-def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp, grad_clip_norm: float | None = None):
+def set_backbone_trainable(model: torch.nn.Module, trainable: bool) -> None:
+    backbone = getattr(model, "backbone", None)
+    if backbone is None:
+        raise AttributeError("Model does not expose a 'backbone' module")
+
+    for parameter in backbone.parameters():
+        parameter.requires_grad = trainable
+
+
+def train_one_epoch(
+    model,
+    loader,
+    criterion,
+    optimizer,
+    scaler,
+    device,
+    use_amp,
+    grad_clip_norm: float | None = None,
+    backbone_frozen: bool = False,
+):
     model.train()
+    if backbone_frozen:
+        # Keep dropout and other training-time behavior disabled while the
+        # pretrained backbone is frozen. Newly added ReID heads stay in train mode.
+        model.backbone.eval()
     running_loss = 0.0
     running_ce = 0.0
     running_triplet = 0.0
@@ -348,6 +371,14 @@ def run_training(config: dict) -> None:
     scheduler, scheduler_step_mode = build_scheduler(config, optimizer)
     scaler = amp.GradScaler(device.type, enabled=use_amp)
 
+    freeze_backbone_epochs = max(0, int(config["train"].get("freeze_backbone_epochs", 0)))
+    if freeze_backbone_epochs > 0:
+        set_backbone_trainable(model, False)
+        print(
+            f"Backbone frozen for the first {freeze_backbone_epochs} epoch(s); "
+            "only ReID heads will be updated."
+        )
+
     mlflow_active = maybe_init_mlflow(config)
     effective_config_path = Path(config["artifacts"]["logs_dir"]) / "effective_config.json"
     save_json(config, effective_config_path)
@@ -371,6 +402,7 @@ def run_training(config: dict) -> None:
                 "lr_reduce_patience": config["train"].get("lr_reduce_patience", 5),
                 "min_lr": config["train"].get("min_lr", 1e-6),
                 "warmup_epochs": config["train"].get("warmup_epochs", 0),
+                "freeze_backbone_epochs": freeze_backbone_epochs,
                 "grad_clip_norm": config["train"].get("grad_clip_norm", 0.0),
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
@@ -393,6 +425,14 @@ def run_training(config: dict) -> None:
 
     try:
         for epoch in range(1, config["train"]["epochs"] + 1):
+            backbone_frozen = epoch <= freeze_backbone_epochs
+            if epoch == freeze_backbone_epochs + 1 and freeze_backbone_epochs > 0:
+                set_backbone_trainable(model, True)
+                print(
+                    f"Backbone unfrozen at epoch {epoch}; "
+                    "full-model fine-tuning is now enabled."
+                )
+
             train_metrics = train_one_epoch(
                 model,
                 train_loader,
@@ -402,11 +442,13 @@ def run_training(config: dict) -> None:
                 device,
                 use_amp,
                 grad_clip_norm=config["train"].get("grad_clip_norm"),
+                backbone_frozen=backbone_frozen,
             )
             eval_metrics = run_evaluation(model, query_loader, gallery_loader, device, config)
 
             epoch_metrics = {
                 "epoch": epoch,
+                "backbone_frozen": int(backbone_frozen),
                 **train_metrics,
                 **eval_metrics,
                 "lr": float(optimizer.param_groups[0]["lr"]),

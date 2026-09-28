@@ -32,6 +32,7 @@ model:
 
 train:
   epochs: 50
+  freeze_backbone_epochs: 5
   learning_rate: 0.00005
   backbone_lr_factor: 0.5
   weight_decay: 0.0005
