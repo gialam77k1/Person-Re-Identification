@@ -1,5 +1,5 @@
 project_name: person-reid-mlops
-experiment_name: market1501-dadnet
+experiment_name: market1501-vit-staged
 seed: 42
 device: auto
 num_workers: 2

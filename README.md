@@ -1,13 +1,31 @@
-# Person Re-Identification với ResNet50 và DADNet-inspired
+# Person Re-Identification với ViT-B/16
 
 Dự án này xây dựng pipeline `Person Re-Identification` bằng `PyTorch` trên bộ dữ liệu `Market-1501`. Mục tiêu là huấn luyện một mô hình nhận diện lại người giữa các camera khác nhau, đồng thời hỗ trợ theo dõi thí nghiệm, lưu checkpoint và đánh giá theo các chỉ số phổ biến như `Rank-1` và `mAP`.
 
-Hiện tại repo có 2 hướng chính:
+Repo có 3 biến thể để đối chiếu, trong đó workflow chính hiện tại là `ViT-B/16`:
 
 - `Baseline`: `ResNet50 -> Embedding -> Classifier`
 - `DADNet-inspired`: thêm attention và head tăng khả năng phân biệt đặc trưng
+- `ViT ReID`: pretrained `ViT-B/16` kết hợp CLS token, global patch token và local stripe token
+
+File cấu hình chính vẫn mang tên `configs/dadnet.yaml` để tương thích với các run cũ, nhưng `model.variant` trong file này là `vit`.
 
 ## 1. Tổng quan kiến trúc
+
+### ViT ReID — workflow chính
+
+```text
+Input 224x224
+  -> Pretrained ViT-B/16 Backbone
+  -> CLS Token Embedding
+  -> Global Patch Token Embedding
+  -> 4 Local Stripe Token Embeddings
+  -> Fusion Layer
+  -> Embedding 512 chiều
+  -> Classifier
+```
+
+Backbone được freeze trong 5 epoch đầu, sau đó unfreeze để full fine-tune trên Market-1501.
 
 ### Baseline
 
@@ -36,8 +54,8 @@ Input
 Ghi chú:
 
 - Đây là phiên bản `inspired by DADNet`, không phải bản tái hiện nguyên gốc 100% từ paper.
-- Backbone hiện tại vẫn là `ResNet50`.
-- Các thử nghiệm gần đây tập trung vào `loss`, `batch strategy`, `scheduler`, `re-ranking` và tinh chỉnh attention nhẹ thay vì thay backbone.
+- DADNet/ResNet50 được giữ lại để đối chiếu; workflow train chính hiện tại là ViT-B/16.
+- Các thử nghiệm tập trung vào `loss`, `batch strategy`, staged fine-tuning, scheduler và re-ranking.
 
 ## 2. Cấu trúc dự án
 
@@ -65,42 +83,38 @@ Person-Re-Identification/
 └─ README.md
 ```
 
-## 3. Yêu cầu môi trường
+## 3. Môi trường local
 
-- Windows 10/11
-- Python `3.10` khuyến nghị
-- GPU NVIDIA là tùy chọn nhưng rất nên có nếu train full
+- Ubuntu 22.04
+- Conda environment: `reid`
+- Python `3.10`
+- GPU NVIDIA RTX 3090
+- PyTorch có CUDA
 
-Môi trường đã được xác nhận chạy trong máy hiện tại:
+Môi trường local đã được cài đủ dependency train, MLflow và ONNX:
 
 ```bash
-conda activate C:\tmp\reid-mlops
+conda activate reid
 ```
 
-Nếu muốn tạo môi trường mới từ đầu:
+Kiểm tra GPU trước mỗi run:
 
 ```bash
-conda create -n reid-mlops python=3.10 -y
-conda activate reid-mlops
+python -c "import torch; print('torch =', torch.__version__); print('cuda =', torch.cuda.is_available()); print('gpu =', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none')"
+```
+
+Kết quả phải có `cuda = True` và `gpu = NVIDIA GeForce RTX 3090`. Nếu chạy lệnh trong môi trường bị sandbox, GPU có thể không được expose; hãy kiểm tra trực tiếp trong terminal local.
+
+Nếu cần tạo lại environment:
+
+```bash
+conda create -n reid python=3.10 -y
+conda activate reid
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Kiểm tra nhanh sau khi cài:
-
-```bash
-python -c "import torch, torchvision, mlflow, yaml, numpy, PIL, tqdm; print('torch =', torch.__version__); print('torchvision =', torchvision.__version__); print('cuda =', torch.cuda.is_available())"
-```
-
-Nếu chạy CPU:
-
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-```
-
-Tham khảo cài đặt GPU:
-
-- [PyTorch Start Locally](https://docs.pytorch.org/get-started/locally/)
+Không nên chạy full training bằng CPU.
 
 ## 4. Dataset
 
@@ -136,10 +150,10 @@ Với `MSMT17`, root cần giữ nguyên protocol gốc:
 - `list_gallery.txt`
 - thư mục ảnh tương ứng của `MSMT17`
 
-Các đường dẫn mẫu đang được khai báo trong:
+Các đường dẫn mẫu được khai báo trong:
 
-- [baseline.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\baseline.yaml)
-- [dadnet.yaml](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\configs\dadnet.yaml)
+- [`configs/baseline.yaml`](configs/baseline.yaml)
+- [`configs/dadnet.yaml`](configs/dadnet.yaml)
 
 ### 4.2. Schema config dataset
 
@@ -187,18 +201,29 @@ thay vì ép phải đổi dữ liệu vật lý sang `bounding_box_train/query/
 ### 5.1. Kích hoạt môi trường
 
 ```bash
-conda activate C:\tmp\reid-mlops
+conda activate reid
 ```
 
-Hoặc nếu dùng môi trường Python khác, chỉ cần đảm bảo đã cài đủ dependency trong `requirements.txt`.
+Xác nhận `torch.cuda.is_available()` trả về `True` trước khi train.
 
 ### 5.2. Train model
 
-Train với `Market-1501`:
+Workflow khuyến nghị cho model MLOps là train không re-ranking. Nhờ đó checkpoint tốt nhất được chọn theo chất lượng embedding gốc (`mAP_base`), còn re-ranking chỉ được bật ở bước evaluate cuối.
+
+Chạy nhanh bằng local runner:
 
 ```bash
-python src/train.py --config configs/dadnet.yaml --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-train --set artifacts.run_root=artifacts/market1501/market1501-dadnet-train
+./scripts/train_local.sh --check
+./scripts/train_local.sh market1501-vit-staged-v1
 ```
+
+Lệnh Python tương đương:
+
+```bash
+python src/train.py --config configs/dadnet.yaml --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=false --set runtime.run_slug=market1501-vit-staged-v1 --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1
+```
+
+Trong 5 epoch đầu, backbone ViT được freeze để train các ReID head. Từ epoch 6, backbone được unfreeze và pipeline chuyển sang full-model fine-tuning.
 
 Ví dụ với `DukeMTMC-reID`:
 
@@ -217,13 +242,13 @@ python src/train.py --config configs/dadnet.yaml --set data.dataset.name=msmt17 
 Nếu bạn đã có `best_model.pth`, có thể evaluate riêng:
 
 ```bash
-python src/evaluate.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-eval --set artifacts.run_root=artifacts/market1501/market1501-dadnet-eval
+python src/evaluate.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-staged-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=true --set runtime.run_slug=market1501-vit-staged-v1-eval --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1-eval
 ```
 
 ### 5.4. Smoke test
 
 ```bash
-python src/train.py --config configs/dadnet_smoke.yaml
+python src/train.py --config configs/dadnet.yaml --set train.epochs=1 --set train.freeze_backbone_epochs=1 --set evaluation.use_rerank=false --set logging.enable_mlflow=false --set runtime.run_slug=market1501-vit-smoke --set artifacts.run_root=artifacts/market1501/market1501-vit-smoke
 python src/train.py --config configs/baseline_smoke.yaml
 ```
 
@@ -250,7 +275,7 @@ python src/train.py --config configs/dadnet.yaml --set augmentation.random_erasi
 ### 5.6. Trích xuất embedding tham chiếu
 
 ```bash
-python src/extract_reference.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-eval --set artifacts.run_root=artifacts/market1501/market1501-dadnet-eval
+python src/extract_reference.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-staged-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-staged-v1-reference --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1-reference
 ```
 
 Ví dụ với dataset drift:
@@ -260,7 +285,7 @@ python src/extract_reference.py --config configs/dadnet.yaml --checkpoint model/
 python src/extract_reference.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=msmt17 --set data.location.root=datasets/MSMT17_V1 --set runtime.run_slug=msmt17-dadnet-eval --set artifacts.run_root=artifacts/msmt17/msmt17-dadnet-eval
 ```
 
-### 5.7. Dùng lại model đã train sẵn từ Kaggle hoặc nguồn ngoài
+### 5.7. Dùng lại checkpoint có sẵn
 
 Nếu bạn đã có một thư mục model như:
 
@@ -272,7 +297,7 @@ model/
 └─ metrics/
 ```
 
-thì có thể chạy lại `evaluate` và `extract reference embeddings` trên máy local bằng:
+thì có thể chạy lại `evaluate` và `extract reference embeddings` bằng:
 
 ```bash
 python src/evaluate.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-imported --set artifacts.run_root=artifacts/market1501/market1501-dadnet-imported
@@ -297,7 +322,7 @@ pip install onnx onnxscript
 Export một checkpoint local sang ONNX embedding model:
 
 ```bash
-python src/export_onnx.py --config configs/dadnet.yaml --checkpoint model/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-dadnet-export-onnx --set artifacts.run_root=artifacts/market1501/market1501-dadnet-export-onnx
+python src/export_onnx.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-staged-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-staged-v1-onnx --set artifacts.run_root=artifacts/market1501/market1501-vit-staged-v1-onnx
 ```
 
 Kết quả sẽ nằm trong:
@@ -315,7 +340,7 @@ Ghi chú: với stack `PyTorch 2.11` hiện tại trong dự án, nên dùng `op
 Sau khi da co file ONNX, co the tao cau truc model repository cho Triton bang:
 
 ```bash
-python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-dadnet-export-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-cpu-model-repository/model_repository --model-name reid_embedding --model-version 1 --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512 --instance-kind KIND_CPU
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-staged-v1-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-cpu-model-repository/model_repository --model-name reid_embedding --model-version 1 --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512 --instance-kind KIND_CPU
 ```
 
 Ket qua se duoc tao theo cau truc:
@@ -347,7 +372,7 @@ Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
 Neu muon dong goi ban cho GPU, co the goi them:
 
 ```bash
-python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-dadnet-export-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-gpu-model-repository/model_repository --instance-kind KIND_GPU
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-staged-v1-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-gpu-model-repository/model_repository --instance-kind KIND_GPU
 ```
 
 ### 5.10. Chay Triton local bang Docker Compose
@@ -454,7 +479,7 @@ python src/qdrant_local.py --qdrant-url http://localhost:6333 create-collection 
 Neu da co bo `reference_embeddings.npy`, `reference_pids.npy`, `reference_camids.npy` thi upsert vao Qdrant:
 
 ```bash
-python src/qdrant_local.py --qdrant-url http://localhost:6333 upsert-reference --collection-name reid_reference --embeddings-path artifacts/market1501/market1501-dadnet-eval/embeddings/reference_embeddings.npy --pids-path artifacts/market1501/market1501-dadnet-eval/embeddings/reference_pids.npy --camids-path artifacts/market1501/market1501-dadnet-eval/embeddings/reference_camids.npy
+python src/qdrant_local.py --qdrant-url http://localhost:6333 upsert-reference --collection-name reid_reference --embeddings-path artifacts/market1501/market1501-vit-staged-v1-reference/embeddings/reference_embeddings.npy --pids-path artifacts/market1501/market1501-vit-staged-v1-reference/embeddings/reference_pids.npy --camids-path artifacts/market1501/market1501-vit-staged-v1-reference/embeddings/reference_camids.npy
 ```
 
 Sau khi Triton da sinh `embedding.npy`, co the query top-k nhu sau:
@@ -572,7 +597,7 @@ Các local wrapper cũ đã được bỏ để repo tập trung vào Python/Doc
 
 ## 10. Git và push code
 
-Repo đã có [`.gitignore`](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\.gitignore) để tránh đẩy lên:
+Repo đã có [`.gitignore`](.gitignore) để tránh đẩy lên:
 
 - `datasets/`
 - `artifacts/`
@@ -599,7 +624,7 @@ git push origin <ten-branch>
 - So sánh lại `dadnet.yaml` với `baseline.yaml`
 - So riêng `before rerank` và `after rerank`
 - Tối ưu thêm `sampler`, `triplet margin`, `scheduler step`
-- Nếu cần, tách riêng mô hình DADNet sang file chuyên biệt thay vì để chung trong [reid_model.py](C:\Users\Gia Lam\Desktop\IUH Data\Năm 5 - Kỳ 1\Person-Re-Identification\src\models\reid_model.py)
+- Nếu cần, tách riêng mô hình DADNet sang file chuyên biệt thay vì để chung trong [`src/models/reid_model.py`](src/models/reid_model.py)
 
 ## 12. Tài liệu tham khảo
 
