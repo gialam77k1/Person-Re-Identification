@@ -12,6 +12,38 @@ from torchvision import transforms
 from src.common.utils import resolve_path
 
 
+class ResizeWithPadding:
+    def __init__(
+        self,
+        height: int,
+        width: int,
+        fill: tuple[int, int, int] = (124, 116, 104),
+    ) -> None:
+        self.height = height
+        self.width = width
+        self.fill = fill
+
+    def __call__(self, image: Image.Image) -> Image.Image:
+        source_width, source_height = image.size
+        scale = min(self.width / source_width, self.height / source_height)
+        resized_width = min(self.width, max(1, round(source_width * scale)))
+        resized_height = min(self.height, max(1, round(source_height * scale)))
+        resized = transforms.functional.resize(
+            image,
+            [resized_height, resized_width],
+            interpolation=transforms.InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+
+        horizontal_padding = self.width - resized_width
+        vertical_padding = self.height - resized_height
+        left = horizontal_padding // 2
+        right = horizontal_padding - left
+        top = vertical_padding // 2
+        bottom = vertical_padding - top
+        return transforms.functional.pad(resized, [left, top, right, bottom], fill=self.fill)
+
+
 class ImageFolderReIDDataset(Dataset):
     def __init__(self, folder: str | Path, transform=None, relabel: bool = False) -> None:
         self.folder = resolve_path(folder)
@@ -333,14 +365,21 @@ def build_transforms(
     random_grayscale_p: float = 0.0,
     random_affine_degrees: float = 0.0,
     random_occlusion_p: float = 0.0,
+    preserve_aspect_ratio: bool = False,
 ):
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225],
     )
 
+    resize_transform = (
+        ResizeWithPadding(height, width)
+        if preserve_aspect_ratio
+        else transforms.Resize((height, width))
+    )
+
     train_transforms = [
-        transforms.Resize((height, width)),
+        resize_transform,
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.Pad(10),
         transforms.RandomCrop((height, width)),
@@ -395,7 +434,7 @@ def build_transforms(
 
     test_transform = transforms.Compose(
         [
-            transforms.Resize((height, width)),
+            resize_transform,
             transforms.ToTensor(),
             normalize,
         ]

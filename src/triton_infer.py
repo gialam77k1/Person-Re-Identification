@@ -30,13 +30,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-name", default="embeddings")
     parser.add_argument("--input-height", type=int, default=224)
     parser.add_argument("--input-width", type=int, default=224)
+    parser.add_argument("--preserve-aspect-ratio", action="store_true")
     parser.add_argument("--output-root", default="artifacts/inference/local-triton")
     return parser.parse_args()
 
 
-def preprocess_image(image_path: str | Path, input_height: int, input_width: int) -> np.ndarray:
+def preprocess_image(
+    image_path: str | Path,
+    input_height: int,
+    input_width: int,
+    preserve_aspect_ratio: bool = False,
+) -> np.ndarray:
     image = Image.open(image_path).convert("RGB")
-    image = image.resize((input_width, input_height))
+    if preserve_aspect_ratio:
+        source_width, source_height = image.size
+        scale = min(input_width / source_width, input_height / source_height)
+        resized_width = min(input_width, max(1, round(source_width * scale)))
+        resized_height = min(input_height, max(1, round(source_height * scale)))
+        resized = image.resize((resized_width, resized_height), resample=Image.Resampling.BILINEAR)
+        image = Image.new("RGB", (input_width, input_height), color=(124, 116, 104))
+        image.paste(
+            resized,
+            ((input_width - resized_width) // 2, (input_height - resized_height) // 2),
+        )
+    else:
+        image = image.resize((input_width, input_height), resample=Image.Resampling.BILINEAR)
     image_array = np.asarray(image, dtype=np.float32) / 255.0
     image_array = (image_array - IMAGENET_MEAN) / IMAGENET_STD
     image_array = np.transpose(image_array, (2, 0, 1))
@@ -122,7 +140,12 @@ def main() -> None:
 
     with tee_output(log_path):
         print(f"Logging console output to {log_path}")
-        tensor = preprocess_image(args.image_path, args.input_height, args.input_width)
+        tensor = preprocess_image(
+            args.image_path,
+            args.input_height,
+            args.input_width,
+            preserve_aspect_ratio=args.preserve_aspect_ratio,
+        )
         print(f"Prepared input tensor with shape {tuple(tensor.shape)}")
 
         try:
@@ -153,6 +176,7 @@ def main() -> None:
             "input_name": args.input_name,
             "output_name": args.output_name,
             "input_shape": list(tensor.shape),
+            "preserve_aspect_ratio": args.preserve_aspect_ratio,
             "output_shape": list(embedding.shape),
             "embedding_path": str(embedding_path.resolve()),
             "embedding_preview": embedding.reshape(-1)[:10].tolist(),

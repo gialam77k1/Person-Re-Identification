@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "release": {
+    "name": "market1501-vit-bnneck",
+    "version": "v1",
+    "release_id": "market1501-vit-bnneck:v1",
+    "status": "frozen",
+    "created_at": "2026-10-03T16:22:28+07:00",
+    "git_tag": "model-v1.0.0"
+  },
+  "source": {
+    "git_branch": "lam",
+    "git_commit": "3d4d97e240ad11b98f222774dc352f88697a9647",
+    "training_code_commit": "00a8eb9c19ac870d5e503c7334d59b3cffbf23ea",
+    "training_run_slug": "market1501-vit-staged-v2",
+    "official_model_alias": "market1501-vit-bnneck-v1",
+    "checkpoint_epoch": 48,
+    "config_path": "configs/vit_reid.yaml",
+    "config_sha256": "2ea52941c41a3df38fe5c58be840365468941da2dbb4a0a48928be585d78ff71"
+  },
+  "model": {
+    "task": "person-re-identification",
+    "dataset": "market1501",
+    "architecture": "vit_b_16",
+    "embedding_dim": 512,
+    "bnneck": true,
+    "local_branch": true,
+    "onnx_opset": 18
+  },
+  "contract": {
+    "input": {
+      "name": "images",
+      "dtype": "float32",
+      "shape": [1, 3, 224, 224]
+    },
+    "output": {
+      "name": "embeddings",
+      "dtype": "float32",
+      "shape": [1, 512],
+      "l2_normalized": false
+    },
+    "preprocessing_path": "model_releases/market1501-vit-bnneck/v1/preprocessing.json",
+    "preserve_aspect_ratio": true,
+    "padding": "centered RGB fill [124, 116, 104]"
+  },
+  "files": [
+    {
+      "role": "onnx_graph",
+      "repository_path": "artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx",
+      "deployment_path": "artifacts/triton/market1501-vit-bnneck-v1/model_repository/reid_embedding/1/model.onnx",
+      "size_bytes": 1428799,
+      "sha256": "127babc7bee0c4621f90c0aa4b2e3eecd4612472286b98b2e9e1df42f7ab727b"
+    },
+    {
+      "role": "onnx_external_weights",
+      "repository_path": "artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx.data",
+      "deployment_path": "artifacts/triton/market1501-vit-bnneck-v1/model_repository/reid_embedding/1/model_embedding.onnx.data",
+      "size_bytes": 355860480,
+      "sha256": "8bfe3386fca5d0e114d1e5c1be0d21649df40c6097e9a56075012caa43172eff"
+    },
+    {
+      "role": "preprocessing_contract",
+      "repository_path": "model_releases/market1501-vit-bnneck/v1/preprocessing.json",
+      "size_bytes": 1107,
+      "sha256": "291cb60c3f19d98e3a731a3049b34ea5fecf2b22f0bb6542f01d002d14cef534"
+    },
+    {
+      "role": "pytorch_checkpoint",
+      "repository_path": "artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth",
+      "size_bytes": 1086212186,
+      "sha256": "a54da0c9a9eb2652c4ca192c6a6e9b9fb0c59513900d5401a8ae4edfbcdcfd5d"
+    }
+  ],
+  "validation": {
+    "onnx_checker": "passed",
+    "pytorch_onnx_parity": {
+      "passed": true,
+      "num_samples": 8,
+      "atol": 0.0001,
+      "rtol": 0.0001,
+      "max_abs_error": 0.0000133514404296875,
+      "mean_abs_error": 0.000002446028247504728,
+      "min_cosine_similarity": 0.9999998807907104
+    }
+  },
+  "quality_metrics": {
+    "protocol": "Market-1501 query/gallery, 3368 valid queries",
+    "base": {
+      "flip_test": true,
+      "reranking": false,
+      "rank1": 0.9118170738220215,
+      "rank5": 0.9649643898010254,
+      "mAP": 0.8020965488023006,
+      "mINP": 0.5161338929937852
+    },
+    "reranked": {
+      "flip_test": true,
+      "reranking": true,
+      "rank1": 0.9207244515419006,
+      "rank5": 0.9572446346282959,
+      "mAP": 0.8876780306022036,
+      "mINP": 0.7494005369086211
+    }
+  },
+  "serving": {
+    "triton_model_name": "reid_embedding",
+    "triton_model_version": "1",
+    "triton_instance_kind": "KIND_GPU",
+    "triton_max_batch_size": 0,
+    "qdrant_collection": "reid_reference_v1",
+    "retrieval_distance": "cosine",
+    "notes": "Re-ranking is not included in the ONNX graph or the online serving path."
+  }
+}

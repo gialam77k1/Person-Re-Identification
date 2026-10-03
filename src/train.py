@@ -38,7 +38,7 @@ from src.reid.losses import ReIDLoss
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument(
         "--set",
         action="append",
@@ -86,6 +86,7 @@ def build_loaders(config: dict):
         random_grayscale_p=config["augmentation"].get("random_grayscale_p", 0.0),
         random_affine_degrees=config["augmentation"].get("random_affine_degrees", 0.0),
         random_occlusion_p=config["augmentation"].get("random_occlusion_p", 0.0),
+        preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
     )
 
     train_dataset, query_dataset, gallery_dataset = build_dataset_splits(
@@ -125,12 +126,36 @@ def build_loaders(config: dict):
     return train_dataset, train_loader, query_loader, gallery_loader
 
 
-def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp, grad_clip_norm: float | None = None):
+def set_backbone_trainable(model: torch.nn.Module, trainable: bool) -> None:
+    backbone = getattr(model, "backbone", None)
+    if backbone is None:
+        raise AttributeError("Model does not expose a 'backbone' module")
+
+    for parameter in backbone.parameters():
+        parameter.requires_grad = trainable
+
+
+def train_one_epoch(
+    model,
+    loader,
+    criterion,
+    optimizer,
+    scaler,
+    device,
+    use_amp,
+    grad_clip_norm: float | None = None,
+    backbone_frozen: bool = False,
+):
     model.train()
+    if backbone_frozen:
+        # Keep dropout and other training-time behavior disabled while the
+        # pretrained backbone is frozen. Newly added ReID heads stay in train mode.
+        model.backbone.eval()
     running_loss = 0.0
     running_ce = 0.0
     running_triplet = 0.0
     running_center = 0.0
+    running_auxiliary = 0.0
     correct = 0
     total = 0
 
@@ -141,8 +166,27 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
 
         optimizer.zero_grad(set_to_none=True)
         with amp.autocast(device_type=device.type, enabled=use_amp):
-            logits, embeddings = model(images)
-            loss, ce_loss, triplet_loss, center_loss = criterion(logits, embeddings, labels)
+            if hasattr(model, "forward_training"):
+                outputs = model.forward_training(images)
+                logits = outputs["logits"]
+                embeddings = outputs["embedding"]
+                metric_embeddings = outputs.get("metric_embedding")
+                auxiliary_logits = outputs.get("auxiliary_logits")
+                auxiliary_embeddings = outputs.get("auxiliary_embeddings")
+            else:
+                logits, embeddings = model(images)
+                metric_embeddings = None
+                auxiliary_logits = None
+                auxiliary_embeddings = None
+
+            loss, ce_loss, triplet_loss, center_loss, auxiliary_loss = criterion(
+                logits,
+                embeddings,
+                labels,
+                metric_embeddings=metric_embeddings,
+                auxiliary_logits=auxiliary_logits,
+                auxiliary_embeddings=auxiliary_embeddings,
+            )
 
         scaler.scale(loss).backward()
         if grad_clip_norm is not None and grad_clip_norm > 0:
@@ -155,6 +199,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
         running_ce += float(ce_loss.item())
         running_triplet += float(triplet_loss.item())
         running_center += float(center_loss.item())
+        running_auxiliary += float(auxiliary_loss.item())
         predictions = logits.argmax(dim=1)
         correct += int((predictions == labels).sum().item())
         total += labels.size(0)
@@ -169,6 +214,7 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device, use_amp
         "train_ce_loss": running_ce / len(loader),
         "train_triplet_loss": running_triplet / len(loader),
         "train_center_loss": running_center / len(loader),
+        "train_auxiliary_loss": running_auxiliary / len(loader),
         "train_accuracy": correct / max(1, total),
     }
 
@@ -343,10 +389,20 @@ def run_training(config: dict) -> None:
         triplet_margin=config["train"]["triplet_margin"],
         label_smoothing=config["train"]["label_smoothing"],
         center_loss_weight=config["train"].get("center_loss_weight", 0.0),
+        auxiliary_loss_weight=config["train"].get("auxiliary_loss_weight", 0.0),
+        normalize_triplet_embeddings=config["train"].get("normalize_triplet_embeddings", True),
     )
     optimizer = build_optimizer(config, model, criterion)
     scheduler, scheduler_step_mode = build_scheduler(config, optimizer)
     scaler = amp.GradScaler(device.type, enabled=use_amp)
+
+    freeze_backbone_epochs = max(0, int(config["train"].get("freeze_backbone_epochs", 0)))
+    if freeze_backbone_epochs > 0:
+        set_backbone_trainable(model, False)
+        print(
+            f"Backbone frozen for the first {freeze_backbone_epochs} epoch(s); "
+            "only ReID heads will be updated."
+        )
 
     mlflow_active = maybe_init_mlflow(config)
     effective_config_path = Path(config["artifacts"]["logs_dir"]) / "effective_config.json"
@@ -366,15 +422,20 @@ def run_training(config: dict) -> None:
                 "backbone_lr_factor": config["train"].get("backbone_lr_factor", 0.1),
                 "center_loss_weight": config["train"].get("center_loss_weight", 0.0),
                 "center_loss_lr": config["train"].get("center_loss_lr", 0.25),
+                "auxiliary_loss_weight": config["train"].get("auxiliary_loss_weight", 0.0),
+                "normalize_triplet_embeddings": config["train"].get(
+                    "normalize_triplet_embeddings", True
+                ),
                 "scheduler_type": config["train"].get("scheduler_type", "cosine"),
                 "lr_reduce_factor": config["train"].get("lr_reduce_factor", 0.5),
                 "lr_reduce_patience": config["train"].get("lr_reduce_patience", 5),
                 "min_lr": config["train"].get("min_lr", 1e-6),
                 "warmup_epochs": config["train"].get("warmup_epochs", 0),
+                "freeze_backbone_epochs": freeze_backbone_epochs,
                 "grad_clip_norm": config["train"].get("grad_clip_norm", 0.0),
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
-                "model_variant": config["model"].get("variant", "baseline"),
+                "model_variant": config["model"].get("variant", "vit"),
                 "flip_test": config["evaluation"].get("flip_test", False),
                 "use_rerank": config["evaluation"].get("use_rerank", False),
                 "device": str(device),
@@ -393,6 +454,14 @@ def run_training(config: dict) -> None:
 
     try:
         for epoch in range(1, config["train"]["epochs"] + 1):
+            backbone_frozen = epoch <= freeze_backbone_epochs
+            if epoch == freeze_backbone_epochs + 1 and freeze_backbone_epochs > 0:
+                set_backbone_trainable(model, True)
+                print(
+                    f"Backbone unfrozen at epoch {epoch}; "
+                    "full-model fine-tuning is now enabled."
+                )
+
             train_metrics = train_one_epoch(
                 model,
                 train_loader,
@@ -402,11 +471,13 @@ def run_training(config: dict) -> None:
                 device,
                 use_amp,
                 grad_clip_norm=config["train"].get("grad_clip_norm"),
+                backbone_frozen=backbone_frozen,
             )
             eval_metrics = run_evaluation(model, query_loader, gallery_loader, device, config)
 
             epoch_metrics = {
                 "epoch": epoch,
+                "backbone_frozen": int(backbone_frozen),
                 **train_metrics,
                 **eval_metrics,
                 "lr": float(optimizer.param_groups[0]["lr"]),

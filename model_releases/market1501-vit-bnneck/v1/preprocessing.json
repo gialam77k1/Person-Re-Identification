@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "input": {
+    "name": "images",
+    "dtype": "float32",
+    "layout": "NCHW",
+    "shape": [1, 3, 224, 224],
+    "color_space": "RGB"
+  },
+  "decode": {
+    "mode": "RGB"
+  },
+  "resize": {
+    "mode": "letterbox",
+    "preserve_aspect_ratio": true,
+    "target_height": 224,
+    "target_width": 224,
+    "interpolation": "bilinear",
+    "antialias": true
+  },
+  "padding": {
+    "alignment": "center",
+    "fill_rgb": [124, 116, 104]
+  },
+  "tensor_conversion": {
+    "pixel_scale": 0.00392156862745098,
+    "channel_order": "RGB"
+  },
+  "normalization": {
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225]
+  },
+  "inference": {
+    "flip_test": false,
+    "model_output_l2_normalized": false,
+    "retrieval_distance": "cosine",
+    "reference_embeddings_l2_normalized": true,
+    "notes": "Flip-test and k-reciprocal re-ranking are evaluation options, not part of the ONNX serving graph."
+  },
+  "implementations": [
+    "src/data/dataset.py::ResizeWithPadding",
+    "src/data/dataset.py::build_transforms",
+    "src/triton_infer.py::preprocess_image"
+  ]
+}

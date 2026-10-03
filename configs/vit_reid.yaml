@@ -1,5 +1,5 @@
 project_name: person-reid-mlops
-experiment_name: market1501-dadnet
+experiment_name: market1501-vit-bnneck
 seed: 42
 device: auto
 num_workers: 2
@@ -16,7 +16,8 @@ data:
       gallery: bounding_box_test
   image_height: 224
   image_width: 224
-  batch_size: 8
+  preserve_aspect_ratio: true
+  batch_size: 16
   eval_batch_size: 32
   instances_per_identity: 4
 
@@ -29,9 +30,12 @@ model:
   use_local_branch: true
   num_local_stripes: 4
   local_branch_dropout: 0.1
+  use_bnneck: true
+  use_auxiliary_branch_loss: true
 
 train:
   epochs: 50
+  freeze_backbone_epochs: 5
   learning_rate: 0.00005
   backbone_lr_factor: 0.5
   weight_decay: 0.0005
@@ -40,6 +44,8 @@ train:
   triplet_margin: 0.35
   center_loss_weight: 0.0
   center_loss_lr: 0.25
+  auxiliary_loss_weight: 0.3
+  normalize_triplet_embeddings: true
   label_smoothing: 0.02
   scheduler_type: cosine
   warmup_epochs: 5
@@ -64,7 +70,7 @@ evaluation:
   rerank_k1: 20
   rerank_k2: 6
   rerank_lambda: 0.3
-  flip_test: false
+  flip_test: true
 
 logging:
   enable_mlflow: true

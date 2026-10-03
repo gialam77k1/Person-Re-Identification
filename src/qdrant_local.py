@@ -52,22 +52,28 @@ def upsert_reference_embeddings(args: argparse.Namespace) -> None:
     embeddings = np.load(args.embeddings_path)
     pids = np.load(args.pids_path)
     camids = np.load(args.camids_path)
+    paths = np.load(args.paths_path) if args.paths_path else None
 
     if embeddings.ndim != 2:
         raise ValueError("Reference embeddings must have shape [N, D].")
     if len(embeddings) != len(pids) or len(embeddings) != len(camids):
         raise ValueError("Embeddings, pids, and camids must have the same length.")
+    if paths is not None and len(embeddings) != len(paths):
+        raise ValueError("Embeddings and paths must have the same length.")
 
     points = []
     for index, (vector, pid, camid) in enumerate(zip(embeddings, pids, camids, strict=True)):
+        payload = {
+            "pid": int(pid),
+            "camid": int(camid),
+        }
+        if paths is not None:
+            payload["image_path"] = str(paths[index])
         points.append(
             {
                 "id": index + 1,
                 "vector": vector.astype(float).tolist(),
-                "payload": {
-                    "pid": int(pid),
-                    "camid": int(camid),
-                },
+                "payload": payload,
             }
         )
 
@@ -93,6 +99,7 @@ def upsert_reference_embeddings(args: argparse.Namespace) -> None:
         "embeddings_path": str(Path(args.embeddings_path).resolve()),
         "pids_path": str(Path(args.pids_path).resolve()),
         "camids_path": str(Path(args.camids_path).resolve()),
+        "paths_path": str(Path(args.paths_path).resolve()) if args.paths_path else None,
         "qdrant_result": batch_results[-1]["result"] if batch_results else {},
     }
     save_json(manifest, Path(args.output_root) / "qdrant_upsert_manifest.json")
@@ -128,7 +135,7 @@ def query_embedding(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--qdrant-url", default="http://localhost:6333")
-    parser.add_argument("--output-root", default="artifacts/qdrant/local")
+    parser.add_argument("--output-root", default="artifacts/qdrant-client/local")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     create_parser = subparsers.add_parser("create-collection")
@@ -142,6 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     upsert_parser.add_argument("--embeddings-path", required=True)
     upsert_parser.add_argument("--pids-path", required=True)
     upsert_parser.add_argument("--camids-path", required=True)
+    upsert_parser.add_argument("--paths-path", default="")
     upsert_parser.add_argument("--batch-size", type=int, default=512)
     upsert_parser.set_defaults(handler=upsert_reference_embeddings)
 

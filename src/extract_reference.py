@@ -28,7 +28,7 @@ from src.reid.evaluation import extract_features
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument(
         "--set",
@@ -56,9 +56,13 @@ def run_extract_command(config: dict, checkpoint_path: str) -> None:
     print(f"Logging console output to {Path(config['artifacts']['logs_dir']) / 'extract.log'}")
 
     device = infer_device(config["device"])
-    _, test_transform = build_transforms(config["data"]["image_height"], config["data"]["image_width"])
+    _, test_transform = build_transforms(
+        config["data"]["image_height"],
+        config["data"]["image_width"],
+        preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
+    )
 
-    train_dataset = build_dataset(config, "train", transform=test_transform, relabel=True)
+    train_dataset = build_dataset(config, "train", transform=test_transform, relabel=False)
     train_loader = DataLoader(
         train_dataset,
         batch_size=config["data"]["eval_batch_size"],
@@ -78,11 +82,13 @@ def run_extract_command(config: dict, checkpoint_path: str) -> None:
     embeddings_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_embeddings.npy")
     pids_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_pids.npy")
     camids_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_camids.npy")
+    paths_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_paths.npy")
 
     embeddings_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(embeddings_path, features)
     np.save(pids_path, pids)
     np.save(camids_path, camids)
+    np.save(paths_path, np.asarray(paths))
 
     manifest = {
         "run_slug": config["runtime"]["run_slug"],
@@ -92,6 +98,7 @@ def run_extract_command(config: dict, checkpoint_path: str) -> None:
         "embeddings_path": str(embeddings_path),
         "pids_path": str(pids_path),
         "camids_path": str(camids_path),
+        "paths_path": str(paths_path),
         "num_samples": int(features.shape[0]),
         "feature_dim": int(features.shape[1]),
         "first_paths": paths[:10],

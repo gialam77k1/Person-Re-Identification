@@ -21,7 +21,7 @@ from src.triton_infer import infer_embedding
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument("--server-url", default="http://localhost:8000")
     parser.add_argument("--model-name", default="reid_embedding")
     parser.add_argument("--input-name", default="images")
@@ -49,6 +49,7 @@ def infer_dataset_embeddings(
     input_height: int,
     input_width: int,
     max_samples: int,
+    preserve_aspect_ratio: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
     selected_samples = dataset.samples[:max_samples] if max_samples > 0 else dataset.samples
     embeddings = []
@@ -57,7 +58,12 @@ def infer_dataset_embeddings(
     paths: list[str] = []
 
     for sample in tqdm(selected_samples, desc=f"Triton {split_name} infer", dynamic_ncols=True):
-        tensor = preprocess_image(sample["img_path"], input_height=input_height, input_width=input_width)
+        tensor = preprocess_image(
+            sample["img_path"],
+            input_height=input_height,
+            input_width=input_width,
+            preserve_aspect_ratio=preserve_aspect_ratio,
+        )
         embedding = infer_embedding(
             server_url=server_url,
             model_name=model_name,
@@ -162,6 +168,7 @@ def main() -> None:
             input_height=int(config["data"]["image_height"]),
             input_width=int(config["data"]["image_width"]),
             max_samples=args.max_queries,
+            preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
         )
         if args.gallery_match_query_pids_only:
             selected_query_pids = set(query_pids.tolist())
@@ -179,6 +186,7 @@ def main() -> None:
             input_height=int(config["data"]["image_height"]),
             input_width=int(config["data"]["image_width"]),
             max_samples=args.max_gallery,
+            preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
         )
 
         distance_matrix = compute_distance_matrix(query_vectors, gallery_vectors)
