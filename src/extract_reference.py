@@ -62,7 +62,7 @@ def run_extract_command(config: dict, checkpoint_path: str) -> None:
         preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
     )
 
-    train_dataset = build_dataset(config, "train", transform=test_transform, relabel=True)
+    train_dataset = build_dataset(config, "train", transform=test_transform, relabel=False)
     train_loader = DataLoader(
         train_dataset,
         batch_size=config["data"]["eval_batch_size"],
@@ -82,11 +82,13 @@ def run_extract_command(config: dict, checkpoint_path: str) -> None:
     embeddings_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_embeddings.npy")
     pids_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_pids.npy")
     camids_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_camids.npy")
+    paths_path = resolve_path(Path(config["artifacts"]["embeddings_dir"]) / "reference_paths.npy")
 
     embeddings_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(embeddings_path, features)
     np.save(pids_path, pids)
     np.save(camids_path, camids)
+    np.save(paths_path, np.asarray(paths))
 
     manifest = {
         "run_slug": config["runtime"]["run_slug"],
@@ -96,6 +98,7 @@ def run_extract_command(config: dict, checkpoint_path: str) -> None:
         "embeddings_path": str(embeddings_path),
         "pids_path": str(pids_path),
         "camids_path": str(camids_path),
+        "paths_path": str(paths_path),
         "num_samples": int(features.shape[0]),
         "feature_dim": int(features.shape[1]),
         "first_paths": paths[:10],

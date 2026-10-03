@@ -76,6 +76,10 @@ Person-Re-Identification/
 │  ├─ train.py
 │  ├─ evaluate.py
 │  ├─ extract_reference.py
+│  ├─ export_onnx.py
+│  ├─ verify_onnx.py
+│  ├─ prepare_triton_model.py
+│  ├─ qdrant_local.py
 │  ├─ common/
 │  ├─ data/
 │  ├─ models/
@@ -216,13 +220,13 @@ Chạy nhanh bằng local runner:
 
 ```bash
 ./scripts/train_local.sh --check
-./scripts/train_local.sh market1501-vit-bnneck-v2
+./scripts/train_local.sh market1501-vit-bnneck-v1
 ```
 
 Lệnh Python tương đương:
 
 ```bash
-python src/train.py --config configs/dadnet.yaml --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=false --set evaluation.flip_test=false --set runtime.run_slug=market1501-vit-bnneck-v2 --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2
+python src/train.py --config configs/dadnet.yaml --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=false --set evaluation.flip_test=false --set runtime.run_slug=market1501-vit-bnneck-v1 --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1
 ```
 
 Trong 5 epoch đầu, backbone ViT được freeze để train các ReID head. Từ epoch 6, backbone được unfreeze và pipeline chuyển sang full-model fine-tuning. Batch gồm 4 identity x 4 ảnh, đủ nhiều negative hơn cho batch-hard triplet.
@@ -244,7 +248,7 @@ python src/train.py --config configs/dadnet.yaml --set data.dataset.name=msmt17 
 Nếu bạn đã có `best_model.pth`, có thể evaluate riêng:
 
 ```bash
-python src/evaluate.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v2/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=true --set evaluation.flip_test=true --set runtime.run_slug=market1501-vit-bnneck-v2-eval --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2-eval
+python src/evaluate.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set evaluation.use_rerank=true --set evaluation.flip_test=true --set runtime.run_slug=market1501-vit-bnneck-v1-eval --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-eval
 ```
 
 ### 5.4. Smoke test
@@ -277,7 +281,7 @@ python src/train.py --config configs/dadnet.yaml --set augmentation.random_erasi
 ### 5.6. Trích xuất embedding tham chiếu
 
 ```bash
-python src/extract_reference.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v2/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-bnneck-v2-reference --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2-reference
+python src/extract_reference.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-bnneck-v1-reference --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-reference
 ```
 
 Ví dụ với dataset drift:
@@ -324,7 +328,7 @@ pip install onnx onnxscript
 Export một checkpoint local sang ONNX embedding model:
 
 ```bash
-python src/export_onnx.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v2/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-bnneck-v2-onnx --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v2-onnx
+python src/export_onnx.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-bnneck-v1-onnx --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-onnx
 ```
 
 Kết quả sẽ nằm trong:
@@ -337,12 +341,22 @@ Model ONNX này trả về trực tiếp `embeddings`, phù hợp cho bước so
 
 Ghi chú: với stack `PyTorch 2.11` hiện tại trong dự án, nên dùng `opset 18` để tránh lỗi convert version khi exporter tự sinh graph ONNX mới.
 
+#### 5.8.1. Kiểm tra PyTorch-ONNX parity
+
+Sau khi export, kiểm tra cùng một tập ảnh qua PyTorch và ONNX Runtime:
+
+```bash
+python src/verify_onnx.py --config configs/dadnet.yaml --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth --onnx-path artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx --num-samples 8 --set data.dataset.name=market1501 --set data.location.root=datasets/Market-1501-v15.09.15 --set runtime.run_slug=market1501-vit-bnneck-v1-onnx-parity --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-onnx-parity
+```
+
+Lệnh sẽ lưu `metrics/onnx_parity.json` và trả mã lỗi nếu output không đạt `numpy.allclose` với `atol=1e-4`, `rtol=1e-4`.
+
 ### 5.9. Dong goi ONNX thanh Triton model repository
 
 Sau khi da co file ONNX, co the tao cau truc model repository cho Triton bang:
 
 ```bash
-python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-bnneck-v2-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-cpu-model-repository/model_repository --model-name reid_embedding --model-version 1 --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512 --instance-kind KIND_CPU
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-cpu-model-repository/model_repository --model-name reid_embedding --model-version 1 --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512 --instance-kind KIND_CPU
 ```
 
 Ket qua se duoc tao theo cau truc:
@@ -374,7 +388,7 @@ Gia tri mac dinh hien tai phu hop voi model ReID cua do an:
 Neu muon dong goi ban cho GPU, co the goi them:
 
 ```bash
-python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-bnneck-v2-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-gpu-model-repository/model_repository --instance-kind KIND_GPU
+python src/prepare_triton_model.py --onnx-path artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx --output-root artifacts/triton/local-gpu-model-repository/model_repository --instance-kind KIND_GPU
 ```
 
 ### 5.10. Chay Triton local bang Docker Compose
@@ -391,8 +405,8 @@ Kiem tra nhanh file env can co:
 
 ```text
 TRITON_IMAGE=nvcr.io/nvidia/tritonserver:24.08-py3
-TRITON_MODEL_REPOSITORY=E:/.../artifacts/triton/local-cpu-model-repository/model_repository
-TRITON_NVIDIA_VISIBLE_DEVICES=void
+TRITON_MODEL_REPOSITORY=./artifacts/triton/market1501-vit-bnneck-v1/model_repository
+TRITON_NVIDIA_VISIBLE_DEVICES=0
 ```
 
 Chay Triton local:
@@ -413,15 +427,15 @@ Compose hien tai map 3 cong mac dinh cua Triton:
 - gRPC: `8001`
 - Metrics: `8002`
 
-Ban local mac dinh dang chay theo huong CPU-safe:
+Model repository v1 hien tai duoc dong goi cho GPU:
 
-- `TRITON_NVIDIA_VISIBLE_DEVICES=void`
+- `TRITON_NVIDIA_VISIBLE_DEVICES=0`
 - khong ep Docker Compose phai dat reservation GPU
 
-Neu sau nay ban deploy tren may CUDA on dinh va muon dung GPU, co the doi:
+Neu can dong goi va chay ban CPU, tao repository voi `--instance-kind KIND_CPU` va doi:
 
 ```text
-TRITON_NVIDIA_VISIBLE_DEVICES=0
+TRITON_NVIDIA_VISIBLE_DEVICES=void
 ```
 
 Sau khi server len, co the kiem tra health qua:
@@ -472,22 +486,22 @@ Dung Qdrant:
 docker compose --env-file .env.qdrant -f docker-compose.qdrant.yml down
 ```
 
-Tao collection `reid_reference`:
+Tao collection phien ban `reid_reference_v1`:
 
 ```bash
-python src/qdrant_local.py --qdrant-url http://localhost:6333 create-collection --collection-name reid_reference --vector-size 512
+python src/qdrant_local.py --qdrant-url http://localhost:6333 --output-root artifacts/qdrant-client/market1501-vit-bnneck-v1 create-collection --collection-name reid_reference_v1 --vector-size 512
 ```
 
-Neu da co bo `reference_embeddings.npy`, `reference_pids.npy`, `reference_camids.npy` thi upsert vao Qdrant:
+Neu da co bo `reference_embeddings.npy`, `reference_pids.npy`, `reference_camids.npy`, `reference_paths.npy` thi upsert vao Qdrant:
 
 ```bash
-python src/qdrant_local.py --qdrant-url http://localhost:6333 upsert-reference --collection-name reid_reference --embeddings-path artifacts/market1501/market1501-vit-bnneck-v2-reference/embeddings/reference_embeddings.npy --pids-path artifacts/market1501/market1501-vit-bnneck-v2-reference/embeddings/reference_pids.npy --camids-path artifacts/market1501/market1501-vit-bnneck-v2-reference/embeddings/reference_camids.npy
+python src/qdrant_local.py --qdrant-url http://localhost:6333 --output-root artifacts/qdrant-client/market1501-vit-bnneck-v1 upsert-reference --collection-name reid_reference_v1 --embeddings-path artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings/reference_embeddings.npy --pids-path artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings/reference_pids.npy --camids-path artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings/reference_camids.npy --paths-path artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings/reference_paths.npy
 ```
 
 Sau khi Triton da sinh `embedding.npy`, co the query top-k nhu sau:
 
 ```bash
-python src/qdrant_local.py --qdrant-url http://localhost:6333 query-embedding --collection-name reid_reference --embedding-path artifacts/inference/local-triton/0001_c1s1_001051_00_embedding.npy
+python src/qdrant_local.py --qdrant-url http://localhost:6333 --output-root artifacts/qdrant-client/market1501-vit-bnneck-v1 query-embedding --collection-name reid_reference_v1 --embedding-path artifacts/inference/local-triton/0001_c1s1_001051_00_embedding.npy
 ```
 
 Phan nay la cau noi dau tien cho retrieval:
@@ -588,6 +602,7 @@ Repo hiện dùng trực tiếp Python scripts và Docker Compose để chạy l
 - `python src/evaluate.py`: evaluate checkpoint
 - `python src/extract_reference.py`: trích xuất reference embeddings
 - `python src/export_onnx.py`: export checkpoint sang ONNX embedding model
+- `python src/verify_onnx.py`: kiểm tra sai số PyTorch-ONNX và lưu parity metrics
 - `python src/prepare_triton_model.py`: đóng gói ONNX thành Triton model repository
 - `python src/triton_infer.py`: gọi Triton và lấy embedding
 - `python src/qdrant_local.py`: tạo collection, upsert reference embeddings, query top-k trong Qdrant
