@@ -540,8 +540,23 @@ Lenh nay se:
 Luu y:
 
 - command nay dung cho benchmark deployment quality
-- collection Qdrant `reid_reference` hien tai dang phu hop cho database retrieval local, khong phai gallery benchmark cua Market-1501
+- collection Qdrant `reid_reference_v1` hien tai dang phu hop cho database retrieval local, khong phai gallery benchmark cua Market-1501
 - vi vay, de danh gia `Rank-1` va `mAP` dung nghia, can dung gallery split chuan
+
+### 5.14. Xác minh model release v1
+
+Metadata release nhỏ được lưu trong Git, còn checkpoint và ONNX binary tiếp tục nằm trong `artifacts/`:
+
+- `model_releases/market1501-vit-bnneck/v1/model_manifest.json`
+- `model_releases/market1501-vit-bnneck/v1/preprocessing.json`
+
+Kiểm tra kích thước và SHA256 của checkpoint, ONNX graph, external weights và preprocessing contract trước khi deploy:
+
+```bash
+python src/verify_model_release.py --manifest model_releases/market1501-vit-bnneck/v1/model_manifest.json
+```
+
+Release hợp lệ khi kết quả có `"passed": true`. Git tag chính thức của release là `model-v1.0.0`.
 
 ## 6. Những gì đang có trong bản hiện tại
 
@@ -571,6 +586,7 @@ Sau khi train hoặc evaluate, kết quả thường được lưu ở:
 - `artifacts/<dataset>/<run-slug>/embeddings/reference_embeddings.npy`
 - `artifacts/<dataset>/<run-slug>/embeddings/reference_pids.npy`
 - `artifacts/<dataset>/<run-slug>/embeddings/reference_camids.npy`
+- `artifacts/<dataset>/<run-slug>/embeddings/reference_paths.npy`
 - `artifacts/<dataset>/<run-slug>/embeddings/reference_manifest.json`
 - `artifacts/<dataset>/<run-slug>/logs/effective_config.json`
 
@@ -603,6 +619,7 @@ Repo hiện dùng trực tiếp Python scripts và Docker Compose để chạy l
 - `python src/extract_reference.py`: trích xuất reference embeddings
 - `python src/export_onnx.py`: export checkpoint sang ONNX embedding model
 - `python src/verify_onnx.py`: kiểm tra sai số PyTorch-ONNX và lưu parity metrics
+- `python src/verify_model_release.py`: xác minh checksum và kích thước toàn bộ file của model release
 - `python src/prepare_triton_model.py`: đóng gói ONNX thành Triton model repository
 - `python src/triton_infer.py`: gọi Triton và lấy embedding
 - `python src/qdrant_local.py`: tạo collection, upsert reference embeddings, query top-k trong Qdrant
