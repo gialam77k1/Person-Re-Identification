@@ -34,7 +34,7 @@ class EmbeddingExportWrapper(torch.nn.Module):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--output", default="")
     parser.add_argument("--opset", type=int, default=18)
@@ -118,7 +118,7 @@ def run_export_command(config: dict, checkpoint_path: str, output_path: str, ops
         "output_name": "embeddings",
         "embedding_dim": int(config["model"]["embedding_dim"]),
         "loaded_epoch": checkpoint.get("epoch"),
-        "model_variant": config["model"].get("variant", "baseline"),
+        "model_variant": config["model"].get("variant", "vit"),
     }
     save_json(metadata, export_dir / "onnx_export_manifest.json")
     save_json(config, Path(config["artifacts"]["logs_dir"]) / "effective_config.json")

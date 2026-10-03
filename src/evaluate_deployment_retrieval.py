@@ -21,7 +21,7 @@ from src.triton_infer import infer_embedding
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument("--server-url", default="http://localhost:8000")
     parser.add_argument("--model-name", default="reid_embedding")
     parser.add_argument("--input-name", default="images")

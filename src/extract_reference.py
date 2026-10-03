@@ -28,7 +28,7 @@ from src.reid.evaluation import extract_features
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument(
         "--set",

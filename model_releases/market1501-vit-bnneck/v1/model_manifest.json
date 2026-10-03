@@ -15,7 +15,7 @@
     "training_run_slug": "market1501-vit-staged-v2",
     "official_model_alias": "market1501-vit-bnneck-v1",
     "checkpoint_epoch": 48,
-    "config_path": "configs/dadnet.yaml",
+    "config_path": "configs/vit_reid.yaml",
     "config_sha256": "2ea52941c41a3df38fe5c58be840365468941da2dbb4a0a48928be585d78ff71"
   },
   "model": {
@@ -83,7 +83,7 @@
       "min_cosine_similarity": 0.9999998807907104
     }
   },
-  "quality_baseline": {
+  "quality_metrics": {
     "protocol": "Market-1501 query/gallery, 3368 valid queries",
     "base": {
       "flip_test": true,
@@ -109,6 +109,6 @@
     "triton_max_batch_size": 0,
     "qdrant_collection": "reid_reference_v1",
     "retrieval_distance": "cosine",
-    "notes": "Re-ranking is not included in the ONNX graph or the online serving baseline."
+    "notes": "Re-ranking is not included in the ONNX graph or the online serving path."
   }
 }

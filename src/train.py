@@ -38,7 +38,7 @@ from src.reid.losses import ReIDLoss
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument(
         "--set",
         action="append",
@@ -435,7 +435,7 @@ def run_training(config: dict) -> None:
                 "grad_clip_norm": config["train"].get("grad_clip_norm", 0.0),
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
-                "model_variant": config["model"].get("variant", "baseline"),
+                "model_variant": config["model"].get("variant", "vit"),
                 "flip_test": config["evaluation"].get("flip_test", False),
                 "use_rerank": config["evaluation"].get("use_rerank", False),
                 "device": str(device),

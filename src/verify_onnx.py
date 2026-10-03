@@ -27,7 +27,7 @@ from src.models.reid_model import build_model_from_config
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/dadnet.yaml")
+    parser.add_argument("--config", default="configs/vit_reid.yaml")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--onnx-path", required=True)
     parser.add_argument("--split", choices=("train", "query", "gallery"), default="query")

@@ -36,7 +36,7 @@ fi
 
 exec conda run --no-capture-output -n "${CONDA_ENV}" \
   python src/train.py \
-  --config configs/dadnet.yaml \
+  --config configs/vit_reid.yaml \
   --set data.dataset.name=market1501 \
   --set data.location.root=datasets/Market-1501-v15.09.15 \
   --set evaluation.use_rerank=false \
