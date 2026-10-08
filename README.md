@@ -95,6 +95,14 @@ conda run -n reid python src/evaluate.py \
 
 ## Chuẩn bị model cho MLOps
 
+Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant và Triton trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
+
+```bash
+./scripts/mlops_stack.sh validate
+./scripts/mlops_stack.sh up
+./scripts/mlops_stack.sh verify
+```
+
 ### 1. Export ONNX
 
 ```bash
