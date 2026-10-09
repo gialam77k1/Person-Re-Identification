@@ -39,3 +39,6 @@ Thumbs.db
 
 # Local implementation notes
 THAY_DOI_STAGED_FINETUNING.md
+
+# Local MLOps credentials
+.env.mlops
