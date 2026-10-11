@@ -12,9 +12,15 @@ env/
 ENV/
 .local/
 
-# Local data and experiment outputs
-datasets/
-artifacts/
+# Local data and experiment outputs. DVC pointer files remain visible to Git.
+datasets/**
+!datasets/**/
+!datasets/**/*.dvc
+!datasets/**/.gitignore
+artifacts/**
+!artifacts/**/
+!artifacts/**/*.dvc
+!artifacts/**/.gitignore
 mlruns/
 
 # Model and binary artifacts
