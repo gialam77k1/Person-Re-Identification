@@ -1,0 +1,5 @@
+outs:
+- md5: 1bc31348d93fa9abe4527a6dabe07fb3
+  size: 1428799
+  hash: md5
+  path: model_embedding.onnx
