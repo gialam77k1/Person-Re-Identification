@@ -132,3 +132,15 @@ Xác nhận credential AWS trong `.env.mlops` khớp credential MinIO.
 ### Qdrant không thấy dữ liệu cũ
 
 Xác nhận `QDRANT_STORAGE_PATH` vẫn trỏ đến `./artifacts/qdrant/storage`. Không tạo collection mới nếu collection `reid_reference_v1` đã tồn tại.
+
+## DVC và MinIO
+
+Dữ liệu huấn luyện và model artifact của release v1 được quản lý bằng DVC. Dùng wrapper để nạp credential từ `.env.mlops` mà không ghi secret vào Git:
+
+```bash
+./scripts/dvc_local.sh status
+./scripts/dvc_local.sh push
+./scripts/dvc_local.sh pull
+```
+
+Danh sách artifact, DVC hash và quy trình phục hồi nằm tại [`DVC_VERSIONING.md`](DVC_VERSIONING.md).
