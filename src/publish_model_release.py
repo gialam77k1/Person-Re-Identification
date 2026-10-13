@@ -30,6 +30,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST)
     parser.add_argument("--experiment", default="market1501-vit-bnneck")
     parser.add_argument("--alias", default="champion")
+    target = parser.add_mutually_exclusive_group()
+    target.add_argument("--run-id", help="Attach release artifacts to an existing training run.")
+    target.add_argument(
+        "--run-metadata",
+        help="Read the target training run ID from its mlflow_run.json file.",
+    )
     return parser.parse_args()
 
 
@@ -75,7 +81,11 @@ def find_release_run(client: MlflowClient, experiment_id: str, release_id: str):
     return runs[0] if runs else None
 
 
-def publish_release_run(manifest: dict, experiment_name: str) -> str:
+def publish_release_run(
+    manifest: dict,
+    experiment_name: str,
+    target_run_id: str | None = None,
+) -> str:
     configure_mlflow(experiment_name)
     experiment = mlflow.get_experiment_by_name(experiment_name)
     if experiment is None:
@@ -83,9 +93,16 @@ def publish_release_run(manifest: dict, experiment_name: str) -> str:
 
     release_id = manifest["release"]["release_id"]
     client = MlflowClient()
-    existing_run = find_release_run(client, experiment.experiment_id, release_id)
+    existing_run = (
+        client.get_run(target_run_id)
+        if target_run_id is not None
+        else find_release_run(client, experiment.experiment_id, release_id)
+    )
     if existing_run is not None:
-        return existing_run.info.run_id
+        if existing_run.data.tags.get("release.id") == release_id:
+            return existing_run.info.run_id
+        if target_run_id is None:
+            return existing_run.info.run_id
 
     source = manifest["source"]
     dataset_asset = next(
@@ -105,7 +122,12 @@ def publish_release_run(manifest: dict, experiment_name: str) -> str:
     }
     runtime_path = save_json(runtime, "artifacts/mlflow-publish/v1/runtime.json")
 
-    with mlflow.start_run(run_name="market1501-vit-bnneck-v1-release") as run:
+    run_context = (
+        mlflow.start_run(run_id=target_run_id)
+        if target_run_id is not None
+        else mlflow.start_run(run_name="market1501-vit-bnneck-v1-release")
+    )
+    with run_context as run:
         mlflow.set_tags(
             {
                 **lineage_tags(git_commit=git_commit, dvc_revision=dvc_revision),
@@ -192,7 +214,11 @@ def main() -> None:
     args = parse_args()
     manifest_path = resolve(args.manifest)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    run_id = publish_release_run(manifest, args.experiment)
+    target_run_id = args.run_id
+    if args.run_metadata:
+        run_metadata = json.loads(resolve(args.run_metadata).read_text(encoding="utf-8"))
+        target_run_id = run_metadata["run_id"]
+    run_id = publish_release_run(manifest, args.experiment, target_run_id=target_run_id)
     version = register_release(manifest, run_id, args.alias)
     result = {
         "tracking_uri": mlflow.get_tracking_uri(),

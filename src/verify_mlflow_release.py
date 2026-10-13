@@ -54,6 +54,7 @@ def main() -> None:
     configure_mlflow(args.experiment)
     client = MlflowClient()
     model_version = client.get_model_version_by_alias(args.model, args.alias)
+    aliases = list(model_version.aliases)
     run = client.get_run(model_version.run_id)
     artifact_paths = list_artifacts_recursive(client, run.info.run_id)
     missing_metrics = sorted(REQUIRED_METRICS - set(run.data.metrics))
@@ -79,7 +80,7 @@ def main() -> None:
 
     passed = (
         str(model_version.version) == "1"
-        and model_version.aliases == [args.alias]
+        and aliases == [args.alias]
         and not missing_metrics
         and not missing_artifacts
         and all(lineage.values())
@@ -94,7 +95,7 @@ def main() -> None:
         "run_status": run.info.status,
         "registered_model": args.model,
         "version": model_version.version,
-        "aliases": model_version.aliases,
+        "aliases": aliases,
         "lineage": lineage,
         "missing_metrics": missing_metrics,
         "missing_artifacts": missing_artifacts,

@@ -144,3 +144,16 @@ Dữ liệu huấn luyện và model artifact của release v1 được quản l
 ```
 
 Danh sách artifact, DVC hash và quy trình phục hồi nằm tại [`DVC_VERSIONING.md`](DVC_VERSIONING.md).
+
+## MLflow Tracking và Model Registry
+
+Training client dùng `http://localhost:5000`; không còn tạo SQLite tracking store trong `mlruns/`. PostgreSQL lưu metadata và MinIO lưu artifact.
+
+Publish và kiểm tra model v1:
+
+```bash
+conda run --no-capture-output -n reid python src/publish_model_release.py
+conda run --no-capture-output -n reid python src/verify_mlflow_release.py
+```
+
+Quy trình logging, lineage và kết quả nghiệm thu nằm tại [`MLFLOW_TRACKING.md`](MLFLOW_TRACKING.md).

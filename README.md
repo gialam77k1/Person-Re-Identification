@@ -185,6 +185,8 @@ conda run -n reid python src/verify_model_release.py
 
 Thông tin truy vết đầy đủ nằm trong [`model_releases/market1501-vit-bnneck/v1/model_manifest.json`](model_releases/market1501-vit-bnneck/v1/model_manifest.json).
 
+Model v1 đã được đăng ký trên MLflow Model Registry với tên `market1501-vit-bnneck`, version `1` và alias `champion`. Xem cách publish và kiểm tra tại [`docs/MLFLOW_TRACKING.md`](docs/MLFLOW_TRACKING.md).
+
 ## Quy ước artifact
 
 Checkpoint, ONNX weights, embeddings, MLflow runs và model repository của Triton không được commit vào Git. Git chỉ lưu code, config, manifest, preprocessing contract và checksum để tái tạo hoặc xác minh release.
