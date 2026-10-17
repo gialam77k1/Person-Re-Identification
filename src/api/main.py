@@ -32,11 +32,11 @@ def create_app(service: InferenceService | None = None) -> FastAPI:
             await image.close()
 
     @api.get("/health", response_model=HealthResponse)
-    def health() -> dict[str, str]:
+    async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @api.get("/ready", response_model=ReadyResponse)
-    def ready() -> ReadyResponse | JSONResponse:
+    async def ready() -> ReadyResponse | JSONResponse:
         checks = inference.readiness()
         response = ReadyResponse(
             status="ready" if all(checks.values()) else "not_ready", checks=checks
@@ -46,7 +46,7 @@ def create_app(service: InferenceService | None = None) -> FastAPI:
         return response
 
     @api.get("/model-info", response_model=ModelInfoResponse)
-    def model_info() -> dict:
+    async def model_info() -> dict:
         return inference.model_info()
 
     @api.post("/embed", response_model=EmbedResponse)
