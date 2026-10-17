@@ -95,7 +95,7 @@ conda run -n reid python src/evaluate.py \
 
 ## Chuẩn bị model cho MLOps
 
-Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant và Triton trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); pipeline tái lập nằm tại [`docs/DVC_PIPELINE.md`](docs/DVC_PIPELINE.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
+Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant và Triton trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); pipeline tái lập nằm tại [`docs/DVC_PIPELINE.md`](docs/DVC_PIPELINE.md); model validation gate nằm tại [`docs/MODEL_VALIDATION_GATE.md`](docs/MODEL_VALIDATION_GATE.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
 
 ```bash
 ./scripts/mlops_stack.sh validate
@@ -148,10 +148,11 @@ conda run -n reid python src/extract_reference.py \
 
 ```bash
 conda run -n reid python src/prepare_triton_model.py \
-  --onnx-path artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx \
-  --output-root artifacts/triton/market1501-vit-bnneck-v1/model_repository \
+  --onnx-path artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx \
+  --output-root artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository \
   --model-name reid_embedding \
   --model-version 1 \
+  --validation-report artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json \
   --instance-kind KIND_GPU
 
 docker compose -f docker-compose.triton.yml up -d

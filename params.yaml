@@ -1,6 +1,7 @@
 pipeline:
   release_slug: market1501-vit-bnneck-v1-dvc
   release_id: market1501-vit-bnneck:v1-dvc
+  source_git_commit: 3bc5cd9e68d4b186900ba52e89976e9c94be28cc
   conda_env: reid
   dataset_root: datasets/Market-1501-v15.09.15
   dataset_pointer: datasets/Market-1501-v15.09.15.dvc

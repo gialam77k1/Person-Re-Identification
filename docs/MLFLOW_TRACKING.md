@@ -36,7 +36,8 @@ Sau khi export ONNX, kiểm tra parity và tạo manifest, gắn các artifact h
 
 ```bash
 conda run --no-capture-output -n reid python src/publish_model_release.py \
-  --manifest model_releases/<model>/<version>/model_manifest.json \
+  --manifest artifacts/pipeline/<release>/release/model_manifest.json \
+  --validation-report artifacts/pipeline/<release>/release/validation_report.json \
   --run-metadata artifacts/<training-run>/logs/mlflow_run.json
 ```
 
@@ -47,9 +48,12 @@ Chế độ này mở lại đúng run ID, bổ sung ONNX, parity report, prepro
 Lệnh này idempotent theo `release.id`: chạy lại không tạo thêm release run hoặc model version cho cùng release.
 
 ```bash
-conda run --no-capture-output -n reid \
-  python src/publish_model_release.py
+conda run --no-capture-output -n reid python src/publish_model_release.py \
+  --manifest artifacts/pipeline/<release>/release/model_manifest.json \
+  --validation-report artifacts/pipeline/<release>/release/validation_report.json
 ```
+
+Release luôn được log cùng validation report. Chỉ report `PASS` đúng `release_id` mới được gán alias; report `FAIL` tạo dữ liệu truy vết nhưng không thay đổi `champion` hoặc `production`.
 
 Kiểm tra Registry và tải thử artifact:
 

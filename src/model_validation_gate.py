@@ -5,7 +5,6 @@ import hashlib
 import json
 import math
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +35,7 @@ REQUIRED_ARTIFACT_ROLES = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate a model candidate before packaging or promotion.")
     parser.add_argument("--release-id", required=True)
+    parser.add_argument("--source-git-commit", required=True)
     parser.add_argument("--thresholds", default="configs/model_validation.yaml")
     parser.add_argument("--config", required=True)
     parser.add_argument("--pipeline-params", default="params.yaml")
@@ -101,10 +101,6 @@ def artifact_spec(role: str, path: Path) -> dict[str, Any]:
         "size_bytes": size,
         "sha256": sha256_file(path),
     }
-
-
-def git_commit() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
 
 def finite_number(value: Any) -> bool:
@@ -188,6 +184,7 @@ def validate_deployment_metrics(
 def build_validation(
     *,
     release_id: str,
+    source_git_commit: str,
     thresholds_path: Path,
     config_path: Path,
     pipeline_params_path: Path,
@@ -291,7 +288,7 @@ def build_validation(
             "created_at": datetime.now(timezone.utc).isoformat(),
         },
         "source": {
-            "git_commit": git_commit(),
+            "git_commit": source_git_commit,
             "dataset_dvc_revision": data_manifest.get("dataset_dvc_revision"),
             "checkpoint_epoch": training_metrics.get("best_epoch"),
             "config_path": repository_path(config_path),
@@ -378,6 +375,7 @@ def main() -> None:
             preprocessing_path = preprocessing_output
         report, manifest = build_validation(
             release_id=args.release_id,
+            source_git_commit=args.source_git_commit,
             thresholds_path=resolve(args.thresholds),
             config_path=resolve(args.config),
             pipeline_params_path=resolve(args.pipeline_params),

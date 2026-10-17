@@ -590,7 +590,7 @@ stages:
     - path:
         artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json
       hash: md5
-      md5: 6233d5092a25512aec8110251f47034b
+      md5: d33da963cf577cc3935ad45a87521528
       size: 8011
     - path: src/common/utils.py
       hash: md5
@@ -620,7 +620,8 @@ stages:
   validate_release:
     cmd: conda run --no-capture-output -n reid python
       src/model_validation_gate.py --release-id market1501-vit-bnneck:v1-dvc
-      --thresholds configs/model_validation.yaml --config configs/vit_reid.yaml
+      --source-git-commit 3bc5cd9e68d4b186900ba52e89976e9c94be28cc --thresholds
+      configs/model_validation.yaml --config configs/vit_reid.yaml
       --pipeline-params params.yaml --data-manifest
       artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
       --training-metrics
@@ -721,8 +722,8 @@ stages:
       size: 1148
     - path: configs/model_validation.yaml
       hash: md5
-      md5: 520a914d76c61dc3b524afc61241f737
-      size: 364
+      md5: a8aa0300a1fce3be24197f14ef999eb6
+      size: 363
     - path: configs/vit_reid.yaml
       hash: md5
       md5: 7615cc0c19c0962aca825b55bdc55a44
@@ -737,16 +738,16 @@ stages:
       size: 1107
     - path: params.yaml
       hash: md5
-      md5: 0263c65a57c9deb38ef099cbf1f3a079
-      size: 763
+      md5: 63de68d48e29be7415033f9cfa720854
+      size: 825
     - path: src/common/utils.py
       hash: md5
       md5: fbbd06be0a7bd29bc1b8461f9c96f424
       size: 3452
     - path: src/model_validation_gate.py
       hash: md5
-      md5: bd7726f7f741c883dd7402326be9f215
-      size: 19025
+      md5: b211cf1572eb56ac96b8b3aa8df6e279
+      size: 19035
     params:
       params.yaml:
         pipeline.conda_env: reid
@@ -754,6 +755,7 @@ stages:
           model_releases/market1501-vit-bnneck/v1/preprocessing.json
         pipeline.release_id: market1501-vit-bnneck:v1-dvc
         pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+        pipeline.source_git_commit: 3bc5cd9e68d4b186900ba52e89976e9c94be28cc
         validation:
           thresholds: configs/model_validation.yaml
           deployment_metrics:
@@ -762,7 +764,7 @@ stages:
     - path:
         artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json
       hash: md5
-      md5: f773439933012773a3bedbcac2fd2e7e
+      md5: 337ea4c9bbda775e1b3a885e1d23de69
       size: 4941
     - path:
         artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/preprocessing.json
@@ -772,5 +774,5 @@ stages:
     - path:
         artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json
       hash: md5
-      md5: 6233d5092a25512aec8110251f47034b
+      md5: d33da963cf577cc3935ad45a87521528
       size: 8011

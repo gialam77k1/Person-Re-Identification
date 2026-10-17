@@ -241,6 +241,7 @@ stages:
       conda run --no-capture-output -n ${pipeline.conda_env}
       python src/model_validation_gate.py
       --release-id ${pipeline.release_id}
+      --source-git-commit ${pipeline.source_git_commit}
       --thresholds ${validation.thresholds}
       --config configs/vit_reid.yaml
       --pipeline-params params.yaml
@@ -283,6 +284,7 @@ stages:
     params:
       - pipeline.release_slug
       - pipeline.release_id
+      - pipeline.source_git_commit
       - pipeline.conda_env
       - pipeline.preprocessing_contract
       - validation

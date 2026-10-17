@@ -109,6 +109,7 @@ class ModelValidationGateTest(unittest.TestCase):
     def _run_gate(self) -> tuple[dict, dict]:
         return build_validation(
             release_id="test:v1",
+            source_git_commit="0123456789abcdef0123456789abcdef01234567",
             thresholds_path=ROOT / "configs/model_validation.yaml",
             config_path=ROOT / "configs/vit_reid.yaml",
             pipeline_params_path=ROOT / "params.yaml",

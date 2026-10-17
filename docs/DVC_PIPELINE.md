@@ -15,12 +15,11 @@ validate_data
   -> train
      -> evaluate
      -> export_onnx -> verify_onnx
-                    -> package_triton
      -> extract_reference
-  -> validate_release
+  -> validate_release -> package_triton
 ```
 
-`validate_release` chỉ thành công khi dataset hợp lệ, PyTorch–ONNX parity đạt, reference embeddings đúng kích thước và bản đóng gói Triton có checksum khớp bản ONNX đã export.
+`validate_release` là model validation gate. Chỉ report `PASS` mới cho phép `package_triton` chạy; script đóng gói còn đối chiếu SHA256 để chắc chắn đúng ONNX đã được gate kiểm tra.
 
 ## Các stage
 
@@ -32,8 +31,8 @@ validate_data
 | `export_onnx` | Export ONNX graph và external weights | `onnx/exports/` |
 | `verify_onnx` | So sánh embedding PyTorch và ONNX Runtime | `parity/metrics/onnx_parity.json` |
 | `extract_reference` | Trích xuất 12.936 reference embeddings | `reference/embeddings/` |
-| `package_triton` | Tạo Triton model repository | `triton/model_repository/` |
-| `validate_release` | Kiểm tra release và tạo manifest truy vết | `release/` |
+| `validate_release` | Chạy quality/contract/checksum/deployment gate và tạo manifest | `release/` |
+| `package_triton` | Chỉ đóng gói candidate có gate PASS | `triton/model_repository/` |
 
 Mọi output nằm dưới thư mục riêng của release:
 
@@ -51,7 +50,8 @@ Các tham số điều phối nằm trong `params.yaml`; cấu hình model/train
 - Đổi `evaluate.*` sẽ chạy lại `train` vì các giá trị này cũng tham gia validation trong lúc train, sau đó chạy lại các stage downstream cần thiết.
 - Đổi `export.opset` chỉ làm bẩn `export_onnx` và release validation; `train` và `evaluate` không chạy lại.
 - Đổi `parity.*` chỉ chạy lại `verify_onnx` và release validation.
-- Đổi `triton.*` chỉ chạy lại `package_triton` và release validation.
+- Đổi `validation.*` chạy lại gate và bước đóng gói phía sau, không chạy lại training.
+- Đổi `triton.*` chỉ chạy lại `package_triton`.
 
 Có thể xem đồ thị và trạng thái trước khi chạy:
 
@@ -96,6 +96,6 @@ Release đầu tiên của pipeline dùng đúng checkpoint epoch 48 đã đư�
 - Chạy `dvc repro` lần hai bỏ qua toàn bộ 8 stage và báo pipeline đã cập nhật.
 - Kiểm thử tạm đổi riêng `export.opset` từ 18 sang 17 cho thấy `train`, `evaluate` và `extract_reference` đều được bỏ qua; tham số đã được hoàn nguyên về 18 sau kiểm thử.
 - Dataset revision: `0d61c823b34177c53e9e2161db8257b3.dir`.
-- Release validation: `passed: true`, 9 file được kiểm tra checksum.
+- Release validation hiện dùng model validation gate: 18 check PASS và 8 nhóm artifact có SHA256 đầy đủ.
 - Metrics: Rank-1 `0,92072`, Rank-5 `0,95724`, mAP `0,88768`, mINP `0,74940`.
 - ONNX parity: max absolute error `1,335144e-5`, minimum cosine similarity `0,99999988`.
