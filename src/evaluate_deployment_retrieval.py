@@ -225,14 +225,25 @@ def main() -> None:
         )
 
         results = {
+            "schema_version": 2,
             "run_slug": config["runtime"]["run_slug"],
             "run_root": config["runtime"]["run_root"],
             "dataset": config["data"]["dataset"]["name"],
             "server_url": args.server_url,
+            "model_name": args.model_name,
+            "protocol": "Triton HTTP, letterbox preprocessing, L2-normalized embeddings, cosine distance, no flip test, no re-ranking",
             "workers": args.workers,
             "num_query_samples": int(query_vectors.shape[0]),
             "num_gallery_samples": int(gallery_vectors.shape[0]),
             "valid_queries": int(valid_queries),
+            "embedding_dim": int(query_vectors.shape[1]),
+            "embeddings_finite": bool(
+                np.all(np.isfinite(query_vectors)) and np.all(np.isfinite(gallery_vectors))
+            ),
+            "embeddings_l2_normalized": bool(
+                np.allclose(np.linalg.norm(query_vectors, axis=1), 1.0, atol=1e-5)
+                and np.allclose(np.linalg.norm(gallery_vectors, axis=1), 1.0, atol=1e-5)
+            ),
             "rank1": rank_at(cmc, 1),
             "rank5": rank_at(cmc, 5),
             "rank10": rank_at(cmc, 10),
