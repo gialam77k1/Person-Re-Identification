@@ -1,0 +1,54 @@
+schema: '2.0'
+stages:
+  validate_data:
+    cmd: conda run --no-capture-output -n reid python src/validate_data.py 
+      --config configs/vit_reid.yaml --dataset-pointer 
+      datasets/Market-1501-v15.09.15.dvc --output 
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
+    deps:
+    - path: datasets/Market-1501-v15.09.15
+      hash: md5
+      md5: 0d61c823b34177c53e9e2161db8257b3.dir
+      size: 145885626
+      nfiles: 68036
+    - path: src/common/config.py
+      hash: md5
+      md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
+      size: 6257
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/validate_data.py
+      hash: md5
+      md5: 3c286babae78901c2213eeb56c7808e6
+      size: 3625
+    params:
+      params.yaml:
+        pipeline.conda_env: reid
+        pipeline.dataset_pointer: datasets/Market-1501-v15.09.15.dvc
+        pipeline.dataset_root: datasets/Market-1501-v15.09.15
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+      configs/vit_reid.yaml:
+        data:
+          source_type: image_folder
+          dataset:
+            name: market1501
+          location:
+            root: datasets/Market-1501-v15.09.15
+            splits:
+              train: bounding_box_train
+              query: query
+              gallery: bounding_box_test
+          image_height: 224
+          image_width: 224
+          preserve_aspect_ratio: true
+          batch_size: 16
+          eval_batch_size: 32
+          instances_per_identity: 4
+    outs:
+    - path: 
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
+      hash: md5
+      md5: a24c02f7b81683573e620bfbe6c5f1af
+      size: 1148

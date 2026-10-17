@@ -1,0 +1,106 @@
+stages:
+  validate_data:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/validate_data.py
+      --config configs/vit_reid.yaml
+      --dataset-pointer ${pipeline.dataset_pointer}
+      --output artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+    deps:
+      - src/validate_data.py
+      - src/common/config.py
+      - src/common/utils.py
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - pipeline.dataset_pointer
+      - configs/vit_reid.yaml:
+          - data
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+
+  train:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/train.py
+      --config configs/vit_reid.yaml
+      --set data.location.root=${pipeline.dataset_root}
+      --set train.epochs=${train.epochs}
+      --set evaluation.flip_test=${evaluate.flip_test}
+      --set evaluation.use_rerank=${evaluate.use_rerank}
+      --set logging.enable_mlflow=${train.enable_mlflow}
+      --set runtime.run_slug=${pipeline.release_slug}-train
+      --set artifacts.run_root=artifacts/pipeline/${pipeline.release_slug}/train
+    deps:
+      - src/train.py
+      - src/common/config.py
+      - src/common/utils.py
+      - src/common/mlflow_utils.py
+      - src/data
+      - src/models
+      - src/reid
+      - artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - train.epochs
+      - train.enable_mlflow
+      - evaluate.flip_test
+      - evaluate.use_rerank
+      - configs/vit_reid.yaml:
+          - seed
+          - device
+          - num_workers
+          - data
+          - model
+          - train
+          - augmentation
+          - evaluation
+          - logging.tracking_uri
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      - artifacts/pipeline/${pipeline.release_slug}/train/logs/effective_config.json
+      - artifacts/pipeline/${pipeline.release_slug}/train/logs/mlflow_run.json
+    metrics:
+      - artifacts/pipeline/${pipeline.release_slug}/train/metrics/metrics_v1.json:
+          cache: true
+
+  evaluate:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/evaluate.py
+      --config configs/vit_reid.yaml
+      --checkpoint artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      --set data.location.root=${pipeline.dataset_root}
+      --set evaluation.flip_test=${evaluate.flip_test}
+      --set evaluation.use_rerank=${evaluate.use_rerank}
+      --set runtime.run_slug=${pipeline.release_slug}-evaluate
+      --set artifacts.run_root=artifacts/pipeline/${pipeline.release_slug}/evaluate
+    deps:
+      - src/evaluate.py
+      - src/common/config.py
+      - src/common/utils.py
+      - src/data
+      - src/models
+      - src/reid/evaluation.py
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - evaluate.flip_test
+      - evaluate.use_rerank
+      - configs/vit_reid.yaml:
+          - device
+          - num_workers
+          - data
+          - model
+          - evaluation
+    metrics:
+      - artifacts/pipeline/${pipeline.release_slug}/evaluate/metrics/evaluation_latest.json:
+          cache: true
