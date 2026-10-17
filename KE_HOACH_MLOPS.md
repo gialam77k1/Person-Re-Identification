@@ -163,8 +163,8 @@ validate_data
   → export_onnx
   → verify_onnx
   → extract_reference
-  → package_triton
   → validate_release
+  → package_triton
 ```
 
 ### Công việc
@@ -230,6 +230,18 @@ Add model quality validation gate
 ```
 
 ## Giai đoạn 6 — Xây dựng FastAPI inference service
+
+Trạng thái: hoàn tất ngày 2026-10-17.
+
+Kết quả:
+
+- Có đủ 5 endpoint `/health`, `/ready`, `/model-info`, `/embed`, `/search`.
+- Preprocessing đọc từ contract của release đã qua validation gate.
+- JPG/PNG được kiểm tra MIME, format thực, dung lượng và số pixel.
+- Embedding được kiểm tra shape/NaN/Inf rồi L2 normalize trước khi query Qdrant.
+- `/ready` kiểm tra Triton server, Triton model và Qdrant collection thực tế.
+- API đã được thêm vào Docker Compose và có healthcheck riêng.
+- Unit/API contract test dùng fake Triton và Qdrant đã PASS; integration test thật được tiếp tục ở Giai đoạn 7.
 
 ### Mục tiêu
 
@@ -425,11 +437,11 @@ Kafka nên có commit và giai đoạn thiết kế riêng nếu thực sự đ�
 ## Thứ tự thực hiện
 
 - [x] Giai đoạn 1 — MLOps infrastructure local.
-- [ ] Giai đoạn 2 — DVC data và artifact versioning.
-- [ ] Giai đoạn 3 — MLflow Tracking Server và Model Registry.
-- [ ] Giai đoạn 4 — DVC reproducible pipeline.
-- [ ] Giai đoạn 5 — Model validation gate.
-- [ ] Giai đoạn 6 — FastAPI inference service.
+- [x] Giai đoạn 2 — DVC data và artifact versioning.
+- [x] Giai đoạn 3 — MLflow Tracking Server và Model Registry.
+- [x] Giai đoạn 4 — DVC reproducible pipeline.
+- [x] Giai đoạn 5 — Model validation gate.
+- [x] Giai đoạn 6 — FastAPI inference service.
 - [ ] Giai đoạn 7 — Deployment tests.
 - [ ] Giai đoạn 8 — CI/CD.
 - [ ] Giai đoạn 9 — Monitoring.

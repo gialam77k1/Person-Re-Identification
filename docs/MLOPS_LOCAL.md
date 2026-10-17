@@ -1,6 +1,6 @@
 # Vận hành MLOps infrastructure local
 
-Stack local sử dụng một Docker Compose chung cho PostgreSQL, MinIO, MLflow, Qdrant và Triton.
+Stack local sử dụng một Docker Compose chung cho PostgreSQL, MinIO, MLflow, Qdrant, Triton và FastAPI inference.
 
 ## Thành phần và version
 
@@ -11,6 +11,7 @@ Stack local sử dụng một Docker Compose chung cho PostgreSQL, MinIO, MLflow
 | MLflow | `ghcr.io/mlflow/mlflow:v3.10.0` | Tracking Server và Model Registry |
 | Qdrant | `qdrant/qdrant:v1.15.4` | Vector database |
 | Triton | `nvcr.io/nvidia/tritonserver:24.08-py3` | ONNX inference server |
+| Inference API | `person-reid/inference-api:1.0.0` | Validate ảnh, gọi Triton và tìm kiếm Qdrant |
 
 Image MLflow nội bộ cài thêm `boto3` và `psycopg2-binary` để kết nối MinIO và PostgreSQL. Job `minio-init` dùng chính image này để tạo bucket, không phụ thuộc MinIO Client image. MinIO Community Edition đã ngừng phát hành image mới từ upstream, vì vậy stack local pin bản legacy công khai của Bitnami thay vì dùng tag `latest` hoặc một registry yêu cầu đăng nhập.
 
@@ -21,7 +22,7 @@ Yêu cầu:
 - Docker Engine và Docker Compose.
 - NVIDIA driver và NVIDIA Container Toolkit.
 - Triton model repository v1 đã được tạo.
-- Các port `5000`, `5432`, `6333`, `6334`, `8000`, `8001`, `8002`, `9000`, `9001` chưa bị chiếm dụng.
+- Các port `5000`, `5432`, `6333`, `6334`, `8000`, `8001`, `8002`, `8080`, `9000`, `9001` chưa bị chiếm dụng.
 
 Tạo file cấu hình local:
 
@@ -59,6 +60,7 @@ Các địa chỉ local:
 - Qdrant HTTP: `http://localhost:6333`.
 - Triton HTTP: `http://localhost:8000`.
 - Triton metrics: `http://localhost:8002/metrics`.
+- FastAPI: `http://localhost:8080`; OpenAPI UI: `http://localhost:8080/docs`.
 
 Job `minio-init` tự tạo hai bucket private và có thể chạy lại an toàn:
 
@@ -74,7 +76,7 @@ Job `minio-init` tự tạo hai bucket private và có thể chạy lại an to�
 ./scripts/mlops_stack.sh logs mlflow
 ```
 
-Lệnh `verify` kiểm tra PostgreSQL, bốn HTTP health endpoint và bảo đảm hai MinIO bucket tồn tại.
+Lệnh `verify` kiểm tra PostgreSQL, các HTTP health/readiness endpoint (bao gồm FastAPI `/ready`) và bảo đảm hai MinIO bucket tồn tại.
 
 ## Dừng stack
 
@@ -99,6 +101,8 @@ Dữ liệu được giữ ở:
 - Qdrant collection `reid_reference_v1` giữ nguyên trạng thái `green`, vector size 512, cosine distance và 12.936 points trước/sau restart.
 - Triton readiness endpoint trả thành công với model repository v1.
 - Named volume PostgreSQL/MinIO và Qdrant bind mount vẫn còn nguyên sau restart.
+
+FastAPI được bổ sung và nghiệm thu ngày 2026-10-17: image build thành công, container healthy qua `/ready`, model info truy đúng release/commit/preprocessing version và truy vấn ảnh thật trả đủ top-5 từ Qdrant.
 
 ## Xử lý lỗi thường gặp
 
@@ -132,6 +136,18 @@ Xác nhận credential AWS trong `.env.mlops` khớp credential MinIO.
 ### Qdrant không thấy dữ liệu cũ
 
 Xác nhận `QDRANT_STORAGE_PATH` vẫn trỏ đến `./artifacts/qdrant/storage`. Không tạo collection mới nếu collection `reid_reference_v1` đã tồn tại.
+
+### FastAPI trả `503` tại `/ready`
+
+Đọc trường `checks` trong response để xác định manifest, Triton server, Triton model hay Qdrant collection chưa sẵn sàng. Kiểm tra thêm:
+
+```bash
+./scripts/mlops_stack.sh logs inference-api
+curl http://localhost:8000/v2/models/reid_embedding/ready
+curl http://localhost:6333/collections/reid_reference_v1
+```
+
+Contract và ví dụ gọi API nằm tại [`FASTAPI_INFERENCE.md`](FASTAPI_INFERENCE.md).
 
 ## DVC và MinIO
 

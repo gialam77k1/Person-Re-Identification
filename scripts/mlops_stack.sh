@@ -42,7 +42,7 @@ validate() {
   docker info >/dev/null
   compose config --quiet
 
-  local model_repository="${TRITON_MODEL_REPOSITORY:-${PROJECT_ROOT}/artifacts/triton/market1501-vit-bnneck-v1/model_repository}"
+  local model_repository="${TRITON_MODEL_REPOSITORY:-${PROJECT_ROOT}/artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository}"
   if [[ "${model_repository}" != /* ]]; then
     model_repository="${PROJECT_ROOT}/${model_repository#./}"
   fi
@@ -83,6 +83,7 @@ verify() {
   verify_url "MLflow" "http://localhost:${MLFLOW_PORT:-5000}/health"
   verify_url "Qdrant" "http://localhost:${QDRANT_HTTP_PORT:-6333}/healthz"
   verify_url "Triton" "http://localhost:${TRITON_HTTP_PORT:-8000}/v2/health/ready"
+  verify_url "Inference API" "http://localhost:${API_PORT:-8080}/ready"
   compose run --rm minio-init >/dev/null
   echo "MinIO buckets: ready"
   echo "MLOps stack verification: PASS"

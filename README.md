@@ -38,6 +38,7 @@ src/extract_reference.py                      Trích xuất reference embeddings
 src/prepare_triton_model.py                    Đóng gói Triton model repository
 src/qdrant_local.py                            Tạo collection và nạp Qdrant
 src/evaluate_deployment_retrieval.py           Đánh giá pipeline đã deploy
+src/api/                                       FastAPI embedding và person search
 model_releases/market1501-vit-bnneck/v1/       Manifest và preprocessing contract
 ```
 
@@ -95,7 +96,7 @@ conda run -n reid python src/evaluate.py \
 
 ## Chuẩn bị model cho MLOps
 
-Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant và Triton trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); pipeline tái lập nằm tại [`docs/DVC_PIPELINE.md`](docs/DVC_PIPELINE.md); model validation gate nằm tại [`docs/MODEL_VALIDATION_GATE.md`](docs/MODEL_VALIDATION_GATE.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
+Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant, Triton và FastAPI trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); API inference nằm tại [`docs/FASTAPI_INFERENCE.md`](docs/FASTAPI_INFERENCE.md); pipeline tái lập nằm tại [`docs/DVC_PIPELINE.md`](docs/DVC_PIPELINE.md); model validation gate nằm tại [`docs/MODEL_VALIDATION_GATE.md`](docs/MODEL_VALIDATION_GATE.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
 
 ```bash
 ./scripts/mlops_stack.sh validate
@@ -176,6 +177,23 @@ conda run -n reid python src/qdrant_local.py upsert-reference \
 ```
 
 Reference set hiện tại gồm 12.936 vector.
+
+### 6. Chạy FastAPI inference
+
+```bash
+./scripts/mlops_stack.sh up
+curl --fail http://localhost:8080/ready
+curl --fail http://localhost:8080/model-info
+```
+
+Search bằng ảnh JPG/PNG:
+
+```bash
+curl --fail -X POST 'http://localhost:8080/search?top_k=5' \
+  -F 'image=@datasets/Market-1501-v15.09.15/query/0001_c1s1_001051_00.jpg;type=image/jpeg'
+```
+
+Chi tiết endpoint, response và giới hạn upload nằm trong [`docs/FASTAPI_INFERENCE.md`](docs/FASTAPI_INFERENCE.md).
 
 ## Model release v1
 
