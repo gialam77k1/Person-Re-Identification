@@ -1,0 +1,31 @@
+pipeline:
+  release_slug: market1501-vit-bnneck-v1-dvc
+  release_id: market1501-vit-bnneck:v1-dvc
+  conda_env: reid
+  dataset_root: datasets/Market-1501-v15.09.15
+  dataset_pointer: datasets/Market-1501-v15.09.15.dvc
+  preprocessing_contract: model_releases/market1501-vit-bnneck/v1/preprocessing.json
+
+train:
+  epochs: 50
+  enable_mlflow: true
+
+evaluate:
+  flip_test: true
+  use_rerank: true
+
+export:
+  opset: 18
+
+parity:
+  split: query
+  num_samples: 8
+  atol: 0.0001
+  rtol: 0.0001
+
+triton:
+  model_name: reid_embedding
+  model_version: 1
+  max_batch_size: 0
+  preferred_batch_sizes: 4,8,16
+  instance_kind: KIND_GPU
