@@ -28,6 +28,11 @@ PARITY_PATH = "artifacts/market1501/market1501-vit-bnneck-v1-onnx-parity/metrics
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Publish frozen model v1 to MLflow.")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST)
+    parser.add_argument(
+        "--validation-report",
+        required=True,
+        help="Validation gate report. The release is logged regardless of PASS/FAIL.",
+    )
     parser.add_argument("--experiment", default="market1501-vit-bnneck")
     parser.add_argument("--alias", default="champion")
     target = parser.add_mutually_exclusive_group()
@@ -79,6 +84,28 @@ def find_release_run(client: MlflowClient, experiment_id: str, release_id: str):
         order_by=["attributes.start_time DESC"],
     )
     return runs[0] if runs else None
+
+
+def validation_allows_promotion(manifest: dict, report: dict) -> bool:
+    manifest_release = manifest["release"]["release_id"]
+    if report.get("release_id") != manifest_release:
+        raise ValueError(
+            f"Validation report release {report.get('release_id')!r} does not match {manifest_release!r}."
+        )
+    return report.get("status") == "PASS" and report.get("passed") is True
+
+
+def record_validation_result(
+    run_id: str,
+    report_path: Path,
+    report: dict,
+) -> None:
+    client = MlflowClient()
+    client.set_tag(run_id, "validation.status", str(report.get("status", "UNKNOWN")))
+    client.set_tag(run_id, "validation.release_id", str(report.get("release_id", "")))
+    client.log_metric(run_id, "validation_passed", 1.0 if report.get("passed") is True else 0.0)
+    client.log_metric(run_id, "validation_failed_checks", float(len(report.get("failed_checks", []))))
+    client.log_artifact(run_id, str(report_path), artifact_path="validation")
 
 
 def publish_release_run(
@@ -172,7 +199,12 @@ def publish_release_run(
         return run.info.run_id
 
 
-def register_release(manifest: dict, run_id: str, alias: str) -> str:
+def register_release(
+    manifest: dict,
+    run_id: str,
+    alias: str,
+    validation_report: dict,
+) -> tuple[str, bool]:
     client = MlflowClient()
     model_name = manifest["release"]["name"]
     release_id = manifest["release"]["release_id"]
@@ -198,6 +230,7 @@ def register_release(manifest: dict, run_id: str, alias: str) -> str:
             tags={
                 "release.id": release_id,
                 "git.commit": manifest["source"]["git_commit"],
+                "validation.status": validation_report["status"],
                 "dvc.dataset_revision": next(
                     asset["dvc_md5"]
                     for asset in manifest["data_versioning"]["assets"]
@@ -206,26 +239,45 @@ def register_release(manifest: dict, run_id: str, alias: str) -> str:
             },
             description="Frozen market1501-vit-bnneck:v1 ONNX release.",
         )
-    client.set_registered_model_alias(model_name, alias, model_version.version)
-    return str(model_version.version)
+    passed = validation_allows_promotion(manifest, validation_report)
+    client.set_model_version_tag(
+        model_name,
+        model_version.version,
+        "validation.status",
+        validation_report["status"],
+    )
+    if passed:
+        client.set_registered_model_alias(model_name, alias, model_version.version)
+    return str(model_version.version), passed
 
 
 def main() -> None:
     args = parse_args()
     manifest_path = resolve(args.manifest)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validation_report_path = resolve(args.validation_report)
+    validation_report = json.loads(validation_report_path.read_text(encoding="utf-8"))
+    validation_allows_promotion(manifest, validation_report)
     target_run_id = args.run_id
     if args.run_metadata:
         run_metadata = json.loads(resolve(args.run_metadata).read_text(encoding="utf-8"))
         target_run_id = run_metadata["run_id"]
     run_id = publish_release_run(manifest, args.experiment, target_run_id=target_run_id)
-    version = register_release(manifest, run_id, args.alias)
+    record_validation_result(run_id, validation_report_path, validation_report)
+    version, promoted = register_release(
+        manifest,
+        run_id,
+        args.alias,
+        validation_report,
+    )
     result = {
         "tracking_uri": mlflow.get_tracking_uri(),
         "run_id": run_id,
         "registered_model": manifest["release"]["name"],
         "version": version,
-        "alias": args.alias,
+        "alias": args.alias if promoted else None,
+        "promoted": promoted,
+        "validation_status": validation_report["status"],
         "release": manifest["release"]["release_id"],
     }
     save_json(result, "artifacts/mlflow-publish/v1/publish_result.json")

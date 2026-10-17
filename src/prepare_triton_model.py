@@ -25,7 +25,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--embedding-dim", type=int, default=512)
     parser.add_argument("--preferred-batch-sizes", default="4,8,16")
     parser.add_argument("--instance-kind", default="KIND_CPU")
+    parser.add_argument(
+        "--validation-report",
+        help="Require a model validation report with status PASS before packaging.",
+    )
     return parser.parse_args()
+
+
+def require_passed_validation(report_path: str | None) -> dict | None:
+    if not report_path:
+        return None
+    resolved_report = resolve_path(report_path)
+    report = json.loads(resolved_report.read_text(encoding="utf-8"))
+    if report.get("status") != "PASS" or report.get("passed") is not True:
+        failed = ", ".join(report.get("failed_checks", [])) or "unknown checks"
+        raise RuntimeError(f"Model validation gate is not PASS; packaging blocked: {failed}")
+    return report
 
 
 def build_config_pbtxt(
@@ -79,6 +94,7 @@ output [
 
 def main() -> None:
     args = parse_args()
+    validation_report = require_passed_validation(args.validation_report)
     output_root = ensure_dir(args.output_root)
     log_path = output_root / "prepare_triton_model.log"
 
@@ -129,6 +145,15 @@ def main() -> None:
             "embedding_dim": args.embedding_dim,
             "preferred_batch_sizes": preferred_batch_sizes,
             "instance_kind": args.instance_kind,
+            "validation_gate": (
+                {
+                    "status": validation_report["status"],
+                    "release_id": validation_report["release_id"],
+                    "report_path": str(resolve_path(args.validation_report)),
+                }
+                if validation_report is not None
+                else None
+            ),
         }
         save_json(manifest, output_root / "triton_model_manifest.json")
         print(json.dumps(manifest, indent=2))

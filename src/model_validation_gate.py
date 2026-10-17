@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -45,7 +46,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--onnx", required=True)
     parser.add_argument("--preprocessing", required=True)
+    parser.add_argument("--preprocessing-output")
     parser.add_argument("--deployment-metrics")
+    parser.add_argument(
+        "--mlflow-run-metadata",
+        help="Log the PASS/FAIL report to the MLflow run referenced by this JSON file.",
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--manifest-output", required=True)
     parser.add_argument(
@@ -299,10 +305,39 @@ def build_validation(
     return report, manifest
 
 
+def log_validation_to_mlflow(
+    report_path: Path,
+    report: dict[str, Any],
+    run_metadata_path: Path,
+) -> None:
+    import mlflow
+    from mlflow import MlflowClient
+
+    metadata = read_json(run_metadata_path)
+    tracking_uri = metadata.get("tracking_uri")
+    run_id = metadata.get("run_id")
+    if not tracking_uri or not run_id:
+        raise ValueError("MLflow run metadata must contain tracking_uri and run_id.")
+
+    mlflow.set_tracking_uri(str(tracking_uri))
+    client = MlflowClient()
+    client.set_tag(run_id, "validation.status", report["status"])
+    client.set_tag(run_id, "validation.release_id", report["release_id"])
+    client.log_metric(run_id, "validation_passed", 1.0 if report["passed"] else 0.0)
+    client.log_metric(run_id, "validation_failed_checks", float(len(report["failed_checks"])))
+    client.log_artifact(run_id, str(report_path), artifact_path="validation")
+
+
 def main() -> None:
     args = parse_args()
     report_path = resolve(args.output)
     manifest_path = resolve(args.manifest_output)
+    preprocessing_path = resolve(args.preprocessing)
+    if args.preprocessing_output:
+        preprocessing_output = resolve(args.preprocessing_output)
+        preprocessing_output.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(preprocessing_path, preprocessing_output)
+        preprocessing_path = preprocessing_output
     report_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     report, manifest = build_validation(
@@ -316,13 +351,19 @@ def main() -> None:
         reference_manifest_path=resolve(args.reference_manifest),
         checkpoint_path=resolve(args.checkpoint),
         onnx_path=resolve(args.onnx),
-        preprocessing_path=resolve(args.preprocessing),
+        preprocessing_path=preprocessing_path,
         deployment_metrics_path=resolve(args.deployment_metrics) if args.deployment_metrics else None,
         report_path=report_path,
         manifest_path=manifest_path,
     )
     save_json(manifest, manifest_path)
     save_json(report, report_path)
+    if args.mlflow_run_metadata:
+        log_validation_to_mlflow(
+            report_path,
+            report,
+            resolve(args.mlflow_run_metadata),
+        )
     print(json.dumps(report, indent=2))
     if not report["passed"] and not args.no_fail_exit:
         raise SystemExit(1)

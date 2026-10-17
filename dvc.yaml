@@ -222,11 +222,13 @@ stages:
       --embedding-dim 512
       --preferred-batch-sizes ${triton.preferred_batch_sizes}
       --instance-kind ${triton.instance_kind}
+      --validation-report artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json
     deps:
       - src/prepare_triton_model.py
       - src/common/utils.py
       - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
       - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json
     params:
       - pipeline.release_slug
       - pipeline.conda_env
@@ -237,40 +239,49 @@ stages:
   validate_release:
     cmd: >-
       conda run --no-capture-output -n ${pipeline.conda_env}
-      python src/validate_pipeline_release.py
+      python src/model_validation_gate.py
       --release-id ${pipeline.release_id}
-      --config configs/vit_reid.yaml
-      --pipeline-params params.yaml
+      --thresholds ${validation.thresholds}
       --data-manifest artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
       --training-metrics artifacts/pipeline/${pipeline.release_slug}/train/metrics/metrics_v1.json
       --evaluation-metrics artifacts/pipeline/${pipeline.release_slug}/evaluate/metrics/evaluation_latest.json
+      --onnx-manifest artifacts/pipeline/${pipeline.release_slug}/onnx/exports/onnx_export_manifest.json
+      --parity-report artifacts/pipeline/${pipeline.release_slug}/parity/metrics/onnx_parity.json
+      --reference-manifest artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_manifest.json
       --checkpoint artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
       --onnx artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
-      --parity artifacts/pipeline/${pipeline.release_slug}/parity/metrics/onnx_parity.json
-      --reference-manifest artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_manifest.json
-      --triton-root artifacts/pipeline/${pipeline.release_slug}/triton/model_repository
       --preprocessing ${pipeline.preprocessing_contract}
-      --output-root artifacts/pipeline/${pipeline.release_slug}/release
+      --preprocessing-output artifacts/pipeline/${pipeline.release_slug}/release/preprocessing.json
+      --deployment-metrics ${validation.deployment_metrics}
+      --mlflow-run-metadata artifacts/pipeline/${pipeline.release_slug}/train/logs/mlflow_run.json
+      --output artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json
+      --manifest-output artifacts/pipeline/${pipeline.release_slug}/release/model_manifest.json
     deps:
-      - src/validate_pipeline_release.py
+      - src/model_validation_gate.py
       - src/common/utils.py
-      - configs/vit_reid.yaml
-      - params.yaml
+      - ${validation.thresholds}
+      - ${validation.deployment_metrics}
       - artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
       - artifacts/pipeline/${pipeline.release_slug}/train/metrics/metrics_v1.json
+      - artifacts/pipeline/${pipeline.release_slug}/train/logs/mlflow_run.json
       - artifacts/pipeline/${pipeline.release_slug}/evaluate/metrics/evaluation_latest.json
       - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
       - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
       - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/onnx_export_manifest.json
       - artifacts/pipeline/${pipeline.release_slug}/parity/metrics/onnx_parity.json
       - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_manifest.json
-      - artifacts/pipeline/${pipeline.release_slug}/triton/model_repository
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_embeddings.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_pids.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_camids.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_paths.npy
       - ${pipeline.preprocessing_contract}
     params:
       - pipeline.release_slug
       - pipeline.release_id
       - pipeline.conda_env
       - pipeline.preprocessing_contract
+      - validation
     outs:
       - artifacts/pipeline/${pipeline.release_slug}/release/model_manifest.json
       - artifacts/pipeline/${pipeline.release_slug}/release/preprocessing.json

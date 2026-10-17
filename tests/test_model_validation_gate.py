@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 
 from src.model_validation_gate import ROOT, build_validation
+from src.prepare_triton_model import require_passed_validation
+from src.publish_model_release import validation_allows_promotion
 
 
 class ModelValidationGateTest(unittest.TestCase):
@@ -144,6 +146,44 @@ class ModelValidationGateTest(unittest.TestCase):
         self.assertIn("quality_mAP", report["failed_checks"])
         self.assertIn("embedding_finite", report["failed_checks"])
         self.assertEqual(manifest["release"]["status"], "rejected")
+
+    def test_packaging_rejects_failed_gate_report(self) -> None:
+        failed_report = self.root / "failed_report.json"
+        self._write_json(
+            failed_report,
+            {"status": "FAIL", "passed": False, "failed_checks": ["quality_mAP"]},
+        )
+        with self.assertRaisesRegex(RuntimeError, "packaging blocked: quality_mAP"):
+            require_passed_validation(str(failed_report))
+
+    def test_packaging_accepts_passed_gate_report(self) -> None:
+        passed_report = self.root / "passed_report.json"
+        self._write_json(
+            passed_report,
+            {"release_id": "test:v1", "status": "PASS", "passed": True},
+        )
+        report = require_passed_validation(str(passed_report))
+        self.assertEqual(report["status"], "PASS")
+
+    def test_promotion_requires_matching_pass_report(self) -> None:
+        manifest = {"release": {"release_id": "test:v1"}}
+        self.assertTrue(
+            validation_allows_promotion(
+                manifest,
+                {"release_id": "test:v1", "status": "PASS", "passed": True},
+            )
+        )
+        self.assertFalse(
+            validation_allows_promotion(
+                manifest,
+                {"release_id": "test:v1", "status": "FAIL", "passed": False},
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            validation_allows_promotion(
+                manifest,
+                {"release_id": "other:v1", "status": "PASS", "passed": True},
+            )
 
 
 if __name__ == "__main__":
