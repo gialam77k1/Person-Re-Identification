@@ -96,7 +96,9 @@ def preprocess_image(image: Image.Image, contract: dict[str, Any]) -> np.ndarray
     if mean.shape != (3,) or std.shape != (3,) or np.any(std == 0):
         raise ValueError("Preprocessing normalization must contain valid RGB mean/std.")
     pixel_scale = float(conversion.get("pixel_scale", 1.0 / 255.0))
-    tensor = np.asarray(canvas, dtype=np.float32) * pixel_scale
+    if not np.isfinite(pixel_scale) or pixel_scale <= 0:
+        raise ValueError("Preprocessing pixel_scale must be a positive finite number.")
+    tensor = np.asarray(canvas, dtype=np.float32) / (1.0 / pixel_scale)
     tensor = (tensor - mean) / std
     tensor = np.transpose(tensor, (2, 0, 1))[None, ...]
     return tensor.astype(np.float32)

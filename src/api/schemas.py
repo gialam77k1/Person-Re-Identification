@@ -16,6 +16,7 @@ class ModelInfoResponse(BaseModel):
     release_id: str
     git_commit: str
     model_name: str
+    model_version: str
     embedding_dim: int
     input_shape: list[int]
     preprocessing_version: int

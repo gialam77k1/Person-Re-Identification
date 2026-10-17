@@ -20,7 +20,7 @@ def create_app(service: InferenceService | None = None) -> FastAPI:
     inference = service or InferenceService(ApiSettings.from_env())
     api = FastAPI(
         title="Person Re-Identification API",
-        version="1.0.0",
+        version="1.1.0",
         description="Online embedding and retrieval through Triton and Qdrant.",
     )
 

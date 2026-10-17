@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 
 from src.api.clients import QdrantClient, TritonClient, UpstreamError
-from src.api.config import ApiSettings, ReleaseContract
+from src.api.config import ApiSettings, ReleaseContract, verify_serving_model_artifacts
 from src.api.image_processing import preprocess_image, validate_and_decode_image
 
 
@@ -17,6 +17,7 @@ class InferenceService:
         triton: TritonClient | None = None,
         qdrant: QdrantClient | None = None,
         contract: ReleaseContract | None = None,
+        verify_model_checksum: bool = True,
     ) -> None:
         self.settings = settings
         self.contract = contract or ReleaseContract.load(settings.model_manifest_path)
@@ -32,12 +33,20 @@ class InferenceService:
         )
         if self.contract.embedding_dim <= 0:
             raise ValueError("Model manifest has an invalid embedding dimension.")
+        if verify_model_checksum:
+            verify_serving_model_artifacts(
+                self.contract,
+                settings.serving_model_repository,
+                settings.model_name,
+                settings.model_version,
+            )
 
     def model_info(self) -> dict[str, Any]:
         return {
             "release_id": self.contract.release_id,
             "git_commit": self.contract.git_commit,
             "model_name": self.settings.model_name,
+            "model_version": self.settings.model_version,
             "embedding_dim": self.contract.embedding_dim,
             "input_shape": list(self.contract.input_shape),
             "preprocessing_version": self.contract.preprocessing_version,

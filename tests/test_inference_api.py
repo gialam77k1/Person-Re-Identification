@@ -92,6 +92,7 @@ class InferenceApiTest(unittest.IsolatedAsyncioTestCase):
             triton=self.triton,
             qdrant=self.qdrant,
             contract=self.contract,
+            verify_model_checksum=False,
         )
         self.app = create_app(self.service)
 
