@@ -145,6 +145,15 @@ Dữ liệu huấn luyện và model artifact của release v1 được quản l
 
 Danh sách artifact, DVC hash và quy trình phục hồi nằm tại [`DVC_VERSIONING.md`](DVC_VERSIONING.md).
 
+Pipeline model hoàn chỉnh được khai báo trong `dvc.yaml` và chạy bằng:
+
+```bash
+./scripts/dvc_local.sh repro
+./scripts/dvc_local.sh metrics show
+```
+
+Chi tiết dependency graph, parameters, phạm vi chạy lại và kết quả nghiệm thu nằm tại [`DVC_PIPELINE.md`](DVC_PIPELINE.md).
+
 ## MLflow Tracking và Model Registry
 
 Training client dùng `http://localhost:5000`; không còn tạo SQLite tracking store trong `mlruns/`. PostgreSQL lưu metadata và MinIO lưu artifact.
