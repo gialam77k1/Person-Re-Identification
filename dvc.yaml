@@ -242,6 +242,8 @@ stages:
       python src/model_validation_gate.py
       --release-id ${pipeline.release_id}
       --thresholds ${validation.thresholds}
+      --config configs/vit_reid.yaml
+      --pipeline-params params.yaml
       --data-manifest artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
       --training-metrics artifacts/pipeline/${pipeline.release_slug}/train/metrics/metrics_v1.json
       --evaluation-metrics artifacts/pipeline/${pipeline.release_slug}/evaluate/metrics/evaluation_latest.json
@@ -259,6 +261,8 @@ stages:
     deps:
       - src/model_validation_gate.py
       - src/common/utils.py
+      - configs/vit_reid.yaml
+      - params.yaml
       - ${validation.thresholds}
       - ${validation.deployment_metrics}
       - artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json

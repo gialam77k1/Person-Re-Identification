@@ -37,6 +37,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate a model candidate before packaging or promotion.")
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--thresholds", default="configs/model_validation.yaml")
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--pipeline-params", default="params.yaml")
     parser.add_argument("--data-manifest", required=True)
     parser.add_argument("--training-metrics", required=True)
     parser.add_argument("--evaluation-metrics", required=True)
@@ -160,17 +162,25 @@ def validate_deployment_metrics(
         ("mAP", "mAP_base", "map_max_drop"),
         ("mINP", "mINP_base", "minp_max_drop"),
     )
-    for deployed_key, baseline_key, policy_key in mappings:
-        deployed = deployment_metrics.get(deployed_key)
-        baseline = evaluation_metrics.get(baseline_key, evaluation_metrics.get(deployed_key))
+    for deployed_key, candidate_key, policy_key in mappings:
+        deployed_baseline = deployment_metrics.get(deployed_key)
+        candidate = evaluation_metrics.get(candidate_key, evaluation_metrics.get(deployed_key))
         allowed_drop = float(policy[policy_key])
-        drop = float(baseline) - float(deployed) if finite_number(baseline) and finite_number(deployed) else None
+        drop = (
+            float(deployed_baseline) - float(candidate)
+            if finite_number(deployed_baseline) and finite_number(candidate)
+            else None
+        )
         passed = drop is not None and drop <= allowed_drop
         add_check(
             checks,
             f"deployment_{deployed_key}_regression",
             passed,
-            actual={"value": deployed, "baseline": baseline, "drop": drop},
+            actual={
+                "candidate": candidate,
+                "deployment_baseline": deployed_baseline,
+                "drop": drop,
+            },
             expected={"max_drop": allowed_drop},
         )
 
@@ -179,6 +189,8 @@ def build_validation(
     *,
     release_id: str,
     thresholds_path: Path,
+    config_path: Path,
+    pipeline_params_path: Path,
     data_manifest_path: Path,
     training_metrics_path: Path,
     evaluation_metrics_path: Path,
@@ -239,9 +251,15 @@ def build_validation(
     camids_path = resolve(reference["camids_path"])
     paths_path = resolve(reference["paths_path"])
     embeddings = np.load(embeddings_path, mmap_mode="r")
+    pids = np.load(pids_path, mmap_mode="r")
+    camids = np.load(camids_path, mmap_mode="r")
+    paths = np.load(paths_path, mmap_mode="r")
     expected_dim = int(contract["embedding_dim"])
-    add_check(checks, "embedding_shape", embeddings.ndim == 2 and embeddings.shape[1] == expected_dim and embeddings.shape[0] == int(reference["num_samples"]), actual=list(embeddings.shape), expected=[int(reference["num_samples"]), expected_dim])
-    add_check(checks, "embedding_finite", bool(np.isfinite(embeddings).all()), actual="all finite" if np.isfinite(embeddings).all() else "contains NaN or Inf", expected="all finite")
+    expected_samples = int(reference["num_samples"])
+    add_check(checks, "embedding_shape", embeddings.ndim == 2 and embeddings.shape == (expected_samples, expected_dim) and int(reference.get("feature_dim", -1)) == expected_dim, actual={"array": list(embeddings.shape), "manifest_feature_dim": reference.get("feature_dim")}, expected=[expected_samples, expected_dim])
+    finite_embeddings = bool(np.isfinite(embeddings).all())
+    add_check(checks, "embedding_finite", finite_embeddings, actual="all finite" if finite_embeddings else "contains NaN or Inf", expected="all finite")
+    add_check(checks, "reference_metadata_alignment", pids.shape == camids.shape == paths.shape == (expected_samples,), actual={"pids": list(pids.shape), "camids": list(camids.shape), "paths": list(paths.shape)}, expected=[expected_samples])
 
     external_weights = onnx_path.with_name(f"{onnx_path.name}.data")
     artifacts = [
@@ -262,9 +280,12 @@ def build_validation(
     validate_deployment_metrics(checks, deployment, evaluation, thresholds["deployment"])
 
     passed = all(check["passed"] for check in checks)
+    release_name, _, release_version = release_id.partition(":")
     manifest = {
         "schema_version": 2,
         "release": {
+            "name": release_name,
+            "version": release_version or "unversioned",
             "release_id": release_id,
             "status": "validated" if passed else "rejected",
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -273,6 +294,12 @@ def build_validation(
             "git_commit": git_commit(),
             "dataset_dvc_revision": data_manifest.get("dataset_dvc_revision"),
             "checkpoint_epoch": training_metrics.get("best_epoch"),
+            "config_path": repository_path(config_path),
+            "config_sha256": sha256_file(config_path),
+            "pipeline_params_path": repository_path(pipeline_params_path),
+            "pipeline_params_sha256": sha256_file(pipeline_params_path),
+            "validation_policy_path": repository_path(thresholds_path),
+            "validation_policy_sha256": sha256_file(thresholds_path),
         },
         "contract": {
             "input_name": contract["input_name"],
@@ -281,6 +308,13 @@ def build_validation(
             "output_shape": expected_output,
             "embedding_dim": expected_dim,
             "preprocessing_path": repository_path(preprocessing_path),
+        },
+        "model": {
+            "task": "person-re-identification",
+            "dataset": evaluation.get("dataset", "market1501"),
+            "architecture": "vit_b_16",
+            "embedding_dim": expected_dim,
+            "onnx_opset": onnx_manifest.get("opset"),
         },
         "quality_metrics": {key: evaluation.get(key) for key in ("rank1", "rank5", "mAP", "mINP")},
         "deployment_metrics": deployment,
@@ -300,6 +334,7 @@ def build_validation(
         "thresholds": thresholds,
         "checks": checks,
         "failed_checks": [check["name"] for check in checks if not check["passed"]],
+        "validated_artifacts": artifacts,
         "manifest_path": repository_path(manifest_path),
     }
     return report, manifest
@@ -333,37 +368,94 @@ def main() -> None:
     report_path = resolve(args.output)
     manifest_path = resolve(args.manifest_output)
     preprocessing_path = resolve(args.preprocessing)
-    if args.preprocessing_output:
-        preprocessing_output = resolve(args.preprocessing_output)
-        preprocessing_output.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(preprocessing_path, preprocessing_output)
-        preprocessing_path = preprocessing_output
     report_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    report, manifest = build_validation(
-        release_id=args.release_id,
-        thresholds_path=resolve(args.thresholds),
-        data_manifest_path=resolve(args.data_manifest),
-        training_metrics_path=resolve(args.training_metrics),
-        evaluation_metrics_path=resolve(args.evaluation_metrics),
-        onnx_manifest_path=resolve(args.onnx_manifest),
-        parity_report_path=resolve(args.parity_report),
-        reference_manifest_path=resolve(args.reference_manifest),
-        checkpoint_path=resolve(args.checkpoint),
-        onnx_path=resolve(args.onnx),
-        preprocessing_path=preprocessing_path,
-        deployment_metrics_path=resolve(args.deployment_metrics) if args.deployment_metrics else None,
-        report_path=report_path,
-        manifest_path=manifest_path,
-    )
+    try:
+        if args.preprocessing_output:
+            preprocessing_output = resolve(args.preprocessing_output)
+            preprocessing_output.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(preprocessing_path, preprocessing_output)
+            preprocessing_path = preprocessing_output
+        report, manifest = build_validation(
+            release_id=args.release_id,
+            thresholds_path=resolve(args.thresholds),
+            config_path=resolve(args.config),
+            pipeline_params_path=resolve(args.pipeline_params),
+            data_manifest_path=resolve(args.data_manifest),
+            training_metrics_path=resolve(args.training_metrics),
+            evaluation_metrics_path=resolve(args.evaluation_metrics),
+            onnx_manifest_path=resolve(args.onnx_manifest),
+            parity_report_path=resolve(args.parity_report),
+            reference_manifest_path=resolve(args.reference_manifest),
+            checkpoint_path=resolve(args.checkpoint),
+            onnx_path=resolve(args.onnx),
+            preprocessing_path=preprocessing_path,
+            deployment_metrics_path=resolve(args.deployment_metrics) if args.deployment_metrics else None,
+            report_path=report_path,
+            manifest_path=manifest_path,
+        )
+    except Exception as exc:
+        report = {
+            "schema_version": 1,
+            "release_id": args.release_id,
+            "status": "FAIL",
+            "passed": False,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "checks": [
+                {
+                    "name": "gate_execution",
+                    "status": "FAIL",
+                    "passed": False,
+                    "actual": f"{type(exc).__name__}: {exc}",
+                    "expected": "validation completes without missing or malformed inputs",
+                    "message": "Validation could not complete.",
+                }
+            ],
+            "failed_checks": ["gate_execution"],
+            "manifest_path": repository_path(manifest_path),
+        }
+        manifest = {
+            "schema_version": 2,
+            "release": {
+                "name": args.release_id.partition(":")[0],
+                "version": args.release_id.partition(":")[2] or "unversioned",
+                "release_id": args.release_id,
+                "status": "rejected",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "files": [],
+            "validation": {
+                "status": "FAIL",
+                "report_path": repository_path(report_path),
+            },
+        }
     save_json(manifest, manifest_path)
     save_json(report, report_path)
     if args.mlflow_run_metadata:
-        log_validation_to_mlflow(
-            report_path,
-            report,
-            resolve(args.mlflow_run_metadata),
-        )
+        try:
+            log_validation_to_mlflow(
+                report_path,
+                report,
+                resolve(args.mlflow_run_metadata),
+            )
+        except Exception as exc:
+            report["status"] = "FAIL"
+            report["passed"] = False
+            report.setdefault("checks", []).append(
+                {
+                    "name": "mlflow_report_storage",
+                    "status": "FAIL",
+                    "passed": False,
+                    "actual": f"{type(exc).__name__}: {exc}",
+                    "expected": "validation report stored in MLflow",
+                    "message": "Promotion is blocked because the validation report was not persisted.",
+                }
+            )
+            report.setdefault("failed_checks", []).append("mlflow_report_storage")
+            manifest["release"]["status"] = "rejected"
+            manifest.setdefault("validation", {})["status"] = "FAIL"
+            save_json(manifest, manifest_path)
+            save_json(report, report_path)
     print(json.dumps(report, indent=2))
     if not report["passed"] and not args.no_fail_exit:
         raise SystemExit(1)

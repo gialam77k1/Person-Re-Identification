@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 from src.common.mlflow_utils import collect_hardware_info, configure_mlflow, lineage_tags
 from src.common.utils import save_json
 
-DEFAULT_MANIFEST = "model_releases/market1501-vit-bnneck/v1/model_manifest.json"
+DEFAULT_MANIFEST = "artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json"
 METRICS_PATH = "artifacts/market1501/market1501-vit-staged-v2/metrics/metrics_v1.json"
 EFFECTIVE_CONFIG_PATH = "artifacts/market1501/market1501-vit-staged-v2/logs/effective_config.json"
 TRAIN_LOG_PATH = "artifacts/market1501/market1501-vit-staged-v2/logs/train.log"
@@ -58,8 +58,15 @@ def estimate_legacy_training_duration() -> float:
 
 
 def release_metrics(manifest: dict) -> dict[str, float]:
-    base = manifest["quality_metrics"]["base"]
-    reranked = manifest["quality_metrics"]["reranked"]
+    quality = manifest["quality_metrics"]
+    if "base" not in quality or "reranked" not in quality:
+        return {
+            key: float(quality[key])
+            for key in ("rank1", "rank5", "mAP", "mINP")
+            if quality.get(key) is not None
+        }
+    base = quality["base"]
+    reranked = quality["reranked"]
     return {
         "rank1": float(reranked["rank1"]),
         "rank5": float(reranked["rank5"]),
@@ -110,6 +117,7 @@ def record_validation_result(
 
 def publish_release_run(
     manifest: dict,
+    manifest_path: Path,
     experiment_name: str,
     target_run_id: str | None = None,
 ) -> str:
@@ -132,14 +140,18 @@ def publish_release_run(
             return existing_run.info.run_id
 
     source = manifest["source"]
-    dataset_asset = next(
-        asset
-        for asset in manifest["data_versioning"]["assets"]
-        if asset["role"] == "market1501_dataset"
-    )
     git_commit = source["git_commit"]
-    dvc_revision = dataset_asset["dvc_md5"]
-    duration_seconds = estimate_legacy_training_duration()
+    dvc_revision = source.get("dataset_dvc_revision")
+    if not dvc_revision:
+        dvc_revision = next(
+            asset["dvc_md5"]
+            for asset in manifest["data_versioning"]["assets"]
+            if asset["role"] == "market1501_dataset"
+        )
+    try:
+        duration_seconds = estimate_legacy_training_duration()
+    except FileNotFoundError:
+        duration_seconds = 0.0
     runtime = {
         "published_at": datetime.now(timezone.utc).isoformat(),
         "training_duration_seconds": duration_seconds,
@@ -160,9 +172,9 @@ def publish_release_run(
                 **lineage_tags(git_commit=git_commit, dvc_revision=dvc_revision),
                 "run.kind": "model-release",
                 "release.id": release_id,
-                "release.version": manifest["release"]["version"],
+                "release.version": manifest["release"].get("version", "unversioned"),
                 "checkpoint.epoch": str(source["checkpoint_epoch"]),
-                "training.code_commit": source["training_code_commit"],
+                "training.code_commit": source.get("training_code_commit", git_commit),
                 "training.duration_source": runtime["training_duration_source"],
                 "hardware.source": runtime["hardware_source"],
             }
@@ -173,9 +185,9 @@ def publish_release_run(
                 "embedding_dim": manifest["model"]["embedding_dim"],
                 "dataset": manifest["model"]["dataset"],
                 "checkpoint_epoch": source["checkpoint_epoch"],
-                "onnx_opset": manifest["model"]["onnx_opset"],
-                "input_shape": "1x3x224x224",
-                "output_shape": "1x512",
+                "onnx_opset": manifest["model"].get("onnx_opset"),
+                "input_shape": "x".join(map(str, manifest["contract"]["input_shape"])),
+                "output_shape": "x".join(map(str, manifest["contract"]["output_shape"])),
             }
         )
         mlflow.log_metrics(
@@ -184,17 +196,25 @@ def publish_release_run(
                 "train_duration_seconds": duration_seconds,
             }
         )
-        mlflow.log_artifact(str(resolve("configs/vit_reid.yaml")), artifact_path="config")
-        mlflow.log_artifact(str(resolve(EFFECTIVE_CONFIG_PATH)), artifact_path="config")
-        mlflow.log_artifact(str(resolve(METRICS_PATH)), artifact_path="metrics")
-        mlflow.log_artifact(str(resolve(CHECKPOINT_PATH)), artifact_path="checkpoints")
-        mlflow.log_artifacts(str(resolve(ONNX_DIR)), artifact_path="model")
-        mlflow.log_artifact(str(resolve(PARITY_PATH)), artifact_path="reports")
-        mlflow.log_artifact(
-            str(resolve(manifest["contract"]["preprocessing_path"])),
-            artifact_path="release",
-        )
-        mlflow.log_artifact(str(resolve(DEFAULT_MANIFEST)), artifact_path="release")
+        mlflow.log_artifact(str(resolve(source["config_path"])), artifact_path="config")
+        artifact_paths = {
+            "pytorch_checkpoint": "checkpoints",
+            "onnx_graph": "model",
+            "onnx_external_weights": "model",
+            "preprocessing_contract": "release",
+            "reference_embeddings": "reference",
+            "reference_pids": "reference",
+            "reference_camids": "reference",
+            "reference_paths": "reference",
+        }
+        for item in manifest["files"]:
+            artifact_path = artifact_paths.get(item["role"])
+            if artifact_path:
+                mlflow.log_artifact(
+                    str(resolve(item["repository_path"])),
+                    artifact_path=artifact_path,
+                )
+        mlflow.log_artifact(str(manifest_path), artifact_path="release")
         mlflow.log_artifact(str(runtime_path), artifact_path="provenance")
         return run.info.run_id
 
@@ -231,11 +251,7 @@ def register_release(
                 "release.id": release_id,
                 "git.commit": manifest["source"]["git_commit"],
                 "validation.status": validation_report["status"],
-                "dvc.dataset_revision": next(
-                    asset["dvc_md5"]
-                    for asset in manifest["data_versioning"]["assets"]
-                    if asset["role"] == "market1501_dataset"
-                ),
+                "dvc.dataset_revision": manifest["source"].get("dataset_dvc_revision", "unknown"),
             },
             description="Frozen market1501-vit-bnneck:v1 ONNX release.",
         )
@@ -262,7 +278,12 @@ def main() -> None:
     if args.run_metadata:
         run_metadata = json.loads(resolve(args.run_metadata).read_text(encoding="utf-8"))
         target_run_id = run_metadata["run_id"]
-    run_id = publish_release_run(manifest, args.experiment, target_run_id=target_run_id)
+    run_id = publish_release_run(
+        manifest,
+        manifest_path,
+        args.experiment,
+        target_run_id=target_run_id,
+    )
     record_validation_result(run_id, validation_report_path, validation_report)
     version, promoted = register_release(
         manifest,

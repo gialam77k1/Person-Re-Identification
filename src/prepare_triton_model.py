@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sys
@@ -27,12 +28,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--instance-kind", default="KIND_CPU")
     parser.add_argument(
         "--validation-report",
-        help="Require a model validation report with status PASS before packaging.",
+        required=True,
+        help="Model validation report with status PASS for the exact ONNX artifact.",
     )
     return parser.parse_args()
 
 
-def require_passed_validation(report_path: str | None) -> dict | None:
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def require_passed_validation(
+    report_path: str | None,
+    onnx_path: Path | None = None,
+) -> dict | None:
     if not report_path:
         return None
     resolved_report = resolve_path(report_path)
@@ -40,6 +53,18 @@ def require_passed_validation(report_path: str | None) -> dict | None:
     if report.get("status") != "PASS" or report.get("passed") is not True:
         failed = ", ".join(report.get("failed_checks", [])) or "unknown checks"
         raise RuntimeError(f"Model validation gate is not PASS; packaging blocked: {failed}")
+    if onnx_path is not None:
+        artifacts = {item["role"]: item for item in report.get("validated_artifacts", [])}
+        paths = {
+            "onnx_graph": onnx_path,
+            "onnx_external_weights": onnx_path.with_name(f"{onnx_path.name}.data"),
+        }
+        for role, path in paths.items():
+            expected = artifacts.get(role, {}).get("sha256")
+            if not expected or not path.is_file() or sha256_file(path) != expected:
+                raise RuntimeError(
+                    f"Validated checksum does not match the artifact being packaged: {role}"
+                )
     return report
 
 
@@ -94,12 +119,12 @@ output [
 
 def main() -> None:
     args = parse_args()
-    validation_report = require_passed_validation(args.validation_report)
+    onnx_path = resolve_path(args.onnx_path)
+    validation_report = require_passed_validation(args.validation_report, onnx_path)
     output_root = ensure_dir(args.output_root)
     log_path = output_root / "prepare_triton_model.log"
 
     with tee_output(log_path):
-        onnx_path = resolve_path(args.onnx_path)
         if not onnx_path.exists():
             raise FileNotFoundError(f"ONNX file not found: {onnx_path}")
 

@@ -110,6 +110,8 @@ class ModelValidationGateTest(unittest.TestCase):
         return build_validation(
             release_id="test:v1",
             thresholds_path=ROOT / "configs/model_validation.yaml",
+            config_path=ROOT / "configs/vit_reid.yaml",
+            pipeline_params_path=ROOT / "params.yaml",
             data_manifest_path=self.paths["data.json"],
             training_metrics_path=self.paths["training.json"],
             evaluation_metrics_path=self.paths["evaluation.json"],
@@ -164,6 +166,23 @@ class ModelValidationGateTest(unittest.TestCase):
         )
         report = require_passed_validation(str(passed_report))
         self.assertEqual(report["status"], "PASS")
+
+    def test_packaging_rejects_unvalidated_onnx_checksum(self) -> None:
+        passed_report = self.root / "passed_without_checksums.json"
+        self._write_json(
+            passed_report,
+            {
+                "release_id": "test:v1",
+                "status": "PASS",
+                "passed": True,
+                "validated_artifacts": [],
+            },
+        )
+        with self.assertRaisesRegex(RuntimeError, "onnx_graph"):
+            require_passed_validation(
+                str(passed_report),
+                self.paths["model.onnx"],
+            )
 
     def test_promotion_requires_matching_pass_report(self) -> None:
         manifest = {"release": {"release_id": "test:v1"}}
