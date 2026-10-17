@@ -116,6 +116,7 @@ Ví dụ response:
 - Mặc định từ chối file lớn hơn 10 MiB.
 - Mặc định từ chối ảnh lớn hơn 25 triệu pixel.
 - File rỗng, file hỏng, embedding sai shape, NaN/Inf hoặc norm bằng 0 đều bị từ chối.
+- Khi khởi động, service đối chiếu SHA256 của ONNX graph, external weights và preprocessing contract với model manifest; artifact bị sửa sẽ làm service fail-fast.
 
 ## Kiểm thử
 
@@ -138,4 +139,4 @@ Nghiệm thu local ngày 2026-10-17 với Triton và Qdrant thật:
 - `/search?top_k=5` trả đúng 5 point từ collection `reid_reference_v1`, có đủ PID, camera ID, similarity score và source image.
 - 6 API tests và 6 model-gate regression tests đều PASS.
 
-Đây là smoke test chức năng. Benchmark latency, deployment quality regression và restart test đầy đủ thuộc Giai đoạn 7.
+Benchmark latency, deployment quality regression và restart test đầy đủ được ghi tại [`DEPLOYMENT_TESTING.md`](DEPLOYMENT_TESTING.md).

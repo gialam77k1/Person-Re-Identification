@@ -96,7 +96,7 @@ conda run -n reid python src/evaluate.py \
 
 ## Chuẩn bị model cho MLOps
 
-Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant, Triton và FastAPI trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); API inference nằm tại [`docs/FASTAPI_INFERENCE.md`](docs/FASTAPI_INFERENCE.md); pipeline tái lập nằm tại [`docs/DVC_PIPELINE.md`](docs/DVC_PIPELINE.md); model validation gate nằm tại [`docs/MODEL_VALIDATION_GATE.md`](docs/MODEL_VALIDATION_GATE.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
+Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant, Triton và FastAPI trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); API inference nằm tại [`docs/FASTAPI_INFERENCE.md`](docs/FASTAPI_INFERENCE.md); kiểm thử deployment nằm tại [`docs/DEPLOYMENT_TESTING.md`](docs/DEPLOYMENT_TESTING.md); pipeline tái lập nằm tại [`docs/DVC_PIPELINE.md`](docs/DVC_PIPELINE.md); model validation gate nằm tại [`docs/MODEL_VALIDATION_GATE.md`](docs/MODEL_VALIDATION_GATE.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
 
 ```bash
 ./scripts/mlops_stack.sh validate
@@ -194,6 +194,19 @@ curl --fail -X POST 'http://localhost:8080/search?top_k=5' \
 ```
 
 Chi tiết endpoint, response và giới hạn upload nằm trong [`docs/FASTAPI_INFERENCE.md`](docs/FASTAPI_INFERENCE.md).
+
+### 7. Kiểm thử deployment
+
+```bash
+./scripts/test_deployment.sh unit
+./scripts/test_deployment.sh integration
+./scripts/test_deployment.sh evaluate
+./scripts/test_deployment.sh quality
+./scripts/test_deployment.sh benchmark
+./scripts/test_deployment.sh persistence
+```
+
+Full deployment đạt Rank-1 `91,36%`, quality gate PASS và `/search` local có p50/p95/p99 lần lượt `86,97/92,10/97,11 ms`. Quy trình và report nằm tại [`docs/DEPLOYMENT_TESTING.md`](docs/DEPLOYMENT_TESTING.md).
 
 ## Model release v1
 
