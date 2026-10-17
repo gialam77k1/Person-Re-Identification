@@ -138,6 +138,47 @@ services:
     networks:
       - mlops
 
+  inference-api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: person-reid/inference-api:1.0.0
+    container_name: reid-inference-api
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      triton-server:
+        condition: service_healthy
+    environment:
+      TRITON_URL: http://triton-server:8000
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-reid_reference_v1}
+      TRITON_MODEL_NAME: ${TRITON_MODEL_NAME:-reid_embedding}
+      MODEL_MANIFEST_PATH: ${API_MODEL_MANIFEST_PATH:-artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json}
+      API_MAX_UPLOAD_BYTES: ${API_MAX_UPLOAD_BYTES:-10485760}
+      API_MAX_IMAGE_PIXELS: ${API_MAX_IMAGE_PIXELS:-25000000}
+      API_DEFAULT_TOP_K: ${API_DEFAULT_TOP_K:-5}
+      API_MAX_TOP_K: ${API_MAX_TOP_K:-100}
+      API_UPSTREAM_TIMEOUT_SECONDS: ${API_UPSTREAM_TIMEOUT_SECONDS:-30}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./model_releases:/app/model_releases:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - mlops
+
 volumes:
   postgres_data:
     name: reid-postgres-data
