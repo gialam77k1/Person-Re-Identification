@@ -208,6 +208,18 @@ Chi tiết endpoint, response và giới hạn upload nằm trong [`docs/FASTAPI
 
 Full deployment đạt Rank-1 `91,36%`, quality gate PASS và `/search` local có p50/p95/p99 lần lượt `86,97/92,10/97,11 ms`. Quy trình và report nằm tại [`docs/DEPLOYMENT_TESTING.md`](docs/DEPLOYMENT_TESTING.md).
 
+### 8. CI/CD
+
+Chạy cùng bộ kiểm tra của pull request trên local:
+
+```bash
+conda activate reid
+pip install -r requirements-ci.txt
+./scripts/ci.sh
+```
+
+GitHub Actions chỉ build image sau khi model candidate qua validation gate, deploy staging trước, smoke-test `/ready` và `/model-info`, rồi mới cho phép production qua GitHub Environment approval. Image được tag bằng Git commit và model version; workflow rollback phục hồi cả image lẫn model release trước đó. Thiết lập runner, branch protection, environment approval và cách vận hành nằm tại [`docs/CI_CD.md`](docs/CI_CD.md).
+
 ## Model release v1
 
 - Release ID: `market1501-vit-bnneck:v1`

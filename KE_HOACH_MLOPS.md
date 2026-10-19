@@ -336,6 +336,17 @@ Add MLOps integration and regression tests
 
 ## Giai đoạn 8 — CI/CD
 
+Trạng thái: đã hoàn tất phần code và workflow ngày 2026-10-19.
+
+Kết quả:
+
+- PR CI gồm lint, 26 unit/API test, config/manifest validation, repository hygiene và API image smoke test không GPU.
+- Release workflow chặn candidate FAIL trước bước build và dùng immutable tag `<git-sha-7>-model-<version>`.
+- Staging phải PASS `/ready` và đúng release ID tại `/model-info` trước production.
+- Production dùng GitHub Environment `production`; cần bật Required reviewers một lần trong repository settings.
+- Rollback phục hồi đồng thời image và Triton model release; state nằm ngoài Git checkout và xử lý cả deployment thất bại giữa chừng.
+- Hướng dẫn: `docs/CI_CD.md`.
+
 ### Mục tiêu
 
 Tự động kiểm tra code và kiểm soát việc phát hành model.
@@ -456,7 +467,7 @@ Kafka nên có commit và giai đoạn thiết kế riêng nếu thực sự đ�
 - [x] Giai đoạn 5 — Model validation gate.
 - [x] Giai đoạn 6 — FastAPI inference service.
 - [x] Giai đoạn 7 — Deployment tests.
-- [ ] Giai đoạn 8 — CI/CD.
+- [x] Giai đoạn 8 — CI/CD (workflow đã có; cần cấu hình branch protection và production reviewer trên GitHub).
 - [ ] Giai đoạn 9 — Monitoring.
 - [ ] Giai đoạn 10 — Prefect; chỉ thêm Kafka khi có nhu cầu streaming.
 
