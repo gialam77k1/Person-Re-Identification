@@ -164,11 +164,15 @@ services:
       API_MAX_TOP_K: ${API_MAX_TOP_K:-100}
       API_UPSTREAM_TIMEOUT_SECONDS: ${API_UPSTREAM_TIMEOUT_SECONDS:-30}
       API_MATCH_THRESHOLD: ${API_MATCH_THRESHOLD:-0.5}
+      API_DRIFT_SAMPLE_PATH: /app/monitoring-samples/current_embeddings.jsonl
+      API_DRIFT_SAMPLE_RATE: ${API_DRIFT_SAMPLE_RATE:-0.05}
+      API_DRIFT_MAX_SAMPLES: ${API_DRIFT_MAX_SAMPLES:-10000}
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
       - ./artifacts:/app/artifacts:ro
       - ./model_releases:/app/model_releases:ro
+      - ${MONITORING_STORAGE_PATH:-../person-reid-monitoring}/samples:/app/monitoring-samples
     healthcheck:
       test:
         - CMD
@@ -258,16 +262,18 @@ services:
     image: prom/node-exporter:v1.9.1
     container_name: reid-node-exporter
     restart: unless-stopped
-    command:
-      - --path.procfs=/host/proc
-      - --path.sysfs=/host/sys
-      - --path.rootfs=/rootfs
-      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
     pid: host
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro,rslave
+      - ${MONITORING_STORAGE_PATH:-../person-reid-monitoring}/textfile:/textfile:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      - --collector.textfile.directory=/textfile
     networks:
       - mlops
 

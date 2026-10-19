@@ -82,6 +82,26 @@
       "targets": [{"expr": "sum by (le) (rate(reid_similarity_score_bucket[5m]))", "format": "heatmap", "legendFormat": "{{le}}", "refId": "A"}],
       "title": "Phân bố similarity score",
       "type": "heatmap"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "green", "text": "NO DRIFT"}, "1": {"color": "red", "text": "DRIFT"}}, "type": "value"}], "max": 1, "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 22},
+      "id": 8,
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "targets": [{"expr": "reid_embedding_drift_detected", "legendFormat": "{{release_id}}", "refId": "A"}],
+      "title": "Embedding drift status",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 16, "x": 8, "y": 22},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "reid_embedding_drift_metric", "legendFormat": "{{metric}}", "refId": "A"}],
+      "title": "Drift statistics",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -92,5 +112,5 @@
   "timezone": "browser",
   "title": "Person ReID - Model Behavior",
   "uid": "reid-model",
-  "version": 1
+  "version": 2
 }

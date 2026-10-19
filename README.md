@@ -220,6 +220,17 @@ pip install -r requirements-ci.txt
 
 GitHub Actions chỉ build image sau khi model candidate qua validation gate, deploy staging trước, smoke-test `/ready` và `/model-info`, rồi mới cho phép production qua GitHub Environment approval. Image được tag bằng Git commit và model version; workflow rollback phục hồi cả image lẫn model release trước đó. Thiết lập runner, branch protection, environment approval và cách vận hành nằm tại [`docs/CI_CD.md`](docs/CI_CD.md).
 
+### 9. Monitoring
+
+Stack local có Prometheus, Grafana, Alertmanager, node-exporter, cAdvisor và NVIDIA DCGM exporter. API xuất system/model metrics tại `/metrics`; hai dashboard được provision tự động và drift report chạy hằng ngày trên self-hosted runner.
+
+```bash
+docker compose --env-file .env.mlops -f docker-compose.mlops.yml up -d
+curl --fail http://localhost:8080/metrics
+```
+
+Metrics, alert thresholds, embedding sampling và drift workflow được mô tả tại [`docs/MONITORING.md`](docs/MONITORING.md).
+
 ## Model release v1
 
 - Release ID: `market1501-vit-bnneck:v1`

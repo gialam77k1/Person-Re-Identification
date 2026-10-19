@@ -392,6 +392,17 @@ Add CI/CD workflows
 
 ## Giai đoạn 9 — Monitoring
 
+Trạng thái: hoàn tất phần code, dashboard, alert và drift workflow ngày 2026-10-19.
+
+Kết quả:
+
+- API, Triton, Qdrant, host, container và GPU được Prometheus scrape.
+- Grafana tự provision dashboard system và model behavior.
+- Alertmanager nhận cảnh báo availability, error rate, latency, collection, no-match và drift.
+- API lấy mẫu embedding có giới hạn, không lưu ảnh; dữ liệu nằm ngoài Git checkout.
+- Drift report chạy hằng ngày, xuất JSON và Prometheus textfile.
+- Hướng dẫn vận hành: `docs/MONITORING.md`.
+
 ### Mục tiêu
 
 Theo dõi cả sức khỏe hệ thống và hành vi của model.
@@ -468,7 +479,7 @@ Kafka nên có commit và giai đoạn thiết kế riêng nếu thực sự đ�
 - [x] Giai đoạn 6 — FastAPI inference service.
 - [x] Giai đoạn 7 — Deployment tests.
 - [x] Giai đoạn 8 — CI/CD (workflow đã có; cần cấu hình branch protection và production reviewer trên GitHub).
-- [ ] Giai đoạn 9 — Monitoring.
+- [x] Giai đoạn 9 — Monitoring.
 - [ ] Giai đoạn 10 — Prefect; chỉ thêm Kafka khi có nhu cầu streaming.
 
 ## Nguyên tắc triển khai

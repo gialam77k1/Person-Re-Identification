@@ -7,6 +7,7 @@ import numpy as np
 
 from src.api.clients import QdrantClient, TritonClient, UpstreamError
 from src.api.config import ApiSettings, ReleaseContract, verify_serving_model_artifacts
+from src.api.drift_sampling import EmbeddingSampler
 from src.api.image_processing import preprocess_image, validate_and_decode_image
 from src.api.metrics import ApiMetrics
 
@@ -35,6 +36,11 @@ class InferenceService:
             settings.upstream_timeout_seconds,
         )
         self.metrics = metrics
+        self.drift_sampler = EmbeddingSampler(
+            settings.drift_sample_path,
+            settings.drift_sample_rate,
+            settings.drift_max_samples,
+        )
         if self.contract.embedding_dim <= 0:
             raise ValueError("Model manifest has an invalid embedding dimension.")
         if verify_model_checksum:
@@ -140,7 +146,9 @@ class InferenceService:
             raise UpstreamError("Triton returned an embedding with invalid norm.")
         if self.metrics is not None:
             self.metrics.embedding_norm.observe(norm)
-        return (embedding / norm).astype(np.float32)
+        normalized = (embedding / norm).astype(np.float32)
+        self.drift_sampler.observe(normalized, self.contract.release_id)
+        return normalized
 
     def search(
         self, raw: bytes, content_type: str | None, top_k: int

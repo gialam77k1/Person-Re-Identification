@@ -62,6 +62,9 @@ class ApiSettings:
     max_top_k: int
     upstream_timeout_seconds: int
     match_threshold: float
+    drift_sample_path: Path | None
+    drift_sample_rate: float
+    drift_max_samples: int
 
     @classmethod
     def from_env(cls) -> "ApiSettings":
@@ -89,6 +92,13 @@ class ApiSettings:
             max_top_k=_env_int("API_MAX_TOP_K", 100),
             upstream_timeout_seconds=_env_int("API_UPSTREAM_TIMEOUT_SECONDS", 30),
             match_threshold=_env_float("API_MATCH_THRESHOLD", 0.5),
+            drift_sample_path=(
+                Path(value)
+                if (value := os.getenv("API_DRIFT_SAMPLE_PATH", "").strip())
+                else None
+            ),
+            drift_sample_rate=_env_float("API_DRIFT_SAMPLE_RATE", 0.05),
+            drift_max_samples=_env_int("API_DRIFT_MAX_SAMPLES", 10_000),
         )
 
 

@@ -1,0 +1,7 @@
+schema_version: 1
+minimum_current_samples: 100
+thresholds:
+  centroid_cosine_distance_max: 0.05
+  standardized_mean_shift_max: 0.20
+  norm_mean_delta_max: 0.05
+  ks_statistic_max: 0.15
