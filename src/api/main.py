@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -17,15 +20,29 @@ from src.api.service import InferenceService
 
 
 def create_app(service: InferenceService | None = None) -> FastAPI:
-    inference = service or InferenceService(ApiSettings.from_env())
+    @asynccontextmanager
+    async def lifespan(api: FastAPI) -> AsyncIterator[None]:
+        if service is None:
+            api.state.inference = InferenceService(ApiSettings.from_env())
+        yield
+
     api = FastAPI(
         title="Person Re-Identification API",
         version="1.1.0",
         description="Online embedding and retrieval through Triton and Qdrant.",
+        lifespan=lifespan,
     )
+    if service is not None:
+        api.state.inference = service
+
+    def inference() -> InferenceService:
+        configured = getattr(api.state, "inference", None)
+        if configured is None:
+            raise RuntimeError("Inference service has not completed startup.")
+        return configured
 
     async def read_upload(image: UploadFile) -> bytes:
-        limit = inference.settings.max_upload_bytes
+        limit = inference().settings.max_upload_bytes
         try:
             return await image.read(limit + 1)
         finally:
@@ -37,7 +54,7 @@ def create_app(service: InferenceService | None = None) -> FastAPI:
 
     @api.get("/ready", response_model=ReadyResponse)
     async def ready() -> ReadyResponse | JSONResponse:
-        checks = inference.readiness()
+        checks = inference().readiness()
         response = ReadyResponse(
             status="ready" if all(checks.values()) else "not_ready", checks=checks
         )
@@ -47,20 +64,21 @@ def create_app(service: InferenceService | None = None) -> FastAPI:
 
     @api.get("/model-info", response_model=ModelInfoResponse)
     async def model_info() -> dict:
-        return inference.model_info()
+        return inference().model_info()
 
     @api.post("/embed", response_model=EmbedResponse)
     async def embed(image: UploadFile = File(...)) -> dict:
         raw = await read_upload(image)
         try:
-            embedding = inference.embed(raw, image.content_type)
+            active = inference()
+            embedding = active.embed(raw, image.content_type)
         except ImageValidationError as exc:
             raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
         except UpstreamError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {
-            "model_release": inference.contract.release_id,
-            "embedding_dim": inference.contract.embedding_dim,
+            "model_release": active.contract.release_id,
+            "embedding_dim": active.contract.embedding_dim,
             "normalized": True,
             "embedding": embedding.tolist(),
         }
@@ -70,21 +88,22 @@ def create_app(service: InferenceService | None = None) -> FastAPI:
         image: UploadFile = File(...),
         top_k: int | None = Query(default=None, ge=1),
     ) -> dict:
-        effective_top_k = top_k or inference.settings.default_top_k
-        if effective_top_k > inference.settings.max_top_k:
+        active = inference()
+        effective_top_k = top_k or active.settings.default_top_k
+        if effective_top_k > active.settings.max_top_k:
             raise HTTPException(
                 status_code=422,
-                detail=f"top_k must not exceed {inference.settings.max_top_k}.",
+                detail=f"top_k must not exceed {active.settings.max_top_k}.",
             )
         raw = await read_upload(image)
         try:
-            results = inference.search(raw, image.content_type, effective_top_k)
+            results = active.search(raw, image.content_type, effective_top_k)
         except ImageValidationError as exc:
             raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
         except UpstreamError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {
-            "model_release": inference.contract.release_id,
+            "model_release": active.contract.release_id,
             "top_k": effective_top_k,
             "results": results,
         }

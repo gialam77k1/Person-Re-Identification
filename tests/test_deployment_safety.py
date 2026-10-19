@@ -8,18 +8,19 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from src.api.config import ApiSettings, ReleaseContract, sha256
+from src.api.config import ApiSettings, sha256
 from src.api.image_processing import preprocess_image
 from src.api.service import InferenceService
 from src.triton_infer import preprocess_image as legacy_preprocess_image
 from tests.test_inference_api import FakeQdrant, FakeTriton
+from tests.helpers import build_test_contract
 
 
 class DeploymentSafetyTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.settings = ApiSettings.from_env()
-        cls.contract = ReleaseContract.load(cls.settings.model_manifest_path)
+        cls.contract = build_test_contract()
 
     def test_contract_preprocessing_matches_triton_preprocessing(self) -> None:
         image = Image.new("RGB", (79, 163))

@@ -9,9 +9,10 @@ import httpx2
 import numpy as np
 from PIL import Image
 
-from src.api.config import ApiSettings, ReleaseContract
+from src.api.config import ApiSettings
 from src.api.main import create_app
 from src.api.service import InferenceService
+from tests.helpers import build_test_contract
 
 
 class FakeTriton:
@@ -74,8 +75,7 @@ def image_bytes(image_format: str = "JPEG") -> bytes:
 class InferenceApiTest(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        base_settings = ApiSettings.from_env()
-        cls.contract = ReleaseContract.load(base_settings.model_manifest_path)
+        cls.contract = build_test_contract()
 
     def setUp(self) -> None:
         settings = replace(

@@ -4,7 +4,6 @@ import argparse
 import sys
 from pathlib import Path
 
-import torch
 from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parents[1]

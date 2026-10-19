@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import mlflow
-import torch
 import yaml
+
+if TYPE_CHECKING:
+    import torch
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TRACKING_URI = "http://localhost:5000"
@@ -39,6 +41,8 @@ def get_dvc_revision(pointer_path: str = DEFAULT_DATASET_POINTER) -> str:
 
 
 def collect_hardware_info(device: torch.device | None = None) -> dict[str, Any]:
+    import torch
+
     selected_device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     result: dict[str, Any] = {
         "device": str(selected_device),
