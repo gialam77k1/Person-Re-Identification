@@ -1,0 +1,17 @@
+.git
+.github
+.dvc/cache
+.env*
+artifacts
+datasets
+docs
+mlruns
+tests
+tmp
+__pycache__
+*.py[cod]
+*.log
+*.onnx
+*.pth
+*.pt
+
