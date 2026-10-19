@@ -142,7 +142,7 @@ services:
     build:
       context: .
       dockerfile: docker/api/Dockerfile
-    image: person-reid/inference-api:1.0.0
+    image: ${API_IMAGE:-person-reid/inference-api:1.0.0}
     container_name: reid-inference-api
     restart: unless-stopped
     depends_on:
