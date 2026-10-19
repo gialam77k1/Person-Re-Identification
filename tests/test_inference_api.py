@@ -164,6 +164,15 @@ class InferenceApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.qdrant.last_limit, 2)
         self.assertAlmostEqual(float(np.linalg.norm(self.qdrant.last_vector)), 1.0, places=6)
 
+        metrics = await self.request("GET", "/metrics")
+        self.assertEqual(metrics.status_code, 200)
+        payload = metrics.text
+        self.assertIn('reid_api_requests_total{endpoint="/search",method="POST",status="200"}', payload)
+        self.assertIn('reid_upstream_duration_seconds_count{operation="infer",outcome="success",service="triton"}', payload)
+        self.assertIn('reid_upstream_duration_seconds_count{operation="search",outcome="success",service="qdrant"}', payload)
+        self.assertIn('reid_search_queries_total{outcome="matched"}', payload)
+        self.assertIn('reid_model_release_info{git_commit=', payload)
+
     async def test_rejects_invalid_mime_corrupt_image_and_oversized_upload(self) -> None:
         wrong_mime = await self.request(
             "POST",

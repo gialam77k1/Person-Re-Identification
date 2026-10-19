@@ -19,6 +19,13 @@ def _env_int(name: str, default: int) -> int:
     return value
 
 
+def _env_float(name: str, default: float) -> float:
+    value = float(os.getenv(name, str(default)))
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"{name} must be between zero and one.")
+    return value
+
+
 def resolve_repository_path(value: str | Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else ROOT / path
@@ -54,6 +61,7 @@ class ApiSettings:
     default_top_k: int
     max_top_k: int
     upstream_timeout_seconds: int
+    match_threshold: float
 
     @classmethod
     def from_env(cls) -> "ApiSettings":
@@ -80,6 +88,7 @@ class ApiSettings:
             default_top_k=_env_int("API_DEFAULT_TOP_K", 5),
             max_top_k=_env_int("API_MAX_TOP_K", 100),
             upstream_timeout_seconds=_env_int("API_UPSTREAM_TIMEOUT_SECONDS", 30),
+            match_threshold=_env_float("API_MATCH_THRESHOLD", 0.5),
         )
 
 
