@@ -1,0 +1,50 @@
+name: Roll back model service
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to restore
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: rollback-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Restore previous deployment
+    runs-on: [self-hosted, linux]
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure local MLOps credentials
+        env:
+          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
+        run: |
+          test -n "$MLOPS_ENV_FILE"
+          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
+          chmod 600 .env.mlops
+
+      - name: Authenticate image pull
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Restore previous image and model release
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+        run: >-
+          ./scripts/deploy_local.sh rollback
+          --environment "$TARGET_ENVIRONMENT"

@@ -1,0 +1,296 @@
+stages:
+  validate_data:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/validate_data.py
+      --config configs/vit_reid.yaml
+      --dataset-pointer ${pipeline.dataset_pointer}
+      --output artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+    deps:
+      - src/validate_data.py
+      - src/common/config.py
+      - src/common/utils.py
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - pipeline.dataset_pointer
+      - configs/vit_reid.yaml:
+          - data
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+
+  train:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/train.py
+      --config configs/vit_reid.yaml
+      --set data.location.root=${pipeline.dataset_root}
+      --set train.epochs=${train.epochs}
+      --set evaluation.flip_test=${evaluate.flip_test}
+      --set evaluation.use_rerank=${evaluate.use_rerank}
+      --set logging.enable_mlflow=${train.enable_mlflow}
+      --set runtime.run_slug=${pipeline.release_slug}-train
+      --set artifacts.run_root=artifacts/pipeline/${pipeline.release_slug}/train
+    deps:
+      - src/train.py
+      - src/common/config.py
+      - src/common/utils.py
+      - src/common/mlflow_utils.py
+      - src/data
+      - src/models
+      - src/reid
+      - artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - train.epochs
+      - train.enable_mlflow
+      - evaluate.flip_test
+      - evaluate.use_rerank
+      - configs/vit_reid.yaml:
+          - seed
+          - device
+          - num_workers
+          - data
+          - model
+          - train
+          - augmentation
+          - evaluation
+          - logging.tracking_uri
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      - artifacts/pipeline/${pipeline.release_slug}/train/logs/effective_config.json
+      - artifacts/pipeline/${pipeline.release_slug}/train/logs/mlflow_run.json
+    metrics:
+      - artifacts/pipeline/${pipeline.release_slug}/train/metrics/metrics_v1.json:
+          cache: true
+
+  evaluate:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/evaluate.py
+      --config configs/vit_reid.yaml
+      --checkpoint artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      --set data.location.root=${pipeline.dataset_root}
+      --set evaluation.flip_test=${evaluate.flip_test}
+      --set evaluation.use_rerank=${evaluate.use_rerank}
+      --set runtime.run_slug=${pipeline.release_slug}-evaluate
+      --set artifacts.run_root=artifacts/pipeline/${pipeline.release_slug}/evaluate
+    deps:
+      - src/evaluate.py
+      - src/common/config.py
+      - src/common/utils.py
+      - src/data
+      - src/models
+      - src/reid/evaluation.py
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - evaluate.flip_test
+      - evaluate.use_rerank
+      - configs/vit_reid.yaml:
+          - device
+          - num_workers
+          - data
+          - model
+          - evaluation
+    metrics:
+      - artifacts/pipeline/${pipeline.release_slug}/evaluate/metrics/evaluation_latest.json:
+          cache: true
+
+  export_onnx:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/export_onnx.py
+      --config configs/vit_reid.yaml
+      --checkpoint artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      --opset ${export.opset}
+      --set data.location.root=${pipeline.dataset_root}
+      --set runtime.run_slug=${pipeline.release_slug}-onnx
+      --set artifacts.run_root=artifacts/pipeline/${pipeline.release_slug}/onnx
+    deps:
+      - src/export_onnx.py
+      - src/common/config.py
+      - src/common/utils.py
+      - src/models
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - export.opset
+      - configs/vit_reid.yaml:
+          - device
+          - data.image_height
+          - data.image_width
+          - data.preserve_aspect_ratio
+          - model
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/onnx_export_manifest.json
+
+  verify_onnx:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/verify_onnx.py
+      --config configs/vit_reid.yaml
+      --checkpoint artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      --onnx-path artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      --split ${parity.split}
+      --num-samples ${parity.num_samples}
+      --atol ${parity.atol}
+      --rtol ${parity.rtol}
+      --set data.location.root=${pipeline.dataset_root}
+      --set runtime.run_slug=${pipeline.release_slug}-parity
+      --set artifacts.run_root=artifacts/pipeline/${pipeline.release_slug}/parity
+    deps:
+      - src/verify_onnx.py
+      - src/common/config.py
+      - src/common/utils.py
+      - src/data
+      - src/models
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - parity
+      - configs/vit_reid.yaml:
+          - device
+          - data
+          - model
+    metrics:
+      - artifacts/pipeline/${pipeline.release_slug}/parity/metrics/onnx_parity.json:
+          cache: true
+
+  extract_reference:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/extract_reference.py
+      --config configs/vit_reid.yaml
+      --checkpoint artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      --set data.location.root=${pipeline.dataset_root}
+      --set runtime.run_slug=${pipeline.release_slug}-reference
+      --set artifacts.run_root=artifacts/pipeline/${pipeline.release_slug}/reference
+    deps:
+      - src/extract_reference.py
+      - src/common/config.py
+      - src/common/utils.py
+      - src/data
+      - src/models
+      - src/reid/evaluation.py
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      - ${pipeline.dataset_root}
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - pipeline.dataset_root
+      - configs/vit_reid.yaml:
+          - device
+          - num_workers
+          - data
+          - model
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_embeddings.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_pids.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_camids.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_paths.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_manifest.json
+
+  package_triton:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/prepare_triton_model.py
+      --onnx-path artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      --output-root artifacts/pipeline/${pipeline.release_slug}/triton/model_repository
+      --model-name ${triton.model_name}
+      --model-version ${triton.model_version}
+      --max-batch-size ${triton.max_batch_size}
+      --input-height 224
+      --input-width 224
+      --embedding-dim 512
+      --preferred-batch-sizes ${triton.preferred_batch_sizes}
+      --instance-kind ${triton.instance_kind}
+      --validation-report artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json
+    deps:
+      - src/prepare_triton_model.py
+      - src/common/utils.py
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json
+    params:
+      - pipeline.release_slug
+      - pipeline.conda_env
+      - triton
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/triton/model_repository
+
+  validate_release:
+    cmd: >-
+      conda run --no-capture-output -n ${pipeline.conda_env}
+      python src/model_validation_gate.py
+      --release-id ${pipeline.release_id}
+      --source-git-commit ${pipeline.source_git_commit}
+      --thresholds ${validation.thresholds}
+      --config configs/vit_reid.yaml
+      --pipeline-params params.yaml
+      --data-manifest artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+      --training-metrics artifacts/pipeline/${pipeline.release_slug}/train/metrics/metrics_v1.json
+      --evaluation-metrics artifacts/pipeline/${pipeline.release_slug}/evaluate/metrics/evaluation_latest.json
+      --onnx-manifest artifacts/pipeline/${pipeline.release_slug}/onnx/exports/onnx_export_manifest.json
+      --parity-report artifacts/pipeline/${pipeline.release_slug}/parity/metrics/onnx_parity.json
+      --reference-manifest artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_manifest.json
+      --checkpoint artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      --onnx artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      --preprocessing ${pipeline.preprocessing_contract}
+      --preprocessing-output artifacts/pipeline/${pipeline.release_slug}/release/preprocessing.json
+      --deployment-metrics ${validation.deployment_metrics}
+      --mlflow-run-metadata artifacts/pipeline/${pipeline.release_slug}/train/logs/mlflow_run.json
+      --output artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json
+      --manifest-output artifacts/pipeline/${pipeline.release_slug}/release/model_manifest.json
+    deps:
+      - src/model_validation_gate.py
+      - src/common/utils.py
+      - configs/vit_reid.yaml
+      - params.yaml
+      - ${validation.thresholds}
+      - ${validation.deployment_metrics}
+      - artifacts/pipeline/${pipeline.release_slug}/validate/data_manifest.json
+      - artifacts/pipeline/${pipeline.release_slug}/train/metrics/metrics_v1.json
+      - artifacts/pipeline/${pipeline.release_slug}/train/logs/mlflow_run.json
+      - artifacts/pipeline/${pipeline.release_slug}/evaluate/metrics/evaluation_latest.json
+      - artifacts/pipeline/${pipeline.release_slug}/train/checkpoints/best_model.pth
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${pipeline.release_slug}/onnx/exports/onnx_export_manifest.json
+      - artifacts/pipeline/${pipeline.release_slug}/parity/metrics/onnx_parity.json
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_manifest.json
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_embeddings.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_pids.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_camids.npy
+      - artifacts/pipeline/${pipeline.release_slug}/reference/embeddings/reference_paths.npy
+      - ${pipeline.preprocessing_contract}
+    params:
+      - pipeline.release_slug
+      - pipeline.release_id
+      - pipeline.source_git_commit
+      - pipeline.conda_env
+      - pipeline.preprocessing_contract
+      - validation
+    outs:
+      - artifacts/pipeline/${pipeline.release_slug}/release/model_manifest.json
+      - artifacts/pipeline/${pipeline.release_slug}/release/preprocessing.json
+    metrics:
+      - artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json:
+          cache: true

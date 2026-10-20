@@ -163,8 +163,8 @@ validate_data
   → export_onnx
   → verify_onnx
   → extract_reference
-  → package_triton
   → validate_release
+  → package_triton
 ```
 
 ### Công việc
@@ -231,6 +231,18 @@ Add model quality validation gate
 
 ## Giai đoạn 6 — Xây dựng FastAPI inference service
 
+Trạng thái: hoàn tất ngày 2026-10-17.
+
+Kết quả:
+
+- Có đủ 5 endpoint `/health`, `/ready`, `/model-info`, `/embed`, `/search`.
+- Preprocessing đọc từ contract của release đã qua validation gate.
+- JPG/PNG được kiểm tra MIME, format thực, dung lượng và số pixel.
+- Embedding được kiểm tra shape/NaN/Inf rồi L2 normalize trước khi query Qdrant.
+- `/ready` kiểm tra Triton server, Triton model và Qdrant collection thực tế.
+- API đã được thêm vào Docker Compose và có healthcheck riêng.
+- Unit/API contract test dùng fake Triton và Qdrant đã PASS; integration test thật được tiếp tục ở Giai đoạn 7.
+
 ### Mục tiêu
 
 Cung cấp API truy hồi người bằng Triton và Qdrant.
@@ -280,6 +292,19 @@ Add FastAPI person retrieval service
 
 ## Giai đoạn 7 — Kiểm thử deployment
 
+Trạng thái: hoàn tất ngày 2026-10-17.
+
+Kết quả:
+
+- Preprocessing regression khớp bit-exact với pipeline Triton trước đó.
+- 17 unit/API/mock test và 3 integration test thật PASS.
+- Model sai checksum bị từ chối khi inference service khởi động.
+- Full 3.368 query + 15.913 gallery đạt Rank-1 `91,3599%`; không giảm so với offline base `91,1817%`.
+- Toàn bộ embedding 512 chiều, finite và L2-normalized.
+- `/search` local đạt p50 `86,97 ms`, p95 `92,10 ms`, p99 `97,11 ms` trên 100 request tuần tự, không lỗi.
+- Qdrant giữ nguyên 12.936 point và sample fingerprint sau restart.
+- Hướng dẫn và report: `docs/DEPLOYMENT_TESTING.md`.
+
 ### Mục tiêu
 
 Chứng minh pipeline triển khai không làm giảm chất lượng model.
@@ -310,6 +335,17 @@ Add MLOps integration and regression tests
 ```
 
 ## Giai đoạn 8 — CI/CD
+
+Trạng thái: đã hoàn tất phần code và workflow ngày 2026-10-19.
+
+Kết quả:
+
+- PR CI gồm lint, 26 unit/API test, config/manifest validation, repository hygiene và API image smoke test không GPU.
+- Release workflow chặn candidate FAIL trước bước build và dùng immutable tag `<git-sha-7>-model-<version>`.
+- Staging phải PASS `/ready` và đúng release ID tại `/model-info` trước production.
+- Production dùng GitHub Environment `production`; cần bật Required reviewers một lần trong repository settings.
+- Rollback phục hồi đồng thời image và Triton model release; state nằm ngoài Git checkout và xử lý cả deployment thất bại giữa chừng.
+- Hướng dẫn: `docs/CI_CD.md`.
 
 ### Mục tiêu
 
@@ -355,6 +391,17 @@ Add CI/CD workflows
 ```
 
 ## Giai đoạn 9 — Monitoring
+
+Trạng thái: hoàn tất phần code, dashboard, alert và drift workflow ngày 2026-10-19.
+
+Kết quả:
+
+- API, Triton, Qdrant, host, container và GPU được Prometheus scrape.
+- Grafana tự provision dashboard system và model behavior.
+- Alertmanager nhận cảnh báo availability, error rate, latency, collection, no-match và drift.
+- API lấy mẫu embedding có giới hạn, không lưu ảnh; dữ liệu nằm ngoài Git checkout.
+- Drift report chạy hằng ngày, xuất JSON và Prometheus textfile.
+- Hướng dẫn vận hành: `docs/MONITORING.md`.
 
 ### Mục tiêu
 
@@ -425,14 +472,14 @@ Kafka nên có commit và giai đoạn thiết kế riêng nếu thực sự đ�
 ## Thứ tự thực hiện
 
 - [x] Giai đoạn 1 — MLOps infrastructure local.
-- [ ] Giai đoạn 2 — DVC data và artifact versioning.
-- [ ] Giai đoạn 3 — MLflow Tracking Server và Model Registry.
-- [ ] Giai đoạn 4 — DVC reproducible pipeline.
-- [ ] Giai đoạn 5 — Model validation gate.
-- [ ] Giai đoạn 6 — FastAPI inference service.
-- [ ] Giai đoạn 7 — Deployment tests.
-- [ ] Giai đoạn 8 — CI/CD.
-- [ ] Giai đoạn 9 — Monitoring.
+- [x] Giai đoạn 2 — DVC data và artifact versioning.
+- [x] Giai đoạn 3 — MLflow Tracking Server và Model Registry.
+- [x] Giai đoạn 4 — DVC reproducible pipeline.
+- [x] Giai đoạn 5 — Model validation gate.
+- [x] Giai đoạn 6 — FastAPI inference service.
+- [x] Giai đoạn 7 — Deployment tests.
+- [x] Giai đoạn 8 — CI/CD (workflow đã có; cần cấu hình branch protection và production reviewer trên GitHub).
+- [x] Giai đoạn 9 — Monitoring.
 - [ ] Giai đoạn 10 — Prefect; chỉ thêm Kafka khi có nhu cầu streaming.
 
 ## Nguyên tắc triển khai

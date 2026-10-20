@@ -1,0 +1,45 @@
+name: Embedding drift report
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Model release ID
+        required: true
+        default: market1501-vit-bnneck:v1-dvc
+      release_slug:
+        description: DVC pipeline release directory
+        required: true
+        default: market1501-vit-bnneck-v1-dvc
+
+permissions:
+  contents: read
+
+concurrency:
+  group: embedding-drift-report
+  cancel-in-progress: false
+
+jobs:
+  drift-report:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure local MLOps credentials
+        env:
+          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
+        run: |
+          test -n "$MLOPS_ENV_FILE"
+          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
+          chmod 600 .env.mlops
+
+      - name: Generate drift report and Prometheus metrics
+        env:
+          RELEASE_ID: ${{ inputs.release_id || 'market1501-vit-bnneck:v1-dvc' }}
+          RELEASE_SLUG: ${{ inputs.release_slug || 'market1501-vit-bnneck-v1-dvc' }}
+        run: ./scripts/drift_report_local.sh "$RELEASE_ID" "$RELEASE_SLUG"
+

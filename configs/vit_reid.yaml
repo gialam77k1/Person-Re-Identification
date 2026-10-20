@@ -74,8 +74,7 @@ evaluation:
 
 logging:
   enable_mlflow: true
-  tracking_uri: sqlite:///mlruns/mlflow.db
-  artifact_location: artifacts/mlflow
+  tracking_uri: http://localhost:5000
 
 artifacts:
   root: artifacts

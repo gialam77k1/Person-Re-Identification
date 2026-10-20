@@ -1,0 +1,116 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"mappings": [{"options": {"1": {"color": "green", "text": "SERVING"}}, "type": "value"}]}, "overrides": []},
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "targets": [{"expr": "reid_model_release_info", "legendFormat": "{{release_id}} / {{git_commit}}", "refId": "A"}],
+      "title": "Model release đang phục vụ",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "targets": [{"expr": "reid_qdrant_collection_points", "legendFormat": "{{collection}}", "refId": "A"}],
+      "title": "Reference collection size",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "rate(reid_embedding_norm_sum[5m]) / clamp_min(rate(reid_embedding_norm_count[5m]), 0.000001)", "legendFormat": "mean", "refId": "A"},
+        {"expr": "histogram_quantile(0.50, rate(reid_embedding_norm_bucket[5m]))", "legendFormat": "p50", "refId": "B"},
+        {"expr": "histogram_quantile(0.95, rate(reid_embedding_norm_bucket[5m]))", "legendFormat": "p95", "refId": "C"}
+      ],
+      "title": "Raw embedding norm",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 1, "min": -1, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "id": 4,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(reid_similarity_score_bucket[5m]))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, rate(reid_similarity_score_bucket[5m]))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, rate(reid_similarity_score_bucket[5m]))", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "Similarity score quantiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 14},
+      "id": 5,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [{"expr": "100 * rate(reid_search_queries_total{outcome=\"no_match\"}[5m]) / clamp_min(sum(rate(reid_search_queries_total[5m])), 0.000001)", "legendFormat": "no match", "refId": "A"}],
+      "title": "Tỷ lệ query không match",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 14},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "sum by (outcome) (rate(reid_search_queries_total[5m]))", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "title": "Search outcome throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 70, "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "scaleDistribution": {"type": "linear"}}}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 14},
+      "id": 7,
+      "options": {"calculate": false, "cellGap": 1, "color": {"scheme": "Spectral"}, "legend": {"show": true}},
+      "targets": [{"expr": "sum by (le) (rate(reid_similarity_score_bucket[5m]))", "format": "heatmap", "legendFormat": "{{le}}", "refId": "A"}],
+      "title": "Phân bố similarity score",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "green", "text": "NO DRIFT"}, "1": {"color": "red", "text": "DRIFT"}}, "type": "value"}], "max": 1, "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 22},
+      "id": 8,
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"]}},
+      "targets": [{"expr": "reid_embedding_drift_detected", "legendFormat": "{{release_id}}", "refId": "A"}],
+      "title": "Embedding drift status",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 16, "x": 8, "y": 22},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "reid_embedding_drift_metric", "legendFormat": "{{metric}}", "refId": "A"}],
+      "title": "Drift statistics",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["person-reid", "model"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "timezone": "browser",
+  "title": "Person ReID - Model Behavior",
+  "uid": "reid-model",
+  "version": 2
+}

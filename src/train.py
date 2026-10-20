@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 import warnings
+from datetime import datetime, timezone
 from pathlib import Path
 
 import mlflow
@@ -16,6 +18,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.common.config import load_runtime_config
+from src.common.mlflow_utils import (
+    collect_hardware_info,
+    configure_mlflow,
+    get_dvc_revision,
+    get_git_commit,
+    lineage_tags,
+)
 from src.common.utils import (
     configure_torch_home,
     ensure_dir,
@@ -49,32 +58,34 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def maybe_init_mlflow(config: dict) -> bool:
+def maybe_init_mlflow(config: dict) -> tuple[bool, dict]:
     if not config["logging"].get("enable_mlflow", False):
-        return False
+        return False, {}
 
-    tracking_uri = config["logging"].get("tracking_uri")
-    artifact_location = ensure_dir(config["logging"].get("artifact_location", "artifacts/mlflow"))
-    ensure_dir("mlruns")
-    if not tracking_uri:
-        tracking_uri = "sqlite:///mlruns/mlflow.db"
+    tracking_uri = configure_mlflow(config["experiment_name"], config)
+    git_commit = get_git_commit()
+    dvc_revision = get_dvc_revision()
+    run = mlflow.start_run(run_name=config["runtime"]["run_slug"])
+    mlflow.set_tags(
+        {
+            **lineage_tags(git_commit=git_commit, dvc_revision=dvc_revision),
+            "run.kind": "training",
+            "dataset": config["data"]["dataset"]["name"],
+        }
+    )
+    metadata = {
+        "run_id": run.info.run_id,
+        "experiment_id": run.info.experiment_id,
+        "tracking_uri": tracking_uri,
+        "git_commit": git_commit,
+        "dvc_dataset_revision": dvc_revision,
+    }
+    return True, metadata
 
-    mlflow.set_tracking_uri(tracking_uri)
-    experiment = mlflow.get_experiment_by_name(config["experiment_name"])
-    if experiment is None:
-        mlflow.create_experiment(
-            name=config["experiment_name"],
-            artifact_location=artifact_location.as_uri(),
-        )
-    mlflow.set_experiment(config["experiment_name"])
-    mlflow.start_run(run_name=config["runtime"]["run_slug"])
-    mlflow.log_artifact(config["config_path"])
-    return True
 
-
-def close_mlflow(active: bool) -> None:
+def close_mlflow(active: bool, status: str = "FINISHED") -> None:
     if active and mlflow.active_run() is not None:
-        mlflow.end_run()
+        mlflow.end_run(status=status)
 
 
 def build_loaders(config: dict):
@@ -367,6 +378,8 @@ def main() -> None:
 
 def run_training(config: dict) -> None:
     print(f"Logging console output to {Path(config['artifacts']['logs_dir']) / 'train.log'}")
+    started_at = datetime.now(timezone.utc)
+    started_monotonic = time.perf_counter()
 
     device = infer_device(config["device"])
     use_amp = bool(config["train"]["amp"] and device.type == "cuda")
@@ -404,11 +417,23 @@ def run_training(config: dict) -> None:
             "only ReID heads will be updated."
         )
 
-    mlflow_active = maybe_init_mlflow(config)
+    mlflow_active, mlflow_metadata = maybe_init_mlflow(config)
     effective_config_path = Path(config["artifacts"]["logs_dir"]) / "effective_config.json"
     save_json(config, effective_config_path)
     if mlflow_active:
-        mlflow.log_artifact(str(effective_config_path))
+        mlflow_metadata.update(
+            {
+                "started_at": started_at.isoformat(),
+                "hardware": collect_hardware_info(device),
+            }
+        )
+        mlflow_run_path = save_json(
+            mlflow_metadata,
+            Path(config["artifacts"]["logs_dir"]) / "mlflow_run.json",
+        )
+        mlflow.log_artifact(config["config_path"], artifact_path="config")
+        mlflow.log_artifact(str(effective_config_path), artifact_path="config")
+        mlflow.log_artifact(str(mlflow_run_path), artifact_path="provenance")
         mlflow.log_params(
             {
                 "dataset": config["data"]["dataset"]["name"],
@@ -451,6 +476,7 @@ def run_training(config: dict) -> None:
     best_monitored_metric = float("-inf")
     bad_epochs = 0
     history = []
+    run_status = "FINISHED"
 
     try:
         for epoch in range(1, config["train"]["epochs"] + 1):
@@ -560,10 +586,40 @@ def run_training(config: dict) -> None:
         metrics_path = Path(config["artifacts"]["metrics_dir"]) / "metrics_v1.json"
         saved_metrics = save_json(summary, metrics_path)
         if mlflow_active:
-            mlflow.log_artifact(str(saved_metrics))
-            mlflow.log_artifact(str(Path(config["artifacts"]["checkpoints_dir"]) / "best_model.pth"))
+            mlflow.log_metrics(
+                {
+                    "best_rank1": summary["best_rank1"],
+                    "best_rank5": summary["best_rank5"],
+                    "best_mAP": summary["best_mAP"],
+                    "best_mINP": summary["best_mINP"],
+                    "best_epoch": summary["best_epoch"],
+                }
+            )
+            mlflow.log_artifact(str(saved_metrics), artifact_path="metrics")
+            mlflow.log_artifact(
+                str(Path(config["artifacts"]["checkpoints_dir"]) / "best_model.pth"),
+                artifact_path="checkpoints",
+            )
+    except Exception:
+        run_status = "FAILED"
+        raise
     finally:
-        close_mlflow(mlflow_active)
+        if mlflow_active:
+            duration_seconds = time.perf_counter() - started_monotonic
+            mlflow.log_metric("train_duration_seconds", duration_seconds)
+            mlflow_metadata.update(
+                {
+                    "ended_at": datetime.now(timezone.utc).isoformat(),
+                    "duration_seconds": duration_seconds,
+                    "status": run_status,
+                }
+            )
+            mlflow_run_path = save_json(
+                mlflow_metadata,
+                Path(config["artifacts"]["logs_dir"]) / "mlflow_run.json",
+            )
+            mlflow.log_artifact(str(mlflow_run_path), artifact_path="provenance")
+        close_mlflow(mlflow_active, status=run_status)
 
 
 if __name__ == "__main__":

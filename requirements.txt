@@ -3,6 +3,7 @@
 torch
 torchvision
 mlflow>=3.10,<4.0
+dvc[s3]>=3.60,<4.0
 numpy>=2.0,<3.0
 Pillow>=10.0,<12.0
 PyYAML>=6.0,<7.0
@@ -10,3 +11,7 @@ tqdm>=4.66,<5.0
 onnx>=1.16,<2.0
 onnxscript>=0.3,<1.0
 onnxruntime>=1.20,<2.0
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+python-multipart>=0.0.20,<1.0
+httpx2>=2.0,<3.0

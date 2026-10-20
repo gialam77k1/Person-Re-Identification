@@ -71,6 +71,51 @@
       "sha256": "a54da0c9a9eb2652c4ca192c6a6e9b9fb0c59513900d5401a8ae4edfbcdcfd5d"
     }
   ],
+  "data_versioning": {
+    "tool": "dvc",
+    "remote": "minio",
+    "remote_url": "s3://dvc-storage/person-reid",
+    "credentials_source": ".env.mlops (not committed)",
+    "assets": [
+      {
+        "role": "market1501_dataset",
+        "path": "datasets/Market-1501-v15.09.15",
+        "pointer_file": "datasets/Market-1501-v15.09.15.dvc",
+        "dvc_md5": "0d61c823b34177c53e9e2161db8257b3.dir",
+        "size_bytes": 145885626,
+        "nfiles": 68036
+      },
+      {
+        "role": "pytorch_checkpoint",
+        "path": "artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth",
+        "pointer_file": "artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth.dvc",
+        "dvc_md5": "7a230c525a7c62deabeeceab31238be6",
+        "size_bytes": 1086212186
+      },
+      {
+        "role": "onnx_graph",
+        "path": "artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx",
+        "pointer_file": "artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx.dvc",
+        "dvc_md5": "1bc31348d93fa9abe4527a6dabe07fb3",
+        "size_bytes": 1428799
+      },
+      {
+        "role": "onnx_external_weights",
+        "path": "artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx.data",
+        "pointer_file": "artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx.data.dvc",
+        "dvc_md5": "06456b87da26789ec21374b0626219e1",
+        "size_bytes": 355860480
+      },
+      {
+        "role": "reference_embeddings_and_metadata",
+        "path": "artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings",
+        "pointer_file": "artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings.dvc",
+        "dvc_md5": "33604888da92aa91c26805b9304a54ca.dir",
+        "size_bytes": 33170755,
+        "nfiles": 5
+      }
+    ]
+  },
   "validation": {
     "onnx_checker": "passed",
     "pytorch_onnx_parity": {

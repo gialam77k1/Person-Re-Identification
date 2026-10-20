@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +31,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-gallery", type=int, default=0)
     parser.add_argument("--gallery-match-query-pids-only", action="store_true")
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of concurrent Triton requests. Keep 1 for serial evaluation.",
+    )
+    parser.add_argument(
         "--set",
         action="append",
         default=[],
@@ -50,44 +57,61 @@ def infer_dataset_embeddings(
     input_width: int,
     max_samples: int,
     preserve_aspect_ratio: bool = False,
+    workers: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
     selected_samples = dataset.samples[:max_samples] if max_samples > 0 else dataset.samples
-    embeddings = []
-    person_ids = []
-    camera_ids = []
-    paths: list[str] = []
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
 
-    for sample in tqdm(selected_samples, desc=f"Triton {split_name} infer", dynamic_ncols=True):
+    def infer_sample(sample: dict) -> np.ndarray:
         tensor = preprocess_image(
             sample["img_path"],
             input_height=input_height,
             input_width=input_width,
             preserve_aspect_ratio=preserve_aspect_ratio,
         )
-        embedding = infer_embedding(
-            server_url=server_url,
-            model_name=model_name,
-            input_name=input_name,
-            output_name=output_name,
-            tensor=tensor,
+        return np.asarray(
+            infer_embedding(
+                server_url=server_url,
+                model_name=model_name,
+                input_name=input_name,
+                output_name=output_name,
+                tensor=tensor,
+            ),
+            dtype=np.float32,
         )
 
-        embedding = np.asarray(embedding, dtype=np.float32)
-        if embedding.ndim == 2 and embedding.shape[0] == 1:
-            embedding = embedding[0]
-        if embedding.ndim != 1:
-            raise ValueError(
-                f"Triton embedding for {sample['img_path']} must have shape [D] or [1, D], got {embedding.shape}."
-            )
+    embeddings: list[np.ndarray] = []
+    person_ids = []
+    camera_ids = []
+    paths: list[str] = []
 
-        norm = np.linalg.norm(embedding)
-        if norm <= 1e-12:
-            raise ValueError(f"Triton embedding norm is zero for {split_name} image {sample['img_path']}.")
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        inferred = executor.map(infer_sample, selected_samples)
+        progress = tqdm(
+            zip(selected_samples, inferred),
+            total=len(selected_samples),
+            desc=f"Triton {split_name} infer",
+            dynamic_ncols=True,
+        )
+        for sample, embedding in progress:
+            if embedding.ndim == 2 and embedding.shape[0] == 1:
+                embedding = embedding[0]
+            if embedding.ndim != 1:
+                raise ValueError(
+                    f"Triton embedding for {sample['img_path']} must have shape [D] or [1, D], got {embedding.shape}."
+                )
 
-        embeddings.append((embedding / norm).astype(np.float32))
-        person_ids.append(int(sample["pid"]))
-        camera_ids.append(int(sample["camid"]))
-        paths.append(str(sample["img_path"]))
+            norm = np.linalg.norm(embedding)
+            if not np.isfinite(embedding).all():
+                raise ValueError(f"Triton embedding is not finite for {split_name} image {sample['img_path']}.")
+            if norm <= 1e-12:
+                raise ValueError(f"Triton embedding norm is zero for {split_name} image {sample['img_path']}.")
+
+            embeddings.append((embedding / norm).astype(np.float32))
+            person_ids.append(int(sample["pid"]))
+            camera_ids.append(int(sample["camid"]))
+            paths.append(str(sample["img_path"]))
 
     if not embeddings:
         raise RuntimeError(f"No sample was selected from split '{split_name}' for deployment retrieval evaluation.")
@@ -169,6 +193,7 @@ def main() -> None:
             input_width=int(config["data"]["image_width"]),
             max_samples=args.max_queries,
             preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
+            workers=args.workers,
         )
         if args.gallery_match_query_pids_only:
             selected_query_pids = set(query_pids.tolist())
@@ -187,6 +212,7 @@ def main() -> None:
             input_width=int(config["data"]["image_width"]),
             max_samples=args.max_gallery,
             preserve_aspect_ratio=config["data"].get("preserve_aspect_ratio", False),
+            workers=args.workers,
         )
 
         distance_matrix = compute_distance_matrix(query_vectors, gallery_vectors)
@@ -199,13 +225,25 @@ def main() -> None:
         )
 
         results = {
+            "schema_version": 2,
             "run_slug": config["runtime"]["run_slug"],
             "run_root": config["runtime"]["run_root"],
             "dataset": config["data"]["dataset"]["name"],
             "server_url": args.server_url,
+            "model_name": args.model_name,
+            "protocol": "Triton HTTP, letterbox preprocessing, L2-normalized embeddings, cosine distance, no flip test, no re-ranking",
+            "workers": args.workers,
             "num_query_samples": int(query_vectors.shape[0]),
             "num_gallery_samples": int(gallery_vectors.shape[0]),
             "valid_queries": int(valid_queries),
+            "embedding_dim": int(query_vectors.shape[1]),
+            "embeddings_finite": bool(
+                np.all(np.isfinite(query_vectors)) and np.all(np.isfinite(gallery_vectors))
+            ),
+            "embeddings_l2_normalized": bool(
+                np.allclose(np.linalg.norm(query_vectors, axis=1), 1.0, atol=1e-5)
+                and np.allclose(np.linalg.norm(gallery_vectors, axis=1), 1.0, atol=1e-5)
+            ),
             "rank1": rank_at(cmc, 1),
             "rank5": rank_at(cmc, 5),
             "rank10": rank_at(cmc, 10),

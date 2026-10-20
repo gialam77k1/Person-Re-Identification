@@ -138,11 +138,182 @@ services:
     networks:
       - mlops
 
+  inference-api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: ${API_IMAGE:-person-reid/inference-api:1.0.0}
+    container_name: reid-inference-api
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      triton-server:
+        condition: service_healthy
+    environment:
+      TRITON_URL: http://triton-server:8000
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-reid_reference_v1}
+      TRITON_MODEL_NAME: ${TRITON_MODEL_NAME:-reid_embedding}
+      TRITON_MODEL_VERSION: ${TRITON_MODEL_VERSION:-1}
+      API_TRITON_MODEL_REPOSITORY: ${API_TRITON_MODEL_REPOSITORY:-artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository}
+      MODEL_MANIFEST_PATH: ${API_MODEL_MANIFEST_PATH:-artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json}
+      API_MAX_UPLOAD_BYTES: ${API_MAX_UPLOAD_BYTES:-10485760}
+      API_MAX_IMAGE_PIXELS: ${API_MAX_IMAGE_PIXELS:-25000000}
+      API_DEFAULT_TOP_K: ${API_DEFAULT_TOP_K:-5}
+      API_MAX_TOP_K: ${API_MAX_TOP_K:-100}
+      API_UPSTREAM_TIMEOUT_SECONDS: ${API_UPSTREAM_TIMEOUT_SECONDS:-30}
+      API_MATCH_THRESHOLD: ${API_MATCH_THRESHOLD:-0.5}
+      API_DRIFT_SAMPLE_PATH: /app/monitoring-samples/current_embeddings.jsonl
+      API_DRIFT_SAMPLE_RATE: ${API_DRIFT_SAMPLE_RATE:-0.05}
+      API_DRIFT_MAX_SAMPLES: ${API_DRIFT_MAX_SAMPLES:-10000}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./model_releases:/app/model_releases:ro
+      - ${MONITORING_STORAGE_PATH:-../person-reid-monitoring}/samples:/app/monitoring-samples
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8080/ready', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - mlops
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: reid-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+      - --web.enable-lifecycle
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - mlops
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: reid-alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - mlops
+
+  grafana:
+    image: grafana/grafana:11.6.3
+    container_name: reid-grafana
+    restart: unless-stopped
+    env_file:
+      - .env.mlops
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - mlops
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: reid-node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro,rslave
+      - ${MONITORING_STORAGE_PATH:-../person-reid-monitoring}/textfile:/textfile:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      - --collector.textfile.directory=/textfile
+    networks:
+      - mlops
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: reid-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - mlops
+
+  dcgm-exporter:
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:4.1.1-4.0.4-ubuntu22.04
+    container_name: reid-dcgm-exporter
+    restart: unless-stopped
+    gpus: all
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      - mlops
+
 volumes:
   postgres_data:
     name: reid-postgres-data
   minio_data:
     name: reid-minio-data
+  prometheus_data:
+    name: reid-prometheus-data
+  grafana_data:
+    name: reid-grafana-data
+  alertmanager_data:
+    name: reid-alertmanager-data
 
 networks:
   mlops:

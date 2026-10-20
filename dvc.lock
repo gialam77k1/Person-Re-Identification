@@ -1,0 +1,778 @@
+schema: '2.0'
+stages:
+  validate_data:
+    cmd: conda run --no-capture-output -n reid python src/validate_data.py
+      --config configs/vit_reid.yaml --dataset-pointer
+      datasets/Market-1501-v15.09.15.dvc --output
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
+    deps:
+    - path: datasets/Market-1501-v15.09.15
+      hash: md5
+      md5: 0d61c823b34177c53e9e2161db8257b3.dir
+      size: 145885626
+      nfiles: 68036
+    - path: src/common/config.py
+      hash: md5
+      md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
+      size: 6257
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/validate_data.py
+      hash: md5
+      md5: 3c286babae78901c2213eeb56c7808e6
+      size: 3625
+    params:
+      params.yaml:
+        pipeline.conda_env: reid
+        pipeline.dataset_pointer: datasets/Market-1501-v15.09.15.dvc
+        pipeline.dataset_root: datasets/Market-1501-v15.09.15
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+      configs/vit_reid.yaml:
+        data:
+          source_type: image_folder
+          dataset:
+            name: market1501
+          location:
+            root: datasets/Market-1501-v15.09.15
+            splits:
+              train: bounding_box_train
+              query: query
+              gallery: bounding_box_test
+          image_height: 224
+          image_width: 224
+          preserve_aspect_ratio: true
+          batch_size: 16
+          eval_batch_size: 32
+          instances_per_identity: 4
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
+      hash: md5
+      md5: a24c02f7b81683573e620bfbe6c5f1af
+      size: 1148
+  train:
+    cmd: conda run --no-capture-output -n reid python src/train.py --config
+      configs/vit_reid.yaml --set
+      data.location.root=datasets/Market-1501-v15.09.15 --set train.epochs=50
+      --set evaluation.flip_test=true --set evaluation.use_rerank=true --set
+      logging.enable_mlflow=true --set
+      runtime.run_slug=market1501-vit-bnneck-v1-dvc-train --set
+      artifacts.run_root=artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train
+    deps:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
+      hash: md5
+      md5: a24c02f7b81683573e620bfbe6c5f1af
+      size: 1148
+    - path: datasets/Market-1501-v15.09.15
+      hash: md5
+      md5: 0d61c823b34177c53e9e2161db8257b3.dir
+      size: 145885626
+      nfiles: 68036
+    - path: src/common/config.py
+      hash: md5
+      md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
+      size: 6257
+    - path: src/common/mlflow_utils.py
+      hash: md5
+      md5: 538d49dba0d4adec96c13cb1d2c4dba9
+      size: 2733
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/data
+      hash: md5
+      md5: 3a86ca5ddd8d9f74281e3c9f9c9d09db.dir
+      size: 50862
+      nfiles: 6
+    - path: src/models
+      hash: md5
+      md5: b986de2b5b53332bd11a856e3eec0468.dir
+      size: 42732
+      nfiles: 6
+    - path: src/reid
+      hash: md5
+      md5: 673da0c7c7832b51786605a8386d370d.dir
+      size: 37807
+      nfiles: 9
+    - path: src/train.py
+      hash: md5
+      md5: 8c785e6042ece6f6a19f0a48dbe7d6c7
+      size: 24633
+    params:
+      params.yaml:
+        evaluate.flip_test: true
+        evaluate.use_rerank: true
+        pipeline.conda_env: reid
+        pipeline.dataset_root: datasets/Market-1501-v15.09.15
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+        train.enable_mlflow: true
+        train.epochs: 50
+      configs/vit_reid.yaml:
+        augmentation:
+          color_jitter: true
+          random_erasing: true
+          random_grayscale_p: 0.0
+          random_affine_degrees: 5.0
+          random_occlusion_p: 0.15
+        data:
+          source_type: image_folder
+          dataset:
+            name: market1501
+          location:
+            root: datasets/Market-1501-v15.09.15
+            splits:
+              train: bounding_box_train
+              query: query
+              gallery: bounding_box_test
+          image_height: 224
+          image_width: 224
+          preserve_aspect_ratio: true
+          batch_size: 16
+          eval_batch_size: 32
+          instances_per_identity: 4
+        device: auto
+        evaluation:
+          use_rerank: true
+          rerank_k1: 20
+          rerank_k2: 6
+          rerank_lambda: 0.3
+          flip_test: true
+        logging.tracking_uri: http://localhost:5000
+        model:
+          variant: vit
+          backbone: vit_b_16
+          pretrained: true
+          embedding_dim: 512
+          dropout: 0.1
+          use_local_branch: true
+          num_local_stripes: 4
+          local_branch_dropout: 0.1
+          use_bnneck: true
+          use_auxiliary_branch_loss: true
+        num_workers: 2
+        seed: 42
+        train:
+          epochs: 50
+          freeze_backbone_epochs: 5
+          learning_rate: 5e-05
+          backbone_lr_factor: 0.5
+          weight_decay: 0.0005
+          ce_weight: 1.0
+          triplet_weight: 1.2
+          triplet_margin: 0.35
+          center_loss_weight: 0.0
+          center_loss_lr: 0.25
+          auxiliary_loss_weight: 0.3
+          normalize_triplet_embeddings: true
+          label_smoothing: 0.02
+          scheduler_type: cosine
+          warmup_epochs: 5
+          min_lr_scale: 0.02
+          grad_clip_norm: 1.0
+          amp: true
+          early_stopping:
+            enabled: true
+            patience: 12
+            min_delta: 0.001
+            monitor: mAP
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      hash: md5
+      md5: 7a230c525a7c62deabeeceab31238be6
+      size: 1086212186
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/logs/effective_config.json
+      hash: md5
+      md5: b9d6727538acc6e17b04685473374c04
+      size: 3359
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/logs/mlflow_run.json
+      hash: md5
+      md5: 1b6682722fc91226c071b84219d2e494
+      size: 285
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/metrics/metrics_v1.json
+      hash: md5
+      md5: 90778a309f3e8e0121762dc27b181e0b
+      size: 41711
+  evaluate:
+    cmd: conda run --no-capture-output -n reid python src/evaluate.py --config
+      configs/vit_reid.yaml --checkpoint
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      --set data.location.root=datasets/Market-1501-v15.09.15 --set
+      evaluation.flip_test=true --set evaluation.use_rerank=true --set
+      runtime.run_slug=market1501-vit-bnneck-v1-dvc-evaluate --set
+      artifacts.run_root=artifacts/pipeline/market1501-vit-bnneck-v1-dvc/evaluate
+    deps:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      hash: md5
+      md5: 7a230c525a7c62deabeeceab31238be6
+      size: 1086212186
+    - path: datasets/Market-1501-v15.09.15
+      hash: md5
+      md5: 0d61c823b34177c53e9e2161db8257b3.dir
+      size: 145885626
+      nfiles: 68036
+    - path: src/common/config.py
+      hash: md5
+      md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
+      size: 6257
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/data
+      hash: md5
+      md5: 3a86ca5ddd8d9f74281e3c9f9c9d09db.dir
+      size: 50862
+      nfiles: 6
+    - path: src/evaluate.py
+      hash: md5
+      md5: 71d3656433b2f95f2eec818eadbf000d
+      size: 5957
+    - path: src/models
+      hash: md5
+      md5: b986de2b5b53332bd11a856e3eec0468.dir
+      size: 42732
+      nfiles: 6
+    - path: src/reid/evaluation.py
+      hash: md5
+      md5: 2c256a3360a44b525692e4d1cceaa4b2
+      size: 5553
+    params:
+      params.yaml:
+        evaluate.flip_test: true
+        evaluate.use_rerank: true
+        pipeline.conda_env: reid
+        pipeline.dataset_root: datasets/Market-1501-v15.09.15
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+      configs/vit_reid.yaml:
+        data:
+          source_type: image_folder
+          dataset:
+            name: market1501
+          location:
+            root: datasets/Market-1501-v15.09.15
+            splits:
+              train: bounding_box_train
+              query: query
+              gallery: bounding_box_test
+          image_height: 224
+          image_width: 224
+          preserve_aspect_ratio: true
+          batch_size: 16
+          eval_batch_size: 32
+          instances_per_identity: 4
+        device: auto
+        evaluation:
+          use_rerank: true
+          rerank_k1: 20
+          rerank_k2: 6
+          rerank_lambda: 0.3
+          flip_test: true
+        model:
+          variant: vit
+          backbone: vit_b_16
+          pretrained: true
+          embedding_dim: 512
+          dropout: 0.1
+          use_local_branch: true
+          num_local_stripes: 4
+          local_branch_dropout: 0.1
+          use_bnneck: true
+          use_auxiliary_branch_loss: true
+        num_workers: 2
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/evaluate/metrics/evaluation_latest.json
+      hash: md5
+      md5: c419a260089d430ead121283430fccd0
+      size: 1027
+  export_onnx:
+    cmd: conda run --no-capture-output -n reid python src/export_onnx.py
+      --config configs/vit_reid.yaml --checkpoint
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      --opset 18 --set data.location.root=datasets/Market-1501-v15.09.15 --set
+      runtime.run_slug=market1501-vit-bnneck-v1-dvc-onnx --set
+      artifacts.run_root=artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx
+    deps:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      hash: md5
+      md5: 7a230c525a7c62deabeeceab31238be6
+      size: 1086212186
+    - path: src/common/config.py
+      hash: md5
+      md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
+      size: 6257
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/export_onnx.py
+      hash: md5
+      md5: 221d15af8b6b619a75d5251591b1cd9f
+      size: 4345
+    - path: src/models
+      hash: md5
+      md5: b986de2b5b53332bd11a856e3eec0468.dir
+      size: 42732
+      nfiles: 6
+    params:
+      params.yaml:
+        export.opset: 18
+        pipeline.conda_env: reid
+        pipeline.dataset_root: datasets/Market-1501-v15.09.15
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+      configs/vit_reid.yaml:
+        data.image_height: 224
+        data.image_width: 224
+        data.preserve_aspect_ratio: true
+        device: auto
+        model:
+          variant: vit
+          backbone: vit_b_16
+          pretrained: true
+          embedding_dim: 512
+          dropout: 0.1
+          use_local_branch: true
+          num_local_stripes: 4
+          local_branch_dropout: 0.1
+          use_bnneck: true
+          use_auxiliary_branch_loss: true
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx
+      hash: md5
+      md5: b3f942aaee8ed05f977bea38a975cb9c
+      size: 1428799
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx.data
+      hash: md5
+      md5: 06456b87da26789ec21374b0626219e1
+      size: 355860480
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/onnx_export_manifest.json
+      hash: md5
+      md5: 10b16b32f3226585e024ee6be9bd390a
+      size: 660
+  verify_onnx:
+    cmd: conda run --no-capture-output -n reid python src/verify_onnx.py
+      --config configs/vit_reid.yaml --checkpoint
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      --onnx-path
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx
+      --split query --num-samples 8 --atol 0.0001 --rtol 0.0001 --set
+      data.location.root=datasets/Market-1501-v15.09.15 --set
+      runtime.run_slug=market1501-vit-bnneck-v1-dvc-parity --set
+      artifacts.run_root=artifacts/pipeline/market1501-vit-bnneck-v1-dvc/parity
+    deps:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx
+      hash: md5
+      md5: b3f942aaee8ed05f977bea38a975cb9c
+      size: 1428799
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx.data
+      hash: md5
+      md5: 06456b87da26789ec21374b0626219e1
+      size: 355860480
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      hash: md5
+      md5: 7a230c525a7c62deabeeceab31238be6
+      size: 1086212186
+    - path: datasets/Market-1501-v15.09.15
+      hash: md5
+      md5: 0d61c823b34177c53e9e2161db8257b3.dir
+      size: 145885626
+      nfiles: 68036
+    - path: src/common/config.py
+      hash: md5
+      md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
+      size: 6257
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/data
+      hash: md5
+      md5: 3a86ca5ddd8d9f74281e3c9f9c9d09db.dir
+      size: 50862
+      nfiles: 6
+    - path: src/models
+      hash: md5
+      md5: b986de2b5b53332bd11a856e3eec0468.dir
+      size: 42732
+      nfiles: 6
+    - path: src/verify_onnx.py
+      hash: md5
+      md5: 60665d14a27c855a4a9c38f6d0e1ac46
+      size: 6392
+    params:
+      params.yaml:
+        parity:
+          split: query
+          num_samples: 8
+          atol: 0.0001
+          rtol: 0.0001
+        pipeline.conda_env: reid
+        pipeline.dataset_root: datasets/Market-1501-v15.09.15
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+      configs/vit_reid.yaml:
+        data:
+          source_type: image_folder
+          dataset:
+            name: market1501
+          location:
+            root: datasets/Market-1501-v15.09.15
+            splits:
+              train: bounding_box_train
+              query: query
+              gallery: bounding_box_test
+          image_height: 224
+          image_width: 224
+          preserve_aspect_ratio: true
+          batch_size: 16
+          eval_batch_size: 32
+          instances_per_identity: 4
+        device: auto
+        model:
+          variant: vit
+          backbone: vit_b_16
+          pretrained: true
+          embedding_dim: 512
+          dropout: 0.1
+          use_local_branch: true
+          num_local_stripes: 4
+          local_branch_dropout: 0.1
+          use_bnneck: true
+          use_auxiliary_branch_loss: true
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/parity/metrics/onnx_parity.json
+      hash: md5
+      md5: b958dd42d5f022f8061d8dc8d172343b
+      size: 3258
+  extract_reference:
+    cmd: conda run --no-capture-output -n reid python src/extract_reference.py
+      --config configs/vit_reid.yaml --checkpoint
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      --set data.location.root=datasets/Market-1501-v15.09.15 --set
+      runtime.run_slug=market1501-vit-bnneck-v1-dvc-reference --set
+      artifacts.run_root=artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference
+    deps:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      hash: md5
+      md5: 7a230c525a7c62deabeeceab31238be6
+      size: 1086212186
+    - path: datasets/Market-1501-v15.09.15
+      hash: md5
+      md5: 0d61c823b34177c53e9e2161db8257b3.dir
+      size: 145885626
+      nfiles: 68036
+    - path: src/common/config.py
+      hash: md5
+      md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
+      size: 6257
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/data
+      hash: md5
+      md5: 3a86ca5ddd8d9f74281e3c9f9c9d09db.dir
+      size: 50862
+      nfiles: 6
+    - path: src/extract_reference.py
+      hash: md5
+      md5: f41fc43a63edce2edfe9f0de26ff7d3e
+      size: 3877
+    - path: src/models
+      hash: md5
+      md5: b986de2b5b53332bd11a856e3eec0468.dir
+      size: 42732
+      nfiles: 6
+    - path: src/reid/evaluation.py
+      hash: md5
+      md5: 2c256a3360a44b525692e4d1cceaa4b2
+      size: 5553
+    params:
+      params.yaml:
+        pipeline.conda_env: reid
+        pipeline.dataset_root: datasets/Market-1501-v15.09.15
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+      configs/vit_reid.yaml:
+        data:
+          source_type: image_folder
+          dataset:
+            name: market1501
+          location:
+            root: datasets/Market-1501-v15.09.15
+            splits:
+              train: bounding_box_train
+              query: query
+              gallery: bounding_box_test
+          image_height: 224
+          image_width: 224
+          preserve_aspect_ratio: true
+          batch_size: 16
+          eval_batch_size: 32
+          instances_per_identity: 4
+        device: auto
+        model:
+          variant: vit
+          backbone: vit_b_16
+          pretrained: true
+          embedding_dim: 512
+          dropout: 0.1
+          use_local_branch: true
+          num_local_stripes: 4
+          local_branch_dropout: 0.1
+          use_bnneck: true
+          use_auxiliary_branch_loss: true
+        num_workers: 2
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_camids.npy
+      hash: md5
+      md5: 0ce3761fd9941e83aefdcfd97cc6757b
+      size: 103616
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_embeddings.npy
+      hash: md5
+      md5: c00fc50fef2ae9c43b1fc45368f74490
+      size: 26493056
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_manifest.json
+      hash: md5
+      md5: 3c3b29461a052ff555070967662f55d7
+      size: 2361
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_paths.npy
+      hash: md5
+      md5: 95a839c83f47da6d82d45e9eef708aa6
+      size: 6468128
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_pids.npy
+      hash: md5
+      md5: 729730202e413d5b86957c3dbd911bc3
+      size: 103616
+  package_triton:
+    cmd: conda run --no-capture-output -n reid python
+      src/prepare_triton_model.py --onnx-path
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx
+      --output-root
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository
+      --model-name reid_embedding --model-version 1 --max-batch-size 0
+      --input-height 224 --input-width 224 --embedding-dim 512
+      --preferred-batch-sizes 4,8,16 --instance-kind KIND_GPU
+      --validation-report
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json
+    deps:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx
+      hash: md5
+      md5: b3f942aaee8ed05f977bea38a975cb9c
+      size: 1428799
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx.data
+      hash: md5
+      md5: 06456b87da26789ec21374b0626219e1
+      size: 355860480
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json
+      hash: md5
+      md5: d33da963cf577cc3935ad45a87521528
+      size: 8011
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/prepare_triton_model.py
+      hash: md5
+      md5: c1f634293bc347eac8ae5227713f949e
+      size: 6676
+    params:
+      params.yaml:
+        pipeline.conda_env: reid
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+        triton:
+          model_name: reid_embedding
+          model_version: 1
+          max_batch_size: 0
+          preferred_batch_sizes: 4,8,16
+          instance_kind: KIND_GPU
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository
+      hash: md5
+      md5: 083e9ba4c078b51f643a6acb89c47ffe.dir
+      size: 357292350
+      nfiles: 5
+  validate_release:
+    cmd: conda run --no-capture-output -n reid python
+      src/model_validation_gate.py --release-id market1501-vit-bnneck:v1-dvc
+      --source-git-commit 3bc5cd9e68d4b186900ba52e89976e9c94be28cc --thresholds
+      configs/model_validation.yaml --config configs/vit_reid.yaml
+      --pipeline-params params.yaml --data-manifest
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
+      --training-metrics
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/metrics/metrics_v1.json
+      --evaluation-metrics
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/evaluate/metrics/evaluation_latest.json
+      --onnx-manifest
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/onnx_export_manifest.json
+      --parity-report
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/parity/metrics/onnx_parity.json
+      --reference-manifest
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_manifest.json
+      --checkpoint
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      --onnx
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx
+      --preprocessing model_releases/market1501-vit-bnneck/v1/preprocessing.json
+      --preprocessing-output
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/preprocessing.json
+      --deployment-metrics
+      model_releases/market1501-vit-bnneck/v1/deployment_metrics.json
+      --mlflow-run-metadata
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/logs/mlflow_run.json
+      --output
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json
+      --manifest-output
+      artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json
+    deps:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/evaluate/metrics/evaluation_latest.json
+      hash: md5
+      md5: c419a260089d430ead121283430fccd0
+      size: 1027
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx
+      hash: md5
+      md5: b3f942aaee8ed05f977bea38a975cb9c
+      size: 1428799
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx.data
+      hash: md5
+      md5: 06456b87da26789ec21374b0626219e1
+      size: 355860480
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/onnx_export_manifest.json
+      hash: md5
+      md5: 10b16b32f3226585e024ee6be9bd390a
+      size: 660
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/parity/metrics/onnx_parity.json
+      hash: md5
+      md5: b958dd42d5f022f8061d8dc8d172343b
+      size: 3258
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_camids.npy
+      hash: md5
+      md5: 0ce3761fd9941e83aefdcfd97cc6757b
+      size: 103616
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_embeddings.npy
+      hash: md5
+      md5: c00fc50fef2ae9c43b1fc45368f74490
+      size: 26493056
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_manifest.json
+      hash: md5
+      md5: 3c3b29461a052ff555070967662f55d7
+      size: 2361
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_paths.npy
+      hash: md5
+      md5: 95a839c83f47da6d82d45e9eef708aa6
+      size: 6468128
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_pids.npy
+      hash: md5
+      md5: 729730202e413d5b86957c3dbd911bc3
+      size: 103616
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/checkpoints/best_model.pth
+      hash: md5
+      md5: 7a230c525a7c62deabeeceab31238be6
+      size: 1086212186
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/logs/mlflow_run.json
+      hash: md5
+      md5: 1b6682722fc91226c071b84219d2e494
+      size: 285
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/train/metrics/metrics_v1.json
+      hash: md5
+      md5: 90778a309f3e8e0121762dc27b181e0b
+      size: 41711
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/validate/data_manifest.json
+      hash: md5
+      md5: a24c02f7b81683573e620bfbe6c5f1af
+      size: 1148
+    - path: configs/model_validation.yaml
+      hash: md5
+      md5: a8aa0300a1fce3be24197f14ef999eb6
+      size: 363
+    - path: configs/vit_reid.yaml
+      hash: md5
+      md5: 7615cc0c19c0962aca825b55bdc55a44
+      size: 1685
+    - path: model_releases/market1501-vit-bnneck/v1/deployment_metrics.json
+      hash: md5
+      md5: 9dbf8c8a53d492755d5349dddacf1ca6
+      size: 963
+    - path: model_releases/market1501-vit-bnneck/v1/preprocessing.json
+      hash: md5
+      md5: 5235a5cfb19e136c0301093ea41421f1
+      size: 1107
+    - path: params.yaml
+      hash: md5
+      md5: 63de68d48e29be7415033f9cfa720854
+      size: 825
+    - path: src/common/utils.py
+      hash: md5
+      md5: fbbd06be0a7bd29bc1b8461f9c96f424
+      size: 3452
+    - path: src/model_validation_gate.py
+      hash: md5
+      md5: b211cf1572eb56ac96b8b3aa8df6e279
+      size: 19035
+    params:
+      params.yaml:
+        pipeline.conda_env: reid
+        pipeline.preprocessing_contract:
+          model_releases/market1501-vit-bnneck/v1/preprocessing.json
+        pipeline.release_id: market1501-vit-bnneck:v1-dvc
+        pipeline.release_slug: market1501-vit-bnneck-v1-dvc
+        pipeline.source_git_commit: 3bc5cd9e68d4b186900ba52e89976e9c94be28cc
+        validation:
+          thresholds: configs/model_validation.yaml
+          deployment_metrics:
+            model_releases/market1501-vit-bnneck/v1/deployment_metrics.json
+    outs:
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json
+      hash: md5
+      md5: 337ea4c9bbda775e1b3a885e1d23de69
+      size: 4941
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/preprocessing.json
+      hash: md5
+      md5: 5235a5cfb19e136c0301093ea41421f1
+      size: 1107
+    - path:
+        artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json
+      hash: md5
+      md5: d33da963cf577cc3935ad45a87521528
+      size: 8011
