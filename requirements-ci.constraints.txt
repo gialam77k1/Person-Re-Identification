@@ -1,0 +1,12 @@
+# Reproducible direct dependencies for the GitHub-hosted CPU CI job.
+# Update deliberately and verify with ./scripts/ci.sh before changing versions.
+fastapi==0.141.1
+httpx2==2.13.1
+mlflow==3.16.1
+numpy==2.2.6
+Pillow==11.3.0
+prometheus-client==0.26.0
+python-multipart==0.0.32
+PyYAML==6.0.3
+ruff==0.17.1
+uvicorn==0.54.0

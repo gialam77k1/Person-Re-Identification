@@ -7,9 +7,19 @@ import sys
 from pathlib import Path
 from typing import IO
 from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
+
+if TYPE_CHECKING:
+    import torch
+
+
+def _load_torch():
+    """Import PyTorch only for code paths that actually need it."""
+    import torch
+
+    return torch
 
 
 def project_root() -> Path:
@@ -30,6 +40,7 @@ def ensure_dir(path_like: str | Path) -> Path:
 
 
 def seed_everything(seed: int) -> None:
+    torch = _load_torch()
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -37,12 +48,14 @@ def seed_everything(seed: int) -> None:
 
 
 def infer_device(device_name: str) -> torch.device:
+    torch = _load_torch()
     if device_name == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return torch.device(device_name)
 
 
 def configure_torch_home() -> Path:
+    torch = _load_torch()
     torch_home = ensure_dir(project_root() / "artifacts" / "cache" / "torch")
     import os
 
@@ -103,6 +116,7 @@ def save_checkpoint(
     metrics: dict[str, Any],
     path_like: str | Path,
 ) -> Path:
+    torch = _load_torch()
     path = resolve_path(path_like)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -123,6 +137,7 @@ def load_checkpoint(
     checkpoint_path: str | Path,
     device: torch.device,
 ) -> dict[str, Any]:
+    torch = _load_torch()
     checkpoint = torch.load(resolve_path(checkpoint_path), map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     return checkpoint

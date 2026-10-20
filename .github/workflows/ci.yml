@@ -21,22 +21,45 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.10"
           cache: pip
-          cache-dependency-path: requirements-ci.txt
+          cache-dependency-path: |
+            requirements-api.txt
+            requirements-ci.txt
+            requirements-ci.constraints.txt
 
       - name: Install CI dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
+        run: >-
+          python -m pip install --disable-pip-version-check
+          --constraint requirements-ci.constraints.txt
+          --requirement requirements-ci.txt
 
-      - name: Run CI checks
+      - name: Lint Python
+        run: python -m ruff check .
+
+      - name: Validate repository metadata
+        run: python src/validate_repository.py
+
+      - name: Check repository hygiene
+        run: python src/check_repository_hygiene.py
+
+      - name: Run unit tests
         env:
           MLFLOW_DISABLE_AGENT_HINT: "1"
-        run: ./scripts/ci.sh
+        run: python -m unittest discover -v tests
+
+      - name: Validate OpenAPI contract
+        run: >-
+          python -c "from src.api.main import app; schema=app.openapi();
+          expected={'/health','/ready','/model-info','/embed','/search'};
+          missing=expected-set(schema['paths']);
+          assert not missing, f'Missing endpoints: {sorted(missing)}';
+          print('OpenAPI smoke: PASS')"
 
   api-image-smoke:
     name: Build and smoke-test API image without GPU
@@ -44,7 +67,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build API image
         run: docker build --file docker/api/Dockerfile --tag reid-api:ci .
