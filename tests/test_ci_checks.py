@@ -1,14 +1,37 @@
 from __future__ import annotations
 
+import builtins
+import importlib
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from src.check_repository_hygiene import inspect_files
 from src.validate_repository import validate_repository
 
 
 class CiChecksTest(unittest.TestCase):
+    def test_common_utils_import_does_not_require_torch(self) -> None:
+        module_name = "src.common.utils"
+        existing = sys.modules.pop(module_name, None)
+        real_import = builtins.__import__
+
+        def import_without_torch(name, *args, **kwargs):
+            if name == "torch":
+                raise ModuleNotFoundError("torch intentionally unavailable in CPU CI")
+            return real_import(name, *args, **kwargs)
+
+        try:
+            with mock.patch("builtins.__import__", side_effect=import_without_torch):
+                imported = importlib.import_module(module_name)
+            self.assertTrue(callable(imported.save_json))
+        finally:
+            sys.modules.pop(module_name, None)
+            if existing is not None:
+                sys.modules[module_name] = existing
+
     def test_current_repository_metadata_is_valid(self) -> None:
         self.assertEqual(validate_repository(), [])
 
