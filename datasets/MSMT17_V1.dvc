@@ -1,0 +1,6 @@
+outs:
+- md5: c8a4c6f18b86490a45f940ab9fb0eb70.dir
+  size: 2560531534
+  nfiles: 126447
+  hash: md5
+  path: MSMT17_V1
