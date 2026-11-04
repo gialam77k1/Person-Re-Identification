@@ -43,6 +43,8 @@ Workflow tạo check, còn branch protection là thiết lập cấp repository 
 Job validation và deployment cần máy Linux local có:
 
 - Docker Engine, Docker Compose và NVIDIA Container Toolkit.
+- `DOCKER_CONTEXT=default` trong `.env.mlops` nếu máy đồng thời cài Docker Desktop; context được chọn
+  phải có NVIDIA runtime (`docker --context default info`).
 - Conda environment `reid` đã cài `requirements.txt`.
 - Kết nối được MinIO/DVC remote, Triton, Qdrant và cổng API.
 - Quyền đọc GitHub Container Registry.
@@ -67,6 +69,8 @@ Có thể chạy cùng kiểm tra trực tiếp trên máy runner:
 
 Workflow chỉ cho phép chạy thủ công để code từ pull request không tự động chạy trên máy local.
 File `.env.mlops` tạm được xóa ở bước cuối kể cả khi smoke test thất bại.
+Mount node-exporter dùng chế độ read-only tiêu chuẩn để chạy được trên cả Docker Engine native và
+Docker Desktop; không yêu cầu root mount propagation kiểu `rslave`.
 
 Tạo hai GitHub Environments:
 
