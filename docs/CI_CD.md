@@ -49,6 +49,25 @@ Job validation và deployment cần máy Linux local có:
 
 Tạo GitHub Actions secret `MLOPS_ENV_FILE` chứa nội dung `.env.mlops`. Không đưa file này hoặc credential vào Git.
 
+Sau khi runner hiện trạng thái `Idle`, mở `Actions → Self-hosted runner smoke test → Run workflow`.
+Giữ `start_stack` và `verify_services` được bật cho lần chạy đầu. Workflow sẽ kiểm tra:
+
+- Git, Docker/Compose, Conda environment `reid`, DVC và NVIDIA driver.
+- `.env.mlops` được tạo tạm từ secret và không còn placeholder `change-me`.
+- Model repository hợp lệ trước khi bật stack.
+- PostgreSQL, MinIO, MLflow, Qdrant, Triton và inference API đều healthy.
+
+Có thể chạy cùng kiểm tra trực tiếp trên máy runner:
+
+```bash
+./scripts/self_hosted_runner_smoke.sh prerequisites
+./scripts/mlops_stack.sh up
+./scripts/self_hosted_runner_smoke.sh services
+```
+
+Workflow chỉ cho phép chạy thủ công để code từ pull request không tự động chạy trên máy local.
+File `.env.mlops` tạm được xóa ở bước cuối kể cả khi smoke test thất bại.
+
 Tạo hai GitHub Environments:
 
 - `staging`.
@@ -112,4 +131,3 @@ conda run -n reid python src/release_deployment.py verify \
 ```
 
 Lệnh chỉ đọc và xác minh candidate, không deploy.
-
