@@ -37,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-pointer", default="datasets/MSMT17_V1.dvc")
     parser.add_argument("--output", default="")
     parser.add_argument("--save-embeddings", action="store_true")
+    parser.add_argument("--log-mlflow", action="store_true")
     parser.add_argument("--gallery-match-query-pids-only", action="store_true")
     parser.add_argument(
         "--workers",
@@ -306,8 +307,31 @@ def main() -> None:
             if args.output
             else Path(config["artifacts"]["metrics_dir"]) / "deployment_retrieval_latest.json"
         )
-        save_json(results, output_path)
+        saved_output = save_json(results, output_path)
         save_json(config, Path(config["artifacts"]["logs_dir"]) / "effective_config.json")
+        if args.log_mlflow:
+            import mlflow
+
+            mlflow.set_tracking_uri(config["logging"]["tracking_uri"])
+            mlflow.set_experiment(config["experiment_name"])
+            with mlflow.start_run(run_name=f"{args.release_id}-on-{config['data']['dataset']['name']}"):
+                mlflow.log_params(
+                    {
+                        "release_id": args.release_id,
+                        "dataset": config["data"]["dataset"]["name"],
+                        "dataset_dvc_revision": results["dataset_dvc_revision"],
+                        "git_commit": results["git_commit"],
+                        "num_query_samples": results["num_query_samples"],
+                        "num_gallery_samples": results["num_gallery_samples"],
+                    }
+                )
+                mlflow.log_metrics(
+                    {
+                        name: float(results[name])
+                        for name in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")
+                    }
+                )
+                mlflow.log_artifact(str(saved_output), artifact_path="cross-domain-evaluation")
         print(results)
 
 
