@@ -1,0 +1,24 @@
+schema_version: 1
+policy_name: msmt17-cross-domain-retraining-v1
+
+candidate:
+  base_release_id: market1501-vit-bnneck:v1-dvc
+  target_dataset: msmt17
+  target_dataset_version: MSMT17_V1
+  target_epochs: 10
+
+evidence:
+  require_drift_detected: true
+  minimum_query_samples: 11659
+  minimum_gallery_samples: 82161
+  minimum_query_coverage: 0.99
+  required_embedding_dim: 512
+
+quality:
+  retrain_when_any_below:
+    rank1: 0.50
+    mAP: 0.30
+
+approval:
+  manual_approval_required: true
+  minimum_approver_name_length: 3
