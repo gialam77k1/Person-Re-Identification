@@ -35,3 +35,31 @@ cấp phát ma trận 11.659 × 82.161 trong RAM.
 
 Report luôn chứa release ID, Git commit, DVC revision, số mẫu, embedding dimension, Rank-1/5/10/20,
 mAP, mINP và query coverage. Chỉ report chạy đủ query/gallery mới được dùng làm baseline retraining.
+
+## Phát hiện embedding drift
+
+Luồng drift lấy mẫu query MSMT17 xác định bằng seed `42`, infer bằng đúng release đang phục vụ và
+so sánh với reference embeddings Market-1501 của model v1:
+
+```bash
+SAMPLE_SIZE=1000 ./scripts/cross_dataset_drift.sh
+```
+
+Các kiểm tra gồm centroid cosine distance, standardized mean shift, norm mean delta và KS statistic.
+Ngưỡng nằm trong `configs/drift_detection.yaml`. Kết quả `DRIFT` là tín hiệu domain shift cần kết hợp
+với metric cross-domain; nó không tự động cho phép retrain hay promote model.
+
+Có thể chạy cùng luồng trên giao diện GitHub tại
+`Actions → MSMT17 cross-domain drift → Run workflow`. Workflow dùng self-hosted runner vì cần GPU,
+Triton, MinIO/DVC và upload report JSON làm GitHub Actions artifact trong 30 ngày.
+
+Output local mặc định:
+
+```text
+artifacts/cross-domain/market1501-v1-on-msmt17/drift/
+├── drift_report.json
+├── msmt17_query_embeddings.npy
+├── msmt17_query_embeddings.jsonl
+├── msmt17_query_metadata.json
+└── reid_cross_dataset_drift.prom
+```
