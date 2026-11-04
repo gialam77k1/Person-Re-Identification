@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
+import yaml
 from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +17,8 @@ if str(ROOT) not in sys.path:
 from src.common.config import load_runtime_config
 from src.common.utils import ensure_dir, save_json, tee_output
 from src.data.dataset import build_dataset
-from src.reid.evaluation import compute_distance_matrix, evaluate_market1501
+from src.reid.cross_domain import evaluate_cross_domain_retrieval
+from src.reid.evaluation import compute_distance_matrix
 from src.triton_infer import preprocess_image
 from src.triton_infer import infer_embedding
 
@@ -29,6 +32,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-name", default="embeddings")
     parser.add_argument("--max-queries", type=int, default=0)
     parser.add_argument("--max-gallery", type=int, default=0)
+    parser.add_argument("--query-batch-size", type=int, default=128)
+    parser.add_argument("--release-id", default="market1501-vit-bnneck:v1-dvc")
+    parser.add_argument("--dataset-pointer", default="datasets/MSMT17_V1.dvc")
+    parser.add_argument("--output", default="")
+    parser.add_argument("--save-embeddings", action="store_true")
     parser.add_argument("--gallery-match-query-pids-only", action="store_true")
     parser.add_argument(
         "--workers",
@@ -135,6 +143,18 @@ def rank_at(cmc: np.ndarray, rank: int) -> float:
     return float(cmc[index])
 
 
+def git_commit() -> str:
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+
+
+def dvc_revision(pointer_path: Path) -> str:
+    pointer = yaml.safe_load(pointer_path.read_text(encoding="utf-8"))
+    outputs = pointer.get("outs", []) if isinstance(pointer, dict) else []
+    if len(outputs) != 1 or not outputs[0].get("md5"):
+        raise ValueError(f"Invalid DVC pointer: {pointer_path}")
+    return str(outputs[0]["md5"])
+
+
 def build_topk_preview(
     distance_matrix: np.ndarray,
     query_paths: list[str],
@@ -215,17 +235,25 @@ def main() -> None:
             workers=args.workers,
         )
 
-        distance_matrix = compute_distance_matrix(query_vectors, gallery_vectors)
-        cmc, mean_ap, mean_inp, valid_queries = evaluate_market1501(
-            distance_matrix,
+        retrieval_metrics = evaluate_cross_domain_retrieval(
+            query_vectors,
+            gallery_vectors,
             query_pids,
             gallery_pids,
             query_camids,
             gallery_camids,
+            query_batch_size=args.query_batch_size,
         )
 
+        preview_query_count = min(5, query_vectors.shape[0])
+        preview_distances = compute_distance_matrix(query_vectors[:preview_query_count], gallery_vectors)
+        pointer_path = (ROOT / args.dataset_pointer).resolve()
+
         results = {
-            "schema_version": 2,
+            "schema_version": 3,
+            "release_id": args.release_id,
+            "git_commit": git_commit(),
+            "dataset_dvc_revision": dvc_revision(pointer_path),
             "run_slug": config["runtime"]["run_slug"],
             "run_root": config["runtime"]["run_root"],
             "dataset": config["data"]["dataset"]["name"],
@@ -235,8 +263,7 @@ def main() -> None:
             "workers": args.workers,
             "num_query_samples": int(query_vectors.shape[0]),
             "num_gallery_samples": int(gallery_vectors.shape[0]),
-            "valid_queries": int(valid_queries),
-            "embedding_dim": int(query_vectors.shape[1]),
+            "query_batch_size": args.query_batch_size,
             "embeddings_finite": bool(
                 np.all(np.isfinite(query_vectors)) and np.all(np.isfinite(gallery_vectors))
             ),
@@ -244,23 +271,41 @@ def main() -> None:
                 np.allclose(np.linalg.norm(query_vectors, axis=1), 1.0, atol=1e-5)
                 and np.allclose(np.linalg.norm(gallery_vectors, axis=1), 1.0, atol=1e-5)
             ),
-            "rank1": rank_at(cmc, 1),
-            "rank5": rank_at(cmc, 5),
-            "rank10": rank_at(cmc, 10),
-            "rank20": rank_at(cmc, 20),
-            "mAP": float(mean_ap),
-            "mINP": float(mean_inp),
+            **retrieval_metrics,
             "topk_preview": build_topk_preview(
-                distance_matrix=distance_matrix,
-                query_paths=query_paths,
-                query_pids=query_pids,
+                distance_matrix=preview_distances,
+                query_paths=query_paths[:preview_query_count],
+                query_pids=query_pids[:preview_query_count],
                 gallery_pids=gallery_pids,
                 gallery_camids=gallery_camids,
                 gallery_paths=gallery_paths,
             ),
         }
 
-        output_path = Path(config["artifacts"]["metrics_dir"]) / "deployment_retrieval_latest.json"
+        if args.save_embeddings:
+            embeddings_dir = ensure_dir(config["artifacts"]["embeddings_dir"])
+            np.save(embeddings_dir / "query_embeddings.npy", query_vectors, allow_pickle=False)
+            np.save(embeddings_dir / "gallery_embeddings.npy", gallery_vectors, allow_pickle=False)
+            save_json(
+                {
+                    "release_id": args.release_id,
+                    "dataset": config["data"]["dataset"]["name"],
+                    "dataset_dvc_revision": results["dataset_dvc_revision"],
+                    "query_paths": query_paths,
+                    "query_pids": query_pids.tolist(),
+                    "query_camids": query_camids.tolist(),
+                    "gallery_paths": gallery_paths,
+                    "gallery_pids": gallery_pids.tolist(),
+                    "gallery_camids": gallery_camids.tolist(),
+                },
+                embeddings_dir / "metadata.json",
+            )
+
+        output_path = (
+            Path(args.output)
+            if args.output
+            else Path(config["artifacts"]["metrics_dir"]) / "deployment_retrieval_latest.json"
+        )
         save_json(results, output_path)
         save_json(config, Path(config["artifacts"]["logs_dir"]) / "effective_config.json")
         print(results)
