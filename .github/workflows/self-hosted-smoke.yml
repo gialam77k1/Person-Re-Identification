@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       start_stack:
-        description: Start or update the local MLOps stack before service checks
+        description: Start stack from runner checkout (normally keep false; verify the persistent stack instead)
         required: true
         type: boolean
-        default: true
+        default: false
       verify_services:
         description: Verify PostgreSQL, MinIO, MLflow, Qdrant, Triton, and API
         required: true
@@ -25,6 +25,9 @@ jobs:
   smoke:
     runs-on: [self-hosted, linux]
     timeout-minutes: 20
+    env:
+      DOCKER_CONTEXT: default
+      DOCKER_HOST: unix:///var/run/docker.sock
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

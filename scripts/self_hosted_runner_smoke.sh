@@ -26,9 +26,20 @@ check_prerequisites() {
   require_command conda
   require_command nvidia-smi
 
-  docker info >/dev/null
+  local docker_context="${DOCKER_CONTEXT:-$(docker context show)}"
+  local docker_host="${DOCKER_HOST:-unix:///var/run/docker.sock}"
+  [[ "${docker_context}" == "default" ]] || {
+    printf 'FAIL: Docker context phải là default, hiện tại là %s\n' "${docker_context}" >&2
+    return 1
+  }
+  [[ "${docker_host}" == "unix:///var/run/docker.sock" ]] || {
+    printf 'FAIL: DOCKER_HOST phải trỏ tới Docker Engine native, hiện tại là %s\n' "${docker_host}" >&2
+    return 1
+  }
+
+  DOCKER_CONTEXT="${docker_context}" DOCKER_HOST="${docker_host}" docker info >/dev/null
   docker compose version >/dev/null
-  pass "Docker daemon và Docker Compose"
+  pass "Docker Engine native (${docker_host}) và Docker Compose"
 
   conda run -n "${CONDA_ENV_NAME}" python --version >/dev/null
   conda run -n "${CONDA_ENV_NAME}" dvc --version >/dev/null
