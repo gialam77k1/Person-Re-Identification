@@ -45,7 +45,12 @@ jobs:
       - name: Pull serving artifacts from DVC
         env:
           RELEASE_SLUG: ${{ inputs.release_slug }}
-        run: ./scripts/dvc_local.sh pull "artifacts/pipeline/${RELEASE_SLUG}"
+        run: >-
+          ./scripts/dvc_local.sh pull
+          "artifacts/pipeline/${RELEASE_SLUG}/triton/model_repository"
+          "artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
+          "artifacts/pipeline/${RELEASE_SLUG}/release/preprocessing.json"
+          "artifacts/pipeline/${RELEASE_SLUG}/release/validation_report.json"
 
       - name: Check runner prerequisites
         run: ./scripts/self_hosted_runner_smoke.sh prerequisites
