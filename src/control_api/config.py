@@ -30,6 +30,11 @@ class ControlSettings:
     triton_url: str
     triton_model: str
     inference_api_url: str
+    public_mlflow_url: str
+    public_grafana_url: str
+    public_minio_url: str
+    public_qdrant_url: str
+    public_github_actions_url: str
     allowed_datasets: tuple[str, ...]
 
     @classmethod
@@ -67,5 +72,13 @@ class ControlSettings:
             triton_url=_url("CONTROL_TRITON_URL", "http://triton-server:8000"),
             triton_model=os.getenv("CONTROL_TRITON_MODEL", "reid_embedding"),
             inference_api_url=_url("CONTROL_INFERENCE_API_URL", "http://inference-api:8080"),
+            public_mlflow_url=_url("CONTROL_PUBLIC_MLFLOW_URL", "http://localhost:5000"),
+            public_grafana_url=_url("CONTROL_PUBLIC_GRAFANA_URL", "http://localhost:3000"),
+            public_minio_url=_url("CONTROL_PUBLIC_MINIO_URL", "http://localhost:9001"),
+            public_qdrant_url=_url("CONTROL_PUBLIC_QDRANT_URL", "http://localhost:6333/dashboard"),
+            public_github_actions_url=_url(
+                "CONTROL_PUBLIC_GITHUB_ACTIONS_URL",
+                "https://github.com/gialam77k1/Person-Re-Identification/actions",
+            ),
             allowed_datasets=datasets,
         )
