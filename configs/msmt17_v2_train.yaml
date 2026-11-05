@@ -1,0 +1,100 @@
+project_name: person-reid-mlops
+experiment_name: market1501-msmt17-vit-bnneck-v2
+seed: 42
+device: auto
+num_workers: 2
+
+release:
+  id: market1501-msmt17-vit-bnneck:v2
+  base_release_id: market1501-vit-bnneck:v1
+
+data:
+  source_type: image_folder
+  dataset:
+    name: msmt17
+    version: MSMT17_V1
+  location:
+    root: datasets/MSMT17_V1
+    splits:
+      train: train
+      query: test
+      gallery: test
+    list_files:
+      train: datasets/MSMT17_V1/list_train.txt
+      query: datasets/MSMT17_V1/list_query.txt
+      gallery: datasets/MSMT17_V1/list_gallery.txt
+  expected_train_images: 30248
+  expected_train_identities: 1041
+  image_height: 224
+  image_width: 224
+  preserve_aspect_ratio: true
+  batch_size: 16
+  eval_batch_size: 32
+  instances_per_identity: 4
+
+model:
+  variant: vit
+  backbone: vit_b_16
+  pretrained: false
+  embedding_dim: 512
+  dropout: 0.1
+  use_local_branch: true
+  num_local_stripes: 4
+  local_branch_dropout: 0.1
+  use_bnneck: true
+  use_auxiliary_branch_loss: true
+
+transfer:
+  enabled: true
+  base_checkpoint: artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth
+  expected_checkpoint_epoch: 48
+  reset_classifier_heads: true
+
+train:
+  epochs: 10
+  freeze_backbone_epochs: 0
+  progressive_unfreeze:
+    enabled: true
+    freeze_lower_blocks: 8
+    full_unfreeze_epoch: 3
+  learning_rate: 0.00005
+  backbone_lr_factor: 0.1
+  weight_decay: 0.0005
+  ce_weight: 1.0
+  triplet_weight: 1.2
+  triplet_margin: 0.35
+  center_loss_weight: 0.0
+  center_loss_lr: 0.25
+  auxiliary_loss_weight: 0.3
+  normalize_triplet_embeddings: true
+  label_smoothing: 0.02
+  scheduler_type: cosine
+  warmup_epochs: 2
+  min_lr_scale: 0.02
+  grad_clip_norm: 1.0
+  amp: true
+  early_stopping:
+    enabled: true
+    patience: 3
+    min_delta: 0.001
+    monitor: mAP
+
+augmentation:
+  color_jitter: true
+  random_erasing: true
+  random_grayscale_p: 0.05
+  random_affine_degrees: 5.0
+  random_occlusion_p: 0.15
+
+evaluation:
+  use_rerank: false
+  flip_test: false
+
+logging:
+  enable_mlflow: true
+  tracking_uri: http://localhost:5000
+
+artifacts:
+  root: artifacts
+  run_root: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2
+  metrics_filename: metrics_v2.json
