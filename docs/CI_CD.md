@@ -52,8 +52,11 @@ Job validation và deployment cần máy Linux local có:
 Tạo GitHub Actions secret `MLOPS_ENV_FILE` chứa nội dung `.env.mlops`. Không đưa file này hoặc credential vào Git.
 
 Sau khi runner hiện trạng thái `Idle`, mở `Actions → Self-hosted runner smoke test → Run workflow`.
-Giữ `start_stack` và `verify_services` được bật cho lần chạy đầu. Workflow sẽ kiểm tra:
+Giữ `start_stack=false` và `verify_services=true`. Workflow chỉ kiểm tra stack chính đã được dựng từ
+workspace bền vững; không dựng container hoặc bind mount từ checkout tạm của Actions. Chỉ bật
+`start_stack` khi chủ động chẩn đoán một checkout có thể bị xóa. Workflow sẽ kiểm tra:
 
+- Pull release serving được chọn từ DVC/MinIO vào checkout sạch của runner trước preflight.
 - Git, Docker/Compose, Conda environment `reid`, DVC và NVIDIA driver.
 - `.env.mlops` được tạo tạm từ secret và không còn placeholder `change-me`.
 - Model repository hợp lệ trước khi bật stack.
@@ -69,8 +72,22 @@ Có thể chạy cùng kiểm tra trực tiếp trên máy runner:
 
 Workflow chỉ cho phép chạy thủ công để code từ pull request không tự động chạy trên máy local.
 File `.env.mlops` tạm được xóa ở bước cuối kể cả khi smoke test thất bại.
+Workflow cố định `DOCKER_CONTEXT=default` và `DOCKER_HOST=unix:///var/run/docker.sock` để không vô tình
+kết nối Docker Desktop. Runner service cũng phải có cùng `DOCKER_HOST`.
 Mount node-exporter dùng chế độ read-only tiêu chuẩn để chạy được trên cả Docker Engine native và
 Docker Desktop; không yêu cầu root mount propagation kiểu `rslave`.
+
+### Chạy runner như systemd service
+
+Trên máy runner, dừng tiến trình `./run.sh` chạy thủ công rồi chạy script cài đặt. Script tạo systemd
+drop-in cố định Docker Engine native, bật tự khởi động và khởi chạy service:
+
+```bash
+./scripts/install_self_hosted_runner_service.sh ~/actions-runner "$USER"
+```
+
+Lệnh sẽ yêu cầu `sudo` một lần. Kiểm tra lại bằng
+`systemctl status "$(cat ~/actions-runner/.service)"`; trạng thái đúng là `active (running)` và `enabled`.
 
 Tạo hai GitHub Environments:
 
