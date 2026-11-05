@@ -68,7 +68,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
         self.assertEqual(config["transfer"]["expected_checkpoint_epoch"], 48)
         self.assertTrue(config["transfer"]["reset_classifier_heads"])
         self.assertFalse(config["model"]["pretrained"])
-        self.assertEqual(config["train"]["epochs"], 10)
+        self.assertEqual(config["train"]["epochs"], 20)
         self.assertEqual(config["train"]["progressive_unfreeze"]["freeze_lower_blocks"], 8)
         self.assertEqual(config["train"]["progressive_unfreeze"]["full_unfreeze_epoch"], 3)
         self.assertEqual(config["train"]["backbone_lr_factor"], 0.1)
@@ -101,7 +101,10 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             checkpoint = root / "best_model.pth"
             dataset = root / "MSMT17_V1"
             dataset.mkdir()
-            decision.write_text(json.dumps({"status": "RETRAIN_APPROVED"}), encoding="utf-8")
+            decision.write_text(
+                json.dumps({"status": "RETRAIN_APPROVED", "target_epochs": 20}),
+                encoding="utf-8",
+            )
             checkpoint.write_bytes(b"checkpoint")
             lines = [f"0000_00_00_{index:04d}.jpg {index % 1041}" for index in range(30248)]
             (dataset / "list_train.txt").write_text("\n".join(lines), encoding="utf-8")
@@ -113,10 +116,12 @@ class MSMT17V2TrainingTest(unittest.TestCase):
                     checkpoint,
                     dataset,
                     root,
+                    ROOT / "configs/msmt17_v2_train.yaml",
                     require_cuda=False,
                 )
 
             self.assertEqual(result["decision"], "RETRAIN_APPROVED")
+            self.assertEqual(result["target_epochs"], 20)
             self.assertEqual(result["train_images"], 30248)
             self.assertEqual(result["train_identities"], 1041)
 
@@ -125,6 +130,31 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             ["bash", "-n", str(ROOT / "scripts/train_msmt17_v2_local.sh")],
             check=True,
         )
+
+    def test_preflight_rejects_epoch_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            decision = root / "decision.json"
+            checkpoint = root / "best_model.pth"
+            dataset = root / "MSMT17_V1"
+            config = root / "config.yaml"
+            dataset.mkdir()
+            decision.write_text(
+                json.dumps({"status": "RETRAIN_APPROVED", "target_epochs": 10}),
+                encoding="utf-8",
+            )
+            checkpoint.write_bytes(b"checkpoint")
+            config.write_text("train:\n  epochs: 20\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "do not match"):
+                validate_inputs(
+                    decision,
+                    checkpoint,
+                    dataset,
+                    root,
+                    config,
+                    require_cuda=False,
+                )
 
 
 if __name__ == "__main__":

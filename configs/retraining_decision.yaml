@@ -5,7 +5,7 @@ candidate:
   base_release_id: market1501-vit-bnneck:v1-dvc
   target_dataset: msmt17
   target_dataset_version: MSMT17_V1
-  target_epochs: 10
+  target_epochs: 20
 
 evidence:
   require_drift_detected: true

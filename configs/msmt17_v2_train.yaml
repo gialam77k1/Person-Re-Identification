@@ -51,7 +51,7 @@ transfer:
   reset_classifier_heads: true
 
 train:
-  epochs: 10
+  epochs: 20
   freeze_backbone_epochs: 0
   progressive_unfreeze:
     enabled: true

@@ -5,6 +5,8 @@ import json
 import shutil
 from pathlib import Path
 
+import yaml
+
 
 EXPECTED_TRAIN_IMAGES = 30248
 EXPECTED_TRAIN_IDENTITIES = 1041
@@ -16,6 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--decision", required=True)
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--dataset", required=True)
+    parser.add_argument("--config", required=True)
     parser.add_argument("--workspace", default=".")
     return parser.parse_args()
 
@@ -25,6 +28,7 @@ def validate_inputs(
     checkpoint_path: Path,
     dataset_path: Path,
     workspace: Path,
+    config_path: Path,
     *,
     require_cuda: bool = True,
 ) -> dict[str, object]:
@@ -34,6 +38,16 @@ def validate_inputs(
     decision_status = decision.get("status")
     if decision_status != "RETRAIN_APPROVED":
         raise ValueError("Retraining gate is not RETRAIN_APPROVED")
+    if not config_path.is_file():
+        raise FileNotFoundError(f"Missing v2 training config: {config_path}")
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    configured_epochs = int(config.get("train", {}).get("epochs", 0))
+    approved_epochs = int(decision.get("target_epochs", 0))
+    if configured_epochs != approved_epochs:
+        raise ValueError(
+            "Approved retraining epochs do not match config: "
+            f"decision={approved_epochs}, config={configured_epochs}"
+        )
     if not checkpoint_path.is_file():
         raise FileNotFoundError(f"Missing v1 checkpoint: {checkpoint_path}")
     if not dataset_path.is_dir():
@@ -75,6 +89,7 @@ def validate_inputs(
 
     return {
         "decision": decision_status,
+        "target_epochs": configured_epochs,
         "train_images": len(train_lines),
         "train_identities": len(train_ids),
         "free_disk_gib": round(free_bytes / 1024**3, 1),
@@ -89,6 +104,7 @@ def main() -> None:
         Path(args.checkpoint),
         Path(args.dataset),
         Path(args.workspace),
+        Path(args.config),
     )
     print("GPU:", result["gpu"])
     print(
@@ -99,6 +115,7 @@ def main() -> None:
         "identities",
     )
     print("Retraining gate:", result["decision"])
+    print("Approved epochs:", result["target_epochs"])
     print("Free disk:", f"{result['free_disk_gib']} GiB")
 
 
