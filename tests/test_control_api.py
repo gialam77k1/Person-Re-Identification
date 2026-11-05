@@ -9,6 +9,7 @@ from typing import Any
 import httpx2
 
 from src.control_api.config import ControlSettings
+from src.control_api.lifecycle import LifecycleController
 from src.control_api.main import create_app
 from src.control_api.store import CycleStore
 
@@ -21,6 +22,11 @@ class FakeOverview:
         return {"services": {"ready": 1, "checked": 1}, "drift": {"status": "DRIFT"}}
 
 
+class FakeDispatcher:
+    def dispatch(self, workflow: str, inputs: dict[str, str]) -> dict[str, Any]:
+        return {"workflow": workflow, "inputs": inputs}
+
+
 class ControlApiTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -30,7 +36,8 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             allowed_datasets=("MSMT17",),
         )
         self.store = CycleStore(settings.database_path)
-        self.app = create_app(settings, self.store, FakeOverview())
+        lifecycle = LifecycleController(settings, self.store, FakeDispatcher())
+        self.app = create_app(settings, self.store, FakeOverview(), lifecycle)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()

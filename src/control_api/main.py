@@ -4,8 +4,10 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.control_api.config import ControlSettings
+from src.control_api.github_actions import GitHubActionsClient, WorkflowDispatchError
+from src.control_api.lifecycle import InvalidTransitionError, LifecycleController
 from src.control_api.overview import OverviewService
-from src.control_api.schemas import CycleCreate, CycleCreateResponse, EventListResponse
+from src.control_api.schemas import ActorRequest, CycleCreate, CycleCreateResponse, EventListResponse
 from src.control_api.store import CycleStore
 
 
@@ -13,10 +15,14 @@ def create_app(
     settings: ControlSettings | None = None,
     store: CycleStore | None = None,
     overview: OverviewService | None = None,
+    lifecycle: LifecycleController | None = None,
 ) -> FastAPI:
     configured = settings or ControlSettings.from_env()
     cycle_store = store or CycleStore(configured.database_path)
     overview_service = overview or OverviewService(configured)
+    lifecycle_service = lifecycle or LifecycleController(
+        configured, cycle_store, GitHubActionsClient(configured)
+    )
     api = FastAPI(
         title="Person ReID MLOps Control API",
         version="0.1.0",
@@ -78,16 +84,42 @@ def create_app(
                 status_code=422,
                 detail=f"Dataset must be one of: {', '.join(configured.allowed_datasets)}",
             )
-        cycle, created = cycle_store.create_cycle(
-            dataset=request.dataset,
-            source_release=request.source_release,
-            target_release=request.target_release,
-            idempotency_key=request.idempotency_key,
-            actor=request.actor,
-        )
+        try:
+            cycle, created = lifecycle_service.start(
+                dataset=request.dataset,
+                source_release=request.source_release,
+                target_release=request.target_release,
+                idempotency_key=request.idempotency_key,
+                actor=request.actor,
+            )
+        except WorkflowDispatchError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         return CycleCreateResponse(created=created, cycle=cycle)
 
+    @api.post("/control/cycles/{cycle_id}/approve-retraining")
+    async def approve_retraining(cycle_id: str, request: ActorRequest) -> dict:
+        return _lifecycle_action(lifecycle_service.approve_retraining, cycle_id, request.actor)
+
+    @api.post("/control/cycles/{cycle_id}/promote")
+    async def promote(cycle_id: str, request: ActorRequest) -> dict:
+        return _lifecycle_action(lifecycle_service.promote, cycle_id, request.actor)
+
+    @api.post("/control/cycles/{cycle_id}/rollback")
+    async def rollback(cycle_id: str, request: ActorRequest) -> dict:
+        return _lifecycle_action(lifecycle_service.rollback, cycle_id, request.actor)
+
     return api
+
+
+def _lifecycle_action(callback, cycle_id: str, actor: str) -> dict:
+    try:
+        return callback(cycle_id, actor)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Cycle not found") from exc
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except WorkflowDispatchError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 app = create_app()

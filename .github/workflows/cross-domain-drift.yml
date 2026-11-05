@@ -3,6 +3,14 @@ name: MSMT17 cross-domain drift
 on:
   workflow_dispatch:
     inputs:
+      cycle_id:
+        description: Control Center cycle ID
+        required: false
+        default: "manual"
+      dataset:
+        description: Target dataset
+        required: true
+        default: MSMT17
       sample_size:
         description: Deterministic MSMT17 query sample size
         required: true
@@ -40,6 +48,7 @@ jobs:
 
       - name: Capture MSMT17 embeddings and detect drift
         env:
+          CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
           SAMPLE_SIZE: ${{ inputs.sample_size }}
           RELEASE_ID: ${{ inputs.release_id }}
         run: ./scripts/cross_dataset_drift.sh

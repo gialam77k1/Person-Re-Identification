@@ -21,3 +21,7 @@ class CycleCreateResponse(BaseModel):
 class EventListResponse(BaseModel):
     events: list[dict[str, Any]]
     last_event_id: int
+
+
+class ActorRequest(BaseModel):
+    actor: str = Field(min_length=1, max_length=100)

@@ -226,6 +226,19 @@ class CycleStore:
         with self._connect() as connection:
             self._insert_audit(connection, cycle_id, action, actor, payload)
 
+    def record_event(
+        self, cycle_id: str, kind: str, message: str, payload: dict[str, Any] | None = None
+    ) -> None:
+        with self._connect() as connection:
+            self._insert_event(connection, cycle_id, kind, message, payload or {})
+
+    def audit_entries(self, cycle_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM audit_log WHERE cycle_id = ? ORDER BY id", (cycle_id,)
+            ).fetchall()
+        return [self._decode_payload(row) for row in rows]
+
     @staticmethod
     def _decode_payload(row: sqlite3.Row) -> dict[str, Any]:
         value = dict(row)

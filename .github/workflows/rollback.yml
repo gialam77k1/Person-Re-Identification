@@ -3,6 +3,10 @@ name: Roll back model service
 on:
   workflow_dispatch:
     inputs:
+      cycle_id:
+        description: Control Center cycle ID
+        required: false
+        default: "manual"
       environment:
         description: Environment to restore
         required: true
