@@ -39,3 +39,12 @@ export type Overview = {
   unavailable?: boolean;
   error?: string;
 };
+
+export type CycleEvent = {
+  id: number;
+  cycle_id: string;
+  kind: string;
+  message: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
