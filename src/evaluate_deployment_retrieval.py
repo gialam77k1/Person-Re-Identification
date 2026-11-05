@@ -16,7 +16,6 @@ if str(ROOT) not in sys.path:
 
 from src.common.config import load_runtime_config
 from src.common.utils import ensure_dir, save_json, tee_output
-from src.data.dataset import build_dataset
 from src.reid.cross_domain import evaluate_cross_domain_retrieval
 from src.reid.evaluation import compute_distance_matrix
 from src.triton_infer import preprocess_image
@@ -191,6 +190,8 @@ def build_topk_preview(
 
 
 def main() -> None:
+    from src.data.dataset import build_dataset
+
     args = parse_args()
     config = load_runtime_config(args.config, args.set, command_name="deployment-retrieval-evaluate")
     ensure_dir(config["artifacts"]["logs_dir"])

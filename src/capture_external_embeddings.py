@@ -16,7 +16,6 @@ if str(ROOT) not in sys.path:
 
 from src.common.config import load_runtime_config
 from src.common.utils import save_json
-from src.data.dataset import build_dataset
 from src.evaluate_deployment_retrieval import infer_dataset_embeddings
 from src.validate_data import dvc_revision
 
@@ -46,6 +45,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    from src.data.dataset import build_dataset
+
     args = parse_args()
     config = load_runtime_config(args.config, command_name="capture-external-embeddings")
     dataset = build_dataset(config, args.split, transform=None, relabel=False)
