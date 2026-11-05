@@ -1,0 +1,53 @@
+name: Self-hosted runner smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_stack:
+        description: Start or update the local MLOps stack before service checks
+        required: true
+        type: boolean
+        default: true
+      verify_services:
+        description: Verify PostgreSQL, MinIO, MLflow, Qdrant, Triton, and API
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-runner-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure local MLOps credentials
+        env:
+          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
+        run: |
+          test -n "$MLOPS_ENV_FILE"
+          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
+          chmod 600 .env.mlops
+
+      - name: Check runner prerequisites
+        run: ./scripts/self_hosted_runner_smoke.sh prerequisites
+
+      - name: Start local MLOps stack
+        if: ${{ inputs.start_stack }}
+        run: ./scripts/mlops_stack.sh up
+
+      - name: Check MLOps services
+        if: ${{ inputs.verify_services }}
+        run: ./scripts/self_hosted_runner_smoke.sh services
+
+      - name: Remove temporary credential file
+        if: ${{ always() }}
+        run: rm -f .env.mlops

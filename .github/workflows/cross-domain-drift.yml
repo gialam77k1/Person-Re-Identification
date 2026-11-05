@@ -1,0 +1,59 @@
+name: MSMT17 cross-domain drift
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_size:
+        description: Deterministic MSMT17 query sample size
+        required: true
+        default: "1000"
+      release_id:
+        description: Model release ID
+        required: true
+        default: market1501-vit-bnneck:v1-dvc
+
+permissions:
+  contents: read
+
+concurrency:
+  group: msmt17-cross-domain-drift
+  cancel-in-progress: false
+
+jobs:
+  detect-drift:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure local MLOps credentials
+        env:
+          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
+        run: |
+          test -n "$MLOPS_ENV_FILE"
+          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
+          chmod 600 .env.mlops
+
+      - name: Start serving stack
+        run: ./scripts/mlops_stack.sh up
+
+      - name: Capture MSMT17 embeddings and detect drift
+        env:
+          SAMPLE_SIZE: ${{ inputs.sample_size }}
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: ./scripts/cross_dataset_drift.sh
+
+      - name: Upload drift evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: msmt17-cross-domain-drift-${{ github.sha }}
+          path: |
+            artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json
+            artifacts/cross-domain/market1501-v1-on-msmt17/drift/msmt17_query_metadata.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove temporary credential file
+        if: ${{ always() }}
+        run: rm -f .env.mlops
