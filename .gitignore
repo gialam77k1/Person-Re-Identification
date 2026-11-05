@@ -12,6 +12,10 @@ env/
 ENV/
 .local/
 
+# Frontend dependencies and Next.js build output
+node_modules/
+.next/
+
 # Local data and experiment outputs. DVC pointer files remain visible to Git.
 datasets/**
 !datasets/**/
