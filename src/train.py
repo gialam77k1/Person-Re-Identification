@@ -36,6 +36,7 @@ from src.common.utils import (
 )
 from src.data.dataset import RandomIdentitySampler, build_dataset_splits, build_transforms
 from src.models.reid_model import build_model_from_config
+from src.models.transfer import load_transfer_checkpoint, set_vit_lower_blocks_trainable
 from src.reid.evaluation import (
     compute_distance_matrix,
     evaluate_market1501,
@@ -144,6 +145,20 @@ def set_backbone_trainable(model: torch.nn.Module, trainable: bool) -> None:
 
     for parameter in backbone.parameters():
         parameter.requires_grad = trainable
+
+
+def validate_training_dataset(config: dict, train_dataset) -> None:
+    expected_images = config["data"].get("expected_train_images")
+    expected_identities = config["data"].get("expected_train_identities")
+    if expected_images is not None and len(train_dataset) != int(expected_images):
+        raise ValueError(
+            f"Expected {expected_images} training images, received {len(train_dataset)}"
+        )
+    if expected_identities is not None and train_dataset.num_classes != int(expected_identities):
+        raise ValueError(
+            f"Expected {expected_identities} training identities, "
+            f"received {train_dataset.num_classes}"
+        )
 
 
 def train_one_epoch(
@@ -388,11 +403,39 @@ def run_training(config: dict) -> None:
         warnings.warn("AMP was requested but CUDA is not available. Training will run in FP32.")
 
     train_dataset, train_loader, query_loader, gallery_loader = build_loaders(config)
+    validate_training_dataset(config, train_dataset)
     model = build_model_from_config(
         config,
         num_classes=train_dataset.num_classes,
         pretrained=config["model"]["pretrained"],
     ).to(device)
+
+    transfer_config = config.get("transfer", {})
+    transfer_report: dict = {"enabled": False}
+    if transfer_config.get("enabled", False):
+        transfer_report = {
+            "enabled": True,
+            **load_transfer_checkpoint(
+                model,
+                transfer_config["base_checkpoint"],
+                device,
+                reset_classifier_heads=bool(
+                    transfer_config.get("reset_classifier_heads", True)
+                ),
+                expected_epoch=transfer_config.get("expected_checkpoint_epoch"),
+            ),
+        }
+        print(
+            "Loaded transfer checkpoint "
+            f"epoch {transfer_report['source_epoch']} with "
+            f"{transfer_report['loaded_backbone_tensors']} backbone tensors; "
+            "MSMT17 classifier heads remain newly initialized."
+        )
+
+    transfer_report_path = save_json(
+        transfer_report,
+        Path(config["artifacts"]["logs_dir"]) / "transfer_report.json",
+    )
 
     criterion = ReIDLoss(
         num_classes=train_dataset.num_classes,
@@ -410,6 +453,30 @@ def run_training(config: dict) -> None:
     scaler = amp.GradScaler(device.type, enabled=use_amp)
 
     freeze_backbone_epochs = max(0, int(config["train"].get("freeze_backbone_epochs", 0)))
+    progressive_config = config["train"].get("progressive_unfreeze", {})
+    progressive_enabled = bool(progressive_config.get("enabled", False))
+    if freeze_backbone_epochs > 0 and progressive_enabled:
+        raise ValueError(
+            "train.freeze_backbone_epochs and train.progressive_unfreeze cannot both be enabled"
+        )
+
+    frozen_lower_blocks = 0
+    full_unfreeze_epoch = 1
+    if progressive_enabled:
+        frozen_lower_blocks = int(progressive_config.get("freeze_lower_blocks", 0))
+        full_unfreeze_epoch = int(progressive_config.get("full_unfreeze_epoch", 1))
+        if full_unfreeze_epoch < 1 or full_unfreeze_epoch > int(config["train"]["epochs"]):
+            raise ValueError("progressive_unfreeze.full_unfreeze_epoch is outside the training range")
+        phase = set_vit_lower_blocks_trainable(
+            model,
+            frozen_lower_blocks=frozen_lower_blocks,
+        )
+        print(
+            "Progressive unfreeze enabled: "
+            f"{phase['frozen_lower_blocks']}/{phase['total_blocks']} lower ViT blocks frozen "
+            f"until epoch {full_unfreeze_epoch - 1}; "
+            f"{phase['trainable_upper_blocks']} upper blocks and ReID heads train immediately."
+        )
     if freeze_backbone_epochs > 0:
         set_backbone_trainable(model, False)
         print(
@@ -434,6 +501,7 @@ def run_training(config: dict) -> None:
         mlflow.log_artifact(config["config_path"], artifact_path="config")
         mlflow.log_artifact(str(effective_config_path), artifact_path="config")
         mlflow.log_artifact(str(mlflow_run_path), artifact_path="provenance")
+        mlflow.log_artifact(str(transfer_report_path), artifact_path="provenance")
         mlflow.log_params(
             {
                 "dataset": config["data"]["dataset"]["name"],
@@ -457,6 +525,9 @@ def run_training(config: dict) -> None:
                 "min_lr": config["train"].get("min_lr", 1e-6),
                 "warmup_epochs": config["train"].get("warmup_epochs", 0),
                 "freeze_backbone_epochs": freeze_backbone_epochs,
+                "progressive_unfreeze": progressive_enabled,
+                "frozen_lower_blocks": frozen_lower_blocks,
+                "full_unfreeze_epoch": full_unfreeze_epoch,
                 "grad_clip_norm": config["train"].get("grad_clip_norm", 0.0),
                 "embedding_dim": config["model"]["embedding_dim"],
                 "pretrained": config["model"]["pretrained"],
@@ -464,6 +535,10 @@ def run_training(config: dict) -> None:
                 "flip_test": config["evaluation"].get("flip_test", False),
                 "use_rerank": config["evaluation"].get("use_rerank", False),
                 "device": str(device),
+                "release_id": config.get("release", {}).get("id", ""),
+                "base_release_id": config.get("release", {}).get("base_release_id", ""),
+                "transfer_checkpoint": transfer_report.get("checkpoint", ""),
+                "transfer_checkpoint_epoch": transfer_report.get("source_epoch", ""),
             }
         )
 
@@ -487,6 +562,14 @@ def run_training(config: dict) -> None:
                     f"Backbone unfrozen at epoch {epoch}; "
                     "full-model fine-tuning is now enabled."
                 )
+            if progressive_enabled and epoch == full_unfreeze_epoch:
+                set_backbone_trainable(model, True)
+                print(
+                    f"All ViT blocks unfrozen at epoch {epoch}; "
+                    "full-model fine-tuning is now enabled with the backbone LR group."
+                )
+
+            lower_blocks_frozen = progressive_enabled and epoch < full_unfreeze_epoch
 
             train_metrics = train_one_epoch(
                 model,
@@ -504,9 +587,12 @@ def run_training(config: dict) -> None:
             epoch_metrics = {
                 "epoch": epoch,
                 "backbone_frozen": int(backbone_frozen),
+                "lower_blocks_frozen": int(lower_blocks_frozen),
+                "full_model_finetune": int(not backbone_frozen and not lower_blocks_frozen),
                 **train_metrics,
                 **eval_metrics,
                 "lr": float(optimizer.param_groups[0]["lr"]),
+                "head_lr": float(optimizer.param_groups[1]["lr"]),
             }
             history.append(epoch_metrics)
 
@@ -574,6 +660,9 @@ def run_training(config: dict) -> None:
             "run_slug": config["runtime"]["run_slug"],
             "run_root": config["runtime"]["run_root"],
             "dataset": config["data"]["dataset"]["name"],
+            "release_id": config.get("release", {}).get("id"),
+            "base_release_id": config.get("release", {}).get("base_release_id"),
+            "transfer": transfer_report,
             "best_epoch": max(history, key=lambda item: item["mAP"])["epoch"],
             "best_rank1": max(history, key=lambda item: item["mAP"])["rank1"],
             "best_rank5": max(history, key=lambda item: item["mAP"])["rank5"],
@@ -583,7 +672,8 @@ def run_training(config: dict) -> None:
             "best_mINP": max(history, key=lambda item: item["mAP"])["mINP"],
             "history": history,
         }
-        metrics_path = Path(config["artifacts"]["metrics_dir"]) / "metrics_v1.json"
+        metrics_filename = config["artifacts"].get("metrics_filename", "metrics_v1.json")
+        metrics_path = Path(config["artifacts"]["metrics_dir"]) / metrics_filename
         saved_metrics = save_json(summary, metrics_path)
         if mlflow_active:
             mlflow.log_metrics(

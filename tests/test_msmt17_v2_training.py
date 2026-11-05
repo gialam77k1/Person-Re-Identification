@@ -1,0 +1,131 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import yaml
+
+from src.models.transfer import is_task_head_parameter, set_vit_lower_blocks_trainable
+from src.validate_msmt17_v2_training import MINIMUM_FREE_BYTES, validate_inputs
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class FakeParameter:
+    def __init__(self) -> None:
+        self.requires_grad = True
+
+
+class FakeModule:
+    def __init__(self, count: int = 1) -> None:
+        self._parameters = [FakeParameter() for _ in range(count)]
+
+    def parameters(self):
+        return iter(self._parameters)
+
+
+class FakeEncoder(FakeModule):
+    def __init__(self) -> None:
+        super().__init__(0)
+        self.layers = [FakeModule() for _ in range(12)]
+        self.pos_embedding = FakeParameter()
+
+
+class FakeBackbone(FakeModule):
+    def __init__(self) -> None:
+        super().__init__(0)
+        self.conv_proj = FakeModule()
+        self.class_token = FakeParameter()
+        self.encoder = FakeEncoder()
+
+    def parameters(self):
+        yield from self.conv_proj.parameters()
+        yield self.class_token
+        yield self.encoder.pos_embedding
+        for layer in self.encoder.layers:
+            yield from layer.parameters()
+
+
+class FakeModel:
+    def __init__(self) -> None:
+        self.backbone = FakeBackbone()
+
+
+class MSMT17V2TrainingTest(unittest.TestCase):
+    def test_config_matches_approved_training_contract(self) -> None:
+        config = yaml.safe_load(
+            (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(config["release"]["id"], "market1501-msmt17-vit-bnneck:v2")
+        self.assertEqual(config["release"]["base_release_id"], "market1501-vit-bnneck:v1")
+        self.assertEqual(config["data"]["expected_train_images"], 30248)
+        self.assertEqual(config["data"]["expected_train_identities"], 1041)
+        self.assertEqual(config["transfer"]["expected_checkpoint_epoch"], 48)
+        self.assertTrue(config["transfer"]["reset_classifier_heads"])
+        self.assertFalse(config["model"]["pretrained"])
+        self.assertEqual(config["train"]["epochs"], 10)
+        self.assertEqual(config["train"]["progressive_unfreeze"]["freeze_lower_blocks"], 8)
+        self.assertEqual(config["train"]["progressive_unfreeze"]["full_unfreeze_epoch"], 3)
+        self.assertEqual(config["train"]["backbone_lr_factor"], 0.1)
+        self.assertEqual(config["train"]["warmup_epochs"], 2)
+        self.assertEqual(config["train"]["scheduler_type"], "cosine")
+        self.assertTrue(config["train"]["early_stopping"]["enabled"])
+
+    def test_progressive_phase_freezes_only_lower_vit_blocks(self) -> None:
+        model = FakeModel()
+        phase = set_vit_lower_blocks_trainable(model, frozen_lower_blocks=8)
+        self.assertEqual(
+            phase,
+            {"total_blocks": 12, "frozen_lower_blocks": 8, "trainable_upper_blocks": 4},
+        )
+        self.assertFalse(next(model.backbone.encoder.layers[0].parameters()).requires_grad)
+        self.assertTrue(next(model.backbone.encoder.layers[11].parameters()).requires_grad)
+        self.assertFalse(next(model.backbone.conv_proj.parameters()).requires_grad)
+        self.assertFalse(model.backbone.class_token.requires_grad)
+        self.assertFalse(model.backbone.encoder.pos_embedding.requires_grad)
+
+    def test_classifier_parameters_are_recognized_as_task_heads(self) -> None:
+        self.assertTrue(is_task_head_parameter("classifier.weight"))
+        self.assertTrue(is_task_head_parameter("auxiliary_classifiers.0.weight"))
+        self.assertFalse(is_task_head_parameter("backbone.encoder.layers.encoder_layer_0.mlp.0.weight"))
+
+    def test_preflight_accepts_approved_complete_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            decision = root / "decision.json"
+            checkpoint = root / "best_model.pth"
+            dataset = root / "MSMT17_V1"
+            dataset.mkdir()
+            decision.write_text(json.dumps({"status": "RETRAIN_APPROVED"}), encoding="utf-8")
+            checkpoint.write_bytes(b"checkpoint")
+            lines = [f"0000_00_00_{index:04d}.jpg {index % 1041}" for index in range(30248)]
+            (dataset / "list_train.txt").write_text("\n".join(lines), encoding="utf-8")
+
+            with patch("src.validate_msmt17_v2_training.shutil.disk_usage") as disk_usage:
+                disk_usage.return_value.free = MINIMUM_FREE_BYTES
+                result = validate_inputs(
+                    decision,
+                    checkpoint,
+                    dataset,
+                    root,
+                    require_cuda=False,
+                )
+
+            self.assertEqual(result["decision"], "RETRAIN_APPROVED")
+            self.assertEqual(result["train_images"], 30248)
+            self.assertEqual(result["train_identities"], 1041)
+
+    def test_local_training_script_has_valid_shell_syntax(self) -> None:
+        subprocess.run(
+            ["bash", "-n", str(ROOT / "scripts/train_msmt17_v2_local.sh")],
+            check=True,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
