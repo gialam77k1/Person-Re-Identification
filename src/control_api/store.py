@@ -105,7 +105,7 @@ class CycleStore:
                     dataset,
                     source_release,
                     target_release,
-                    CycleStatus.PENDING,
+                    CycleStatus.PENDING.value,
                     now,
                     now,
                 ),
@@ -113,7 +113,7 @@ class CycleStore:
             connection.executemany(
                 "INSERT INTO stages (cycle_id, name, position, status) VALUES (?, ?, ?, ?)",
                 [
-                    (cycle_id, name, position, StageStatus.PENDING)
+                    (cycle_id, name, position, StageStatus.PENDING.value)
                     for position, name in enumerate(PIPELINE_STAGES)
                 ],
             )
@@ -165,7 +165,7 @@ class CycleStore:
         ):
             if value is not None:
                 updates.append(f"{column} = ?")
-                values.append(str(value))
+                values.append(getattr(value, "value", value))
         values.append(cycle_id)
         with self._connect() as connection:
             cursor = connection.execute(
@@ -201,7 +201,7 @@ class CycleStore:
                     started_at = COALESCE(started_at, ?), finished_at = COALESCE(?, finished_at)
                 WHERE cycle_id = ? AND name = ?
                 """,
-                (status, progress_value, detail, started_at, finished_at, cycle_id, name),
+                (status.value, progress_value, detail, started_at, finished_at, cycle_id, name),
             )
             if cursor.rowcount != 1:
                 raise KeyError(f"{cycle_id}:{name}")
@@ -209,8 +209,8 @@ class CycleStore:
                 connection,
                 cycle_id,
                 "stage.updated",
-                f"{name}: {status}",
-                {"stage": name, "status": status, "progress": progress_value, "detail": detail},
+                f"{name}: {status.value}",
+                {"stage": name, "status": status.value, "progress": progress_value, "detail": detail},
             )
         return self.get_cycle(cycle_id)
 

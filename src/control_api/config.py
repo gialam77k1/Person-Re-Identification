@@ -35,6 +35,7 @@ class ControlSettings:
     public_minio_url: str
     public_qdrant_url: str
     public_github_actions_url: str
+    cors_origins: tuple[str, ...]
     allowed_datasets: tuple[str, ...]
 
     @classmethod
@@ -79,6 +80,13 @@ class ControlSettings:
             public_github_actions_url=_url(
                 "CONTROL_PUBLIC_GITHUB_ACTIONS_URL",
                 "https://github.com/gialam77k1/Person-Re-Identification/actions",
+            ),
+            cors_origins=tuple(
+                origin.strip()
+                for origin in os.getenv(
+                    "CONTROL_CORS_ORIGINS", "http://localhost:3001"
+                ).split(",")
+                if origin.strip()
             ),
             allowed_datasets=datasets,
         )

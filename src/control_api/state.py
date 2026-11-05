@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 
 
-class CycleStatus(StrEnum):
+class CycleStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     WAITING_APPROVAL = "WAITING_APPROVAL"
@@ -12,7 +12,7 @@ class CycleStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
-class StageStatus(StrEnum):
+class StageStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     WAITING_APPROVAL = "WAITING_APPROVAL"
