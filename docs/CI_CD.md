@@ -43,11 +43,34 @@ Workflow tạo check, còn branch protection là thiết lập cấp repository 
 Job validation và deployment cần máy Linux local có:
 
 - Docker Engine, Docker Compose và NVIDIA Container Toolkit.
+- `DOCKER_CONTEXT=default` trong `.env.mlops` nếu máy đồng thời cài Docker Desktop; context được chọn
+  phải có NVIDIA runtime (`docker --context default info`).
 - Conda environment `reid` đã cài `requirements.txt`.
 - Kết nối được MinIO/DVC remote, Triton, Qdrant và cổng API.
 - Quyền đọc GitHub Container Registry.
 
 Tạo GitHub Actions secret `MLOPS_ENV_FILE` chứa nội dung `.env.mlops`. Không đưa file này hoặc credential vào Git.
+
+Sau khi runner hiện trạng thái `Idle`, mở `Actions → Self-hosted runner smoke test → Run workflow`.
+Giữ `start_stack` và `verify_services` được bật cho lần chạy đầu. Workflow sẽ kiểm tra:
+
+- Git, Docker/Compose, Conda environment `reid`, DVC và NVIDIA driver.
+- `.env.mlops` được tạo tạm từ secret và không còn placeholder `change-me`.
+- Model repository hợp lệ trước khi bật stack.
+- PostgreSQL, MinIO, MLflow, Qdrant, Triton và inference API đều healthy.
+
+Có thể chạy cùng kiểm tra trực tiếp trên máy runner:
+
+```bash
+./scripts/self_hosted_runner_smoke.sh prerequisites
+./scripts/mlops_stack.sh up
+./scripts/self_hosted_runner_smoke.sh services
+```
+
+Workflow chỉ cho phép chạy thủ công để code từ pull request không tự động chạy trên máy local.
+File `.env.mlops` tạm được xóa ở bước cuối kể cả khi smoke test thất bại.
+Mount node-exporter dùng chế độ read-only tiêu chuẩn để chạy được trên cả Docker Engine native và
+Docker Desktop; không yêu cầu root mount propagation kiểu `rslave`.
 
 Tạo hai GitHub Environments:
 
@@ -112,4 +135,3 @@ conda run -n reid python src/release_deployment.py verify \
 ```
 
 Lệnh chỉ đọc và xác minh candidate, không deploy.
-

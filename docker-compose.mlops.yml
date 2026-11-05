@@ -8,7 +8,7 @@ services:
     env_file:
       - .env.mlops
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-15432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -266,7 +266,7 @@ services:
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      - /:/rootfs:ro,rslave
+      - /:/rootfs:ro
       - ${MONITORING_STORAGE_PATH:-../person-reid-monitoring}/textfile:/textfile:ro
     command:
       - --path.procfs=/host/proc
