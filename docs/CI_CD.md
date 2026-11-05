@@ -54,6 +54,7 @@ Tạo GitHub Actions secret `MLOPS_ENV_FILE` chứa nội dung `.env.mlops`. Kh�
 Sau khi runner hiện trạng thái `Idle`, mở `Actions → Self-hosted runner smoke test → Run workflow`.
 Giữ `start_stack` và `verify_services` được bật cho lần chạy đầu. Workflow sẽ kiểm tra:
 
+- Pull release serving được chọn từ DVC/MinIO vào checkout sạch của runner trước preflight.
 - Git, Docker/Compose, Conda environment `reid`, DVC và NVIDIA driver.
 - `.env.mlops` được tạo tạm từ secret và không còn placeholder `change-me`.
 - Model repository hợp lệ trước khi bật stack.

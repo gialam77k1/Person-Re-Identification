@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: true
+      release_slug:
+        description: DVC pipeline release directory required by Triton
+        required: true
+        type: string
+        default: market1501-vit-bnneck-v1-dvc
 
 permissions:
   contents: read
@@ -36,6 +41,11 @@ jobs:
           test -n "$MLOPS_ENV_FILE"
           printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
           chmod 600 .env.mlops
+
+      - name: Pull serving artifacts from DVC
+        env:
+          RELEASE_SLUG: ${{ inputs.release_slug }}
+        run: ./scripts/dvc_local.sh pull "artifacts/pipeline/${RELEASE_SLUG}"
 
       - name: Check runner prerequisites
         run: ./scripts/self_hosted_runner_smoke.sh prerequisites
