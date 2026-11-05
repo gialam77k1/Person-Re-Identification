@@ -56,6 +56,7 @@ Giữ `start_stack=false` và `verify_services=true`. Workflow chỉ kiểm tra 
 workspace bền vững; không dựng container hoặc bind mount từ checkout tạm của Actions. Chỉ bật
 `start_stack` khi chủ động chẩn đoán một checkout có thể bị xóa. Workflow sẽ kiểm tra:
 
+- Pull release serving được chọn từ DVC/MinIO vào checkout sạch của runner trước preflight.
 - Git, Docker/Compose, Conda environment `reid`, DVC và NVIDIA driver.
 - `.env.mlops` được tạo tạm từ secret và không còn placeholder `change-me`.
 - Model repository hợp lệ trước khi bật stack.

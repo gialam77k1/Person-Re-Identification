@@ -56,6 +56,19 @@ class SelfHostedRunnerSmokeTest(unittest.TestCase):
         self.assertIn("DOCKER_CONTEXT=default", installer)
         self.assertIn("DOCKER_HOST=unix:///var/run/docker.sock", installer)
 
+    def test_workflow_pulls_serving_release_before_preflight(self) -> None:
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/self-hosted-smoke.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        steps = workflow["jobs"]["smoke"]["steps"]
+        step_names = [step["name"] for step in steps]
+        pull_index = step_names.index("Pull serving artifacts from DVC")
+        preflight_index = step_names.index("Check runner prerequisites")
+        self.assertLess(pull_index, preflight_index)
+        self.assertIn("inputs.release_slug", steps[pull_index]["env"]["RELEASE_SLUG"])
+        self.assertIn("scripts/dvc_local.sh pull", steps[pull_index]["run"])
+
 
 if __name__ == "__main__":
     unittest.main()
