@@ -25,40 +25,11 @@ if ! command -v conda >/dev/null 2>&1; then
   exit 1
 fi
 
-conda run -n "${CONDA_ENV}" python - "${DECISION_PATH}" "${CHECKPOINT_PATH}" "${DATASET_PATH}" <<'PY'
-import json
-import shutil
-import sys
-from pathlib import Path
-
-import torch
-
-decision_path = Path(sys.argv[1])
-checkpoint_path = Path(sys.argv[2])
-dataset_path = Path(sys.argv[3])
-
-assert torch.cuda.is_available(), "CUDA không khả dụng"
-assert decision_path.is_file(), f"Thiếu retraining decision: {decision_path}"
-decision = json.loads(decision_path.read_text(encoding="utf-8"))
-assert decision.get("decision") == "RETRAIN_APPROVED", "Retraining gate chưa được phê duyệt"
-assert checkpoint_path.is_file(), f"Thiếu checkpoint v1: {checkpoint_path}"
-assert dataset_path.is_dir(), f"Thiếu MSMT17: {dataset_path}"
-
-train_lines = [
-    line for line in (dataset_path / "list_train.txt").read_text(encoding="utf-8").splitlines()
-    if line.strip()
-]
-assert len(train_lines) == 30248, f"MSMT17 train phải có 30248 ảnh, nhận {len(train_lines)}"
-train_ids = {int(line.split()[1]) for line in train_lines}
-assert len(train_ids) == 1041, f"MSMT17 train phải có 1041 ID, nhận {len(train_ids)}"
-
-free = shutil.disk_usage(".").free
-assert free >= 12 * 1024**3, f"Cần ít nhất 12 GiB trống, hiện còn {free / 1024**3:.1f} GiB"
-print("GPU:", torch.cuda.get_device_name(0))
-print("MSMT17 train:", len(train_lines), "ảnh /", len(train_ids), "ID")
-print("Retraining gate:", decision["decision"])
-print("Disk trống:", f"{free / 1024**3:.1f} GiB")
-PY
+conda run -n "${CONDA_ENV}" python src/validate_msmt17_v2_training.py \
+  --decision "${DECISION_PATH}" \
+  --checkpoint "${CHECKPOINT_PATH}" \
+  --dataset "${DATASET_PATH}" \
+  --workspace .
 
 if [[ "${CHECK_ONLY}" == true ]]; then
   echo "MSMT17 v2 training preflight: OK"
