@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import numpy as np
-from tqdm import tqdm
 
 
 def extract_features(model, loader, device, flip_test: bool = False):
     import torch
     import torch.nn.functional as F
+    from tqdm import tqdm
 
     model.eval()
     features = []

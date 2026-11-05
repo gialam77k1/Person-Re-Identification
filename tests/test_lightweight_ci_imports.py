@@ -7,19 +7,22 @@ import unittest
 
 
 class LightweightCiImportsTest(unittest.TestCase):
-    def test_numpy_only_modules_import_without_torch(self) -> None:
+    def test_numpy_only_modules_import_without_training_dependencies(self) -> None:
         program = textwrap.dedent(
             """
             import importlib.abc
             import sys
 
-            class BlockTorch(importlib.abc.MetaPathFinder):
+            class BlockTrainingDependencies(importlib.abc.MetaPathFinder):
                 def find_spec(self, fullname, path=None, target=None):
-                    if fullname == "torch" or fullname.startswith("torch."):
-                        raise ModuleNotFoundError("torch intentionally blocked for lightweight CI")
+                    blocked = ("torch", "tqdm")
+                    if fullname in blocked or fullname.startswith(tuple(f"{name}." for name in blocked)):
+                        raise ModuleNotFoundError(
+                            f"{fullname} intentionally blocked for lightweight CI"
+                        )
                     return None
 
-            sys.meta_path.insert(0, BlockTorch())
+            sys.meta_path.insert(0, BlockTrainingDependencies())
             import src.capture_external_embeddings
             import src.reid.cross_domain
             """

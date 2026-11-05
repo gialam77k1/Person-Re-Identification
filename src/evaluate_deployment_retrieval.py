@@ -8,7 +8,6 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -67,6 +66,8 @@ def infer_dataset_embeddings(
     preserve_aspect_ratio: bool = False,
     workers: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+    from tqdm import tqdm
+
     selected_samples = dataset.samples[:max_samples] if max_samples > 0 else dataset.samples
     if workers < 1:
         raise ValueError("workers must be at least 1")
