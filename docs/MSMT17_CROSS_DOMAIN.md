@@ -91,6 +91,6 @@ REQUIRE_APPROVED=1 ./scripts/retraining_decision.sh gialam77k1
 ```
 
 Các trạng thái có thể có là `INSUFFICIENT_EVIDENCE`, `NO_RETRAIN`, `REVIEW_REQUIRED` và
-`RETRAIN_APPROVED`. Chỉ trạng thái cuối mới cho phép chạy cấu hình retrain MSMT17 10 epoch.
+`RETRAIN_APPROVED`. Chỉ trạng thái cuối mới cho phép chạy cấu hình retrain MSMT17 tối đa 20 epoch.
 Tên người duyệt trong CLI là audit metadata; khi tự động hóa CI/CD cần kết hợp GitHub Environment
 required reviewer để GitHub xác thực danh tính người duyệt.

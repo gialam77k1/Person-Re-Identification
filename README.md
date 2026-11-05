@@ -234,6 +234,9 @@ Metrics, alert thresholds, embedding sampling và drift workflow được mô t�
 Đánh giá cross-domain model v1 trên MSMT17, DVC revision và cách chạy full/smoke được mô tả tại
 [`docs/MSMT17_CROSS_DOMAIN.md`](docs/MSMT17_CROSS_DOMAIN.md).
 
+Cấu hình transfer learning, progressive unfreeze và cách train model v2 local được mô tả tại
+[`docs/MSMT17_V2_TRAINING.md`](docs/MSMT17_V2_TRAINING.md).
+
 ## Model release v1
 
 - Release ID: `market1501-vit-bnneck:v1`
