@@ -43,6 +43,9 @@ class SelfHostedRunnerSmokeTest(unittest.TestCase):
         self.assertEqual(job_env["DOCKER_CONTEXT"], "default")
         self.assertEqual(job_env["DOCKER_HOST"], "unix:///var/run/docker.sock")
 
+        checkout_step = workflow["jobs"]["smoke"]["steps"][0]
+        self.assertEqual(checkout_step["uses"], "actions/checkout@v5")
+
     def test_workflow_cleans_up_temporary_environment_file(self) -> None:
         workflow_text = (ROOT / ".github/workflows/self-hosted-smoke.yml").read_text(encoding="utf-8")
         self.assertIn("secrets.MLOPS_ENV_FILE", workflow_text)

@@ -35,7 +35,7 @@ jobs:
       DOCKER_HOST: unix:///var/run/docker.sock
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure local MLOps credentials
         env:
