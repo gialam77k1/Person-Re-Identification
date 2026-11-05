@@ -14,6 +14,12 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
     def test_local_script_has_valid_shell_syntax(self) -> None:
         subprocess.run(["bash", "-n", str(ROOT / "scripts/cross_dataset_drift.sh")], check=True)
 
+    def test_script_pulls_missing_inputs_separately(self) -> None:
+        script = (ROOT / "scripts/cross_dataset_drift.sh").read_text(encoding="utf-8")
+        self.assertIn("pull datasets/MSMT17_V1.dvc", script)
+        self.assertIn("pull extract_reference", script)
+        self.assertNotIn('pull datasets/MSMT17_V1.dvc "${REFERENCE}"', script)
+
     def test_workflow_is_manual_and_uses_self_hosted_linux(self) -> None:
         workflow = yaml.load(
             (ROOT / ".github/workflows/cross-domain-drift.yml").read_text(encoding="utf-8"),

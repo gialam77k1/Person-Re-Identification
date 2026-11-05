@@ -45,6 +45,10 @@ so sánh với reference embeddings Market-1501 của model v1:
 SAMPLE_SIZE=1000 ./scripts/cross_dataset_drift.sh
 ```
 
+Nếu dataset và reference embeddings đã có ở local, script dùng trực tiếp các artifact đã
+version hóa. Nếu thiếu, từng target được phục hồi riêng từ DVC để tránh quét/pull lại dataset
+126 nghìn file không cần thiết.
+
 Các kiểm tra gồm centroid cosine distance, standardized mean shift, norm mean delta và KS statistic.
 Ngưỡng nằm trong `configs/drift_detection.yaml`. Kết quả `DRIFT` là tín hiệu domain shift cần kết hợp
 với metric cross-domain; nó không tự động cho phép retrain hay promote model.

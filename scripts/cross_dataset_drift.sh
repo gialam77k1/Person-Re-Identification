@@ -14,7 +14,16 @@ CURRENT="${OUTPUT_ROOT}/msmt17_query_embeddings.npy"
 
 cd "${PROJECT_ROOT}"
 curl --fail --silent --max-time 5 "${TRITON_URL}/v2/health/ready" >/dev/null
-./scripts/dvc_local.sh pull datasets/MSMT17_V1.dvc "${REFERENCE}"
+
+# Avoid an expensive 126k-file remote comparison when both versioned inputs are
+# already materialized. Pull missing targets separately because mixing a .dvc
+# directory target and a dvc.yaml stage output triggers a DVC path error.
+if [[ ! -d datasets/MSMT17_V1 ]]; then
+  ./scripts/dvc_local.sh pull datasets/MSMT17_V1.dvc
+fi
+if [[ ! -f "${REFERENCE}" ]]; then
+  ./scripts/dvc_local.sh pull extract_reference
+fi
 
 conda run --no-capture-output -n reid python src/capture_external_embeddings.py \
   --config configs/msmt17_v1_evaluation.yaml \
