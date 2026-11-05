@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Query
+import secrets
+
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.control_api.config import ControlSettings
 from src.control_api.github_actions import GitHubActionsClient, WorkflowDispatchError
 from src.control_api.lifecycle import InvalidTransitionError, LifecycleController
 from src.control_api.overview import OverviewService
-from src.control_api.schemas import ActorRequest, CycleCreate, CycleCreateResponse, EventListResponse
+from src.control_api.progress import ProgressService
+from src.control_api.schemas import (
+    ActorRequest,
+    CycleCreate,
+    CycleCreateResponse,
+    EventListResponse,
+    StageUpdateRequest,
+)
+from src.control_api.state import StageStatus
 from src.control_api.store import CycleStore
 
 
@@ -23,6 +33,7 @@ def create_app(
     lifecycle_service = lifecycle or LifecycleController(
         configured, cycle_store, GitHubActionsClient(configured)
     )
+    progress_service = ProgressService(cycle_store)
     api = FastAPI(
         title="Person ReID MLOps Control API",
         version="0.1.0",
@@ -77,6 +88,14 @@ def create_app(
             last_event_id=events[-1]["id"] if events else after_id,
         )
 
+    @api.get("/control/cycles/{cycle_id}/audit")
+    async def get_audit(cycle_id: str) -> dict:
+        try:
+            cycle_store.get_cycle(cycle_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Cycle not found") from exc
+        return {"audit": cycle_store.audit_entries(cycle_id)}
+
     @api.post("/control/cycles", response_model=CycleCreateResponse)
     async def create_cycle(request: CycleCreate) -> CycleCreateResponse:
         if request.dataset not in configured.allowed_datasets:
@@ -107,6 +126,31 @@ def create_app(
     @api.post("/control/cycles/{cycle_id}/rollback")
     async def rollback(cycle_id: str, request: ActorRequest) -> dict:
         return _lifecycle_action(lifecycle_service.rollback, cycle_id, request.actor)
+
+    @api.post("/control/cycles/{cycle_id}/stages/{stage}")
+    async def update_stage(
+        cycle_id: str,
+        stage: str,
+        request: StageUpdateRequest,
+        x_control_callback_token: str = Header(default=""),
+    ) -> dict:
+        if not secrets.compare_digest(
+            x_control_callback_token, configured.callback_token
+        ):
+            raise HTTPException(status_code=401, detail="Invalid callback token")
+        try:
+            return progress_service.update(
+                cycle_id,
+                stage,
+                StageStatus(request.status),
+                progress=request.progress,
+                detail=request.detail,
+                metrics=request.metrics,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Cycle or stage not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return api
 

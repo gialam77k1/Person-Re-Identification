@@ -75,6 +75,36 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(invalid.status_code, 422)
         self.assertEqual((await self.request("GET", "/control/cycles/missing")).status_code, 404)
 
+    async def test_runner_callback_requires_token_and_updates_live_progress(self) -> None:
+        created = await self.request(
+            "POST",
+            "/control/cycles",
+            json={"dataset": "MSMT17", "idempotency_key": "callback-cycle", "actor": "tester"},
+        )
+        cycle_id = created.json()["cycle"]["id"]
+        payload = {
+            "status": "RUNNING",
+            "progress": 0.35,
+            "detail": "Epoch 7/20",
+            "metrics": {"epoch": 7, "mAP": 0.42},
+        }
+        unauthorized = await self.request(
+            "POST", f"/control/cycles/{cycle_id}/stages/train_v2", json=payload
+        )
+        updated = await self.request(
+            "POST",
+            f"/control/cycles/{cycle_id}/stages/train_v2",
+            json=payload,
+            headers={"X-Control-Callback-Token": "change-me-control-callback-token"},
+        )
+
+        self.assertEqual(unauthorized.status_code, 401)
+        self.assertEqual(updated.status_code, 200)
+        train = next(stage for stage in updated.json()["stages"] if stage["name"] == "train_v2")
+        self.assertEqual(train["progress"], 0.35)
+        events = (await self.request("GET", f"/control/cycles/{cycle_id}/events")).json()["events"]
+        self.assertEqual(events[-1]["kind"], "stage.metrics")
+
 
 if __name__ == "__main__":
     unittest.main()

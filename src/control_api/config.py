@@ -36,6 +36,7 @@ class ControlSettings:
     public_qdrant_url: str
     public_github_actions_url: str
     cors_origins: tuple[str, ...]
+    callback_token: str
     allowed_datasets: tuple[str, ...]
 
     @classmethod
@@ -87,6 +88,9 @@ class ControlSettings:
                     "CONTROL_CORS_ORIGINS", "http://localhost:3001"
                 ).split(",")
                 if origin.strip()
+            ),
+            callback_token=os.getenv(
+                "CONTROL_CALLBACK_TOKEN", "change-me-control-callback-token"
             ),
             allowed_datasets=datasets,
         )

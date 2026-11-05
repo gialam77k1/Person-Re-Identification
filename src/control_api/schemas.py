@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -25,3 +25,10 @@ class EventListResponse(BaseModel):
 
 class ActorRequest(BaseModel):
     actor: str = Field(min_length=1, max_length=100)
+
+
+class StageUpdateRequest(BaseModel):
+    status: Literal["PENDING", "RUNNING", "WAITING_APPROVAL", "PASS", "FAIL", "SKIPPED"]
+    progress: float | None = Field(default=None, ge=0.0, le=1.0)
+    detail: str | None = Field(default=None, max_length=2000)
+    metrics: dict[str, float | int | str | bool | None] = Field(default_factory=dict)
