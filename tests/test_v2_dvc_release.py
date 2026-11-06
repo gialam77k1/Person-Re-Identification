@@ -20,8 +20,10 @@ class V2DVCReleaseTest(unittest.TestCase):
     def test_manifest_contains_required_release_lineage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            checkpoint = root / "best.pth"; checkpoint.write_bytes(b"checkpoint")
-            onnx = root / "model.onnx"; onnx.write_bytes(b"onnx")
+            checkpoint = root / "best.pth"
+            checkpoint.write_bytes(b"checkpoint")
+            onnx = root / "model.onnx"
+            onnx.write_bytes(b"onnx")
             (root / "model.onnx.data").write_bytes(b"weights")
             arrays = {
                 "reference_embeddings": ("emb.npy", np.tile(np.eye(1, 512, dtype=np.float32), (10, 1))),
