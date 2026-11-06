@@ -121,7 +121,7 @@ class LifecycleController:
                 "evidence_artifact": str(evidence["artifact_name"]),
                 "drift_report": "evidence/drift_report.json",
                 "evaluation_report": "evidence/evaluation_report.json",
-                "decision": "evidence/decision.json",
+                "decision": "evidence/approved_decision.json",
                 "decision_sha256": decision_sha256,
             },
         )

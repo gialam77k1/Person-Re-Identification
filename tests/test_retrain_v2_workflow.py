@@ -21,6 +21,8 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertEqual(job["runs-on"], ["self-hosted", "linux"])
         self.assertIn("run-id: ${{ inputs.evidence_run_id }}", self.text)
         self.assertIn("retraining_evidence.py verify", self.text)
+        self.assertIn("verify_approved_decision.py", self.text)
+        self.assertIn("/retraining-decision", self.text)
 
     def test_workflow_preflights_trains_evaluates_and_gates(self) -> None:
         for command in (
@@ -36,6 +38,7 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("--alias candidate", self.text)
         self.assertNotIn("--alias champion", self.text)
         self.assertNotIn("deploy production", self.text.lower())
+        self.assertNotIn("retraining_decision.sh", self.text)
 
     def test_large_models_are_not_uploaded_as_actions_artifacts(self) -> None:
         artifact_section = self.text.split("name: msmt17-v2-retraining-reports", 1)[1]

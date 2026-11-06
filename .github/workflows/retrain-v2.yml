@@ -6,9 +6,6 @@ on:
       cycle_id:
         description: Control Center cycle ID
         required: true
-      approved_by:
-        description: Retraining approver
-        required: true
       source_release:
         description: Source model release
         required: true
@@ -31,7 +28,10 @@ on:
         description: Evaluation report path inside the downloaded artifact
         required: true
       decision:
-        description: Decision path inside the downloaded artifact
+        description: Destination path for the approved Control API decision
+        required: true
+      decision_sha256:
+        description: Canonical SHA256 of the approved decision
         required: true
 
 permissions:
@@ -88,13 +88,20 @@ jobs:
           --dataset-pointer datasets/MSMT17_V1.dvc
           --base-checkpoint "${BASE_CHECKPOINT}"
 
-      - name: Verify approved decision
-        env:
-          REQUIRE_APPROVED: "1"
-          DRIFT_REPORT: ${{ inputs.drift_report }}
-          EVALUATION_REPORT: ${{ inputs.evaluation_report }}
-          OUTPUT: evidence/approved_decision.json
-        run: ./scripts/retraining_decision.sh "${{ inputs.approved_by }}"
+      - name: Fetch and verify approved decision from Control API
+        run: |
+          curl --fail --silent --show-error \
+            -H "X-Control-Callback-Token: ${CONTROL_CALLBACK_TOKEN}" \
+            "${CONTROL_API_URL}/control/cycles/${{ inputs.cycle_id }}/retraining-decision" \
+            --output "${{ inputs.decision }}"
+          python src/verify_approved_decision.py \
+            --decision "${{ inputs.decision }}" \
+            --evidence-manifest evidence/evidence_manifest.json \
+            --decision-sha256 "${{ inputs.decision_sha256 }}" \
+            --cycle-id "${{ inputs.cycle_id }}" \
+            --source-release "${{ inputs.source_release }}" \
+            --dataset "${{ inputs.dataset }}" \
+            --target-epochs 20
 
       - name: Preflight model v2 training
         env:
