@@ -116,10 +116,13 @@ jobs:
           ./scripts/train_msmt17_v2_local.sh
 
       - name: Mark training complete
-        run: >-
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS
-          --progress 1 --detail "Model v2 training completed"
-          --metrics-file "${V2_ROOT}/logs/mlflow_run.json"
+        run: |
+          conda run --no-capture-output -n reid python src/validate_v2_training_completion.py \
+            --run-root "${V2_ROOT}" \
+            --output "${V2_ROOT}/logs/training_completion_report.json"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS \
+            --progress 1 --detail "Model v2 training completed and artifact gate passed" \
+            --metrics-file "${V2_ROOT}/logs/training_completion_report.json"
 
       - name: Evaluate model v2
         run: |

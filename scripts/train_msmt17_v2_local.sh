@@ -59,9 +59,9 @@ if [[ "${CHECK_ONLY}" == true ]]; then
 fi
 
 if [[ -e "${RUN_ROOT}" ]]; then
-  if [[ -f "${RUN_ROOT}/checkpoints/best_model.pth" \
-    && -f "${RUN_ROOT}/metrics/metrics_v2.json" \
-    && -f "${RUN_ROOT}/logs/mlflow_run.json" ]]; then
+  if conda run -n "${CONDA_ENV}" python src/validate_v2_training_completion.py \
+    --run-root "${RUN_ROOT}" \
+    --output "${RUN_ROOT}/logs/training_completion_report.json" >/dev/null 2>&1; then
     echo "Run v2 hoàn chỉnh đã tồn tại; tái sử dụng artifact thay vì ghi đè."
     exit 0
   fi
