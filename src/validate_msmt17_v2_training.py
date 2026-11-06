@@ -11,6 +11,98 @@ import yaml
 EXPECTED_TRAIN_IMAGES = 30248
 EXPECTED_TRAIN_IDENTITIES = 1041
 MINIMUM_FREE_BYTES = 12 * 1024**3
+EXPECTED_RELEASE_ID = "market1501-msmt17-vit-bnneck:v2"
+EXPECTED_BASE_RELEASE_ID = "market1501-vit-bnneck:v1-dvc"
+EXPECTED_DATASET = "msmt17"
+EXPECTED_DATASET_VERSION = "MSMT17_V1"
+EXPECTED_CHECKPOINT_EPOCH = 48
+EXPECTED_EPOCHS = 20
+
+
+def validate_training_contract(config: dict, decision: dict) -> None:
+    release = config.get("release", {})
+    data = config.get("data", {})
+    dataset = data.get("dataset", {})
+    transfer = config.get("transfer", {})
+    train = config.get("train", {})
+    progressive = train.get("progressive_unfreeze", {})
+    early_stopping = train.get("early_stopping", {})
+
+    expected_values = {
+        "release.id": (release.get("id"), EXPECTED_RELEASE_ID),
+        "release.base_release_id": (
+            release.get("base_release_id"),
+            EXPECTED_BASE_RELEASE_ID,
+        ),
+        "data.dataset.name": (str(dataset.get("name", "")).lower(), EXPECTED_DATASET),
+        "data.dataset.version": (dataset.get("version"), EXPECTED_DATASET_VERSION),
+        "data.expected_train_images": (
+            data.get("expected_train_images"),
+            EXPECTED_TRAIN_IMAGES,
+        ),
+        "data.expected_train_identities": (
+            data.get("expected_train_identities"),
+            EXPECTED_TRAIN_IDENTITIES,
+        ),
+        "transfer.expected_checkpoint_epoch": (
+            transfer.get("expected_checkpoint_epoch"),
+            EXPECTED_CHECKPOINT_EPOCH,
+        ),
+        "train.epochs": (train.get("epochs"), EXPECTED_EPOCHS),
+        "train.progressive_unfreeze.freeze_lower_blocks": (
+            progressive.get("freeze_lower_blocks"),
+            8,
+        ),
+        "train.progressive_unfreeze.full_unfreeze_epoch": (
+            progressive.get("full_unfreeze_epoch"),
+            3,
+        ),
+        "train.warmup_epochs": (train.get("warmup_epochs"), 2),
+        "train.scheduler_type": (str(train.get("scheduler_type", "")).lower(), "cosine"),
+        "train.early_stopping.monitor": (
+            early_stopping.get("monitor"),
+            "mAP",
+        ),
+        "train.early_stopping.patience": (
+            early_stopping.get("patience"),
+            3,
+        ),
+    }
+    for field, (actual, expected) in expected_values.items():
+        if actual != expected:
+            raise ValueError(
+                f"Training contract mismatch for {field}: expected {expected!r}, received {actual!r}"
+            )
+
+    required_flags = {
+        "transfer.enabled": transfer.get("enabled"),
+        "transfer.reset_classifier_heads": transfer.get("reset_classifier_heads"),
+        "train.progressive_unfreeze.enabled": progressive.get("enabled"),
+        "train.early_stopping.enabled": early_stopping.get("enabled"),
+    }
+    for field, enabled in required_flags.items():
+        if enabled is not True:
+            raise ValueError(f"Training contract requires {field}=true")
+
+    if int(train.get("freeze_backbone_epochs", -1)) != 0:
+        raise ValueError("Training contract requires train.freeze_backbone_epochs=0")
+    if float(train.get("backbone_lr_factor", -1)) != 0.1:
+        raise ValueError("Training contract requires train.backbone_lr_factor=0.1")
+
+    decision_values = {
+        "base_release_id": EXPECTED_BASE_RELEASE_ID,
+        "target_dataset": EXPECTED_DATASET,
+        "target_dataset_version": EXPECTED_DATASET_VERSION,
+        "target_epochs": EXPECTED_EPOCHS,
+    }
+    for field, expected in decision_values.items():
+        actual = decision.get(field)
+        if field == "target_dataset":
+            actual = str(actual or "").lower()
+        if actual != expected:
+            raise ValueError(
+                f"Approved decision mismatch for {field}: expected {expected!r}, received {actual!r}"
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,6 +133,7 @@ def validate_inputs(
     if not config_path.is_file():
         raise FileNotFoundError(f"Missing v2 training config: {config_path}")
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    validate_training_contract(config, decision)
     configured_epochs = int(config.get("train", {}).get("epochs", 0))
     approved_epochs = int(decision.get("target_epochs", 0))
     if configured_epochs != approved_epochs:

@@ -6,6 +6,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,6 +21,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def load_metrics(inline: str, metrics_file: str | None) -> dict:
+    metrics = json.loads(inline)
+    if metrics_file:
+        file_metrics = json.loads(Path(metrics_file).read_text(encoding="utf-8"))
+        file_metrics.update(metrics)
+        return file_metrics
+    return metrics
+
+
 def main() -> int:
     args = parse_args()
     if args.cycle_id in {"", "manual"}:
@@ -31,11 +41,7 @@ def main() -> int:
         print("ERROR: CONTROL_CALLBACK_TOKEN is required", file=sys.stderr)
         return 1
     try:
-        metrics = (
-            json.loads(open(args.metrics_file, encoding="utf-8").read())
-            if args.metrics_file
-            else json.loads(args.metrics)
-        )
+        metrics = load_metrics(args.metrics, args.metrics_file)
         payload = json.dumps(
             {
                 "status": args.status,

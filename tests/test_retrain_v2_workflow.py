@@ -21,12 +21,16 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertEqual(job["runs-on"], ["self-hosted", "linux"])
         self.assertIn("run-id: ${{ inputs.evidence_run_id }}", self.text)
         self.assertIn("retraining_evidence.py verify", self.text)
+        self.assertIn("verify_approved_decision.py", self.text)
+        self.assertIn("/retraining-decision", self.text)
 
     def test_workflow_preflights_trains_evaluates_and_gates(self) -> None:
         for command in (
             "train_msmt17_v2_local.sh --check",
             "train_msmt17_v2_local.sh",
-            "evaluate_msmt17_v2.sh",
+            "evaluate_v2_dual_domain.sh",
+            "catastrophic_forgetting_gate.py",
+            "log_v2_evaluations_mlflow.py",
             "retraining_validation_gate.py",
             "register_retraining_candidate.py",
         ):
@@ -36,14 +40,35 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("--alias candidate", self.text)
         self.assertNotIn("--alias champion", self.text)
         self.assertNotIn("deploy production", self.text.lower())
+        self.assertNotIn("retraining_decision.sh", self.text)
+
+    def test_full_v2_release_gate_runs_before_candidate_registration(self) -> None:
+        repro = self.text.index("repro v2_package_triton")
+        registration = self.text.index("register_retraining_candidate.py")
+        self.assertLess(repro, registration)
+        self.assertIn("V2_PIPELINE_ROOT", self.text)
+        self.assertIn("parity/metrics/onnx_parity.json", self.text)
+        self.assertIn("${V2_PIPELINE_ROOT}/release/validation_report.json", self.text)
 
     def test_large_models_are_not_uploaded_as_actions_artifacts(self) -> None:
         artifact_section = self.text.split("name: msmt17-v2-retraining-reports", 1)[1]
         self.assertNotIn("*.pth\n", artifact_section)
         self.assertIn("dvc_local.sh push", self.text)
 
+    def test_forgetting_thresholds_are_versioned_outside_workflow(self) -> None:
+        self.assertIn("configs/catastrophic_forgetting.yaml", self.text)
+        self.assertNotIn("rank1_min_absolute_gain:", self.text)
+        self.assertIn("model_releases/market1501-vit-bnneck/v1/model_manifest.json", self.text)
+        self.assertIn("evaluation_msmt17.json", self.text)
+        self.assertIn("evaluation_market1501.json", self.text)
+
     def test_changed_shell_scripts_have_valid_syntax(self) -> None:
-        for script in ("train_msmt17_v2_local.sh", "evaluate_msmt17_v2.sh"):
+        for script in (
+            "train_msmt17_v2_local.sh",
+            "evaluate_msmt17_v2.sh",
+            "evaluate_market1501_v2.sh",
+            "evaluate_v2_dual_domain.sh",
+        ):
             subprocess.run(["bash", "-n", str(ROOT / "scripts" / script)], check=True)
 
 

@@ -18,6 +18,12 @@ def validate_report(path: Path, release_id: str, dataset: str) -> dict:
             raise ValueError(f"Evaluation metric {key} is missing or non-finite.")
     if int(report.get("valid_queries", 0)) <= 0:
         raise ValueError("Evaluation did not produce any valid queries.")
+    for key in ("query_count", "gallery_count"):
+        if int(report.get(key, 0)) <= 0:
+            raise ValueError(f"Evaluation {key} is missing or invalid.")
+    for key in ("checkpoint_sha256", "git_commit", "dataset_dvc_revision"):
+        if not str(report.get(key, "")).strip():
+            raise ValueError(f"Evaluation lineage field {key} is missing.")
     return report
 
 

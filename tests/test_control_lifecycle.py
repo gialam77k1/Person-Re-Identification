@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import hashlib
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -14,10 +16,62 @@ from src.control_api.store import CycleStore
 class FakeDispatcher:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, str]]] = []
+        self.artifact: dict[str, bytes] = {}
 
     def dispatch(self, workflow: str, inputs: dict[str, str]) -> dict:
         self.calls.append((workflow, inputs))
         return {"workflow": workflow, "inputs": inputs}
+
+    def download_artifact(self, run_id: str, artifact_name: str) -> dict[str, bytes]:
+        return self.artifact
+
+
+def approval_artifact(cycle_id: str) -> dict[str, bytes]:
+    release = "market1501-vit-bnneck:v1-dvc"
+    drift = json.dumps({"release_id": release, "drift_detected": True}).encode()
+    evaluation = json.dumps(
+        {
+            "release_id": release,
+            "dataset": "msmt17",
+            "num_query_samples": 11659,
+            "num_gallery_samples": 82161,
+            "query_coverage": 1.0,
+            "embedding_dim": 512,
+            "embeddings_finite": True,
+            "dataset_dvc_revision": "abc.dir",
+            "rank1": 0.01,
+            "mAP": 0.01,
+        }
+    ).encode()
+    review = json.dumps({"status": "REVIEW_REQUIRED"}).encode()
+    manifest = {
+        "cycle_id": cycle_id,
+        "workflow_run_id": "12345",
+        "release_id": release,
+        "dataset": "msmt17",
+        "dataset_dvc_revision": "abc.dir",
+        "source_git_commit": "deadbeef",
+        "evidence": {
+            "drift_report": {
+                "path": "drift_report.json",
+                "sha256": hashlib.sha256(drift).hexdigest(),
+            },
+            "evaluation_report": {
+                "path": "evaluation_report.json",
+                "sha256": hashlib.sha256(evaluation).hexdigest(),
+            },
+            "retraining_decision": {
+                "path": "decision.json",
+                "sha256": hashlib.sha256(review).hexdigest(),
+            },
+        },
+    }
+    return {
+        "evidence_manifest.json": json.dumps(manifest).encode(),
+        "drift_report.json": drift,
+        "evaluation_report.json": evaluation,
+        "decision.json": review,
+    }
 
 
 class LifecycleControllerTest(unittest.TestCase):
@@ -53,7 +107,7 @@ class LifecycleControllerTest(unittest.TestCase):
     def test_approval_requires_waiting_state_and_dispatches_retraining(self) -> None:
         cycle, _ = self.lifecycle.start(
             dataset="MSMT17",
-            source_release="v1",
+            source_release="market1501-vit-bnneck:v1-dvc",
             target_release="v2",
             idempotency_key="lifecycle-2",
             actor="tester",
@@ -77,6 +131,7 @@ class LifecycleControllerTest(unittest.TestCase):
                 },
             },
         )
+        self.dispatcher.artifact = approval_artifact(cycle["id"])
         approved = self.lifecycle.approve_retraining(cycle["id"], "reviewer")
 
         self.assertEqual(approved["status"], CycleStatus.RUNNING.value)
@@ -86,6 +141,9 @@ class LifecycleControllerTest(unittest.TestCase):
         dispatched = self.dispatcher.calls[-1][1]
         self.assertEqual(dispatched["evidence_run_id"], "12345")
         self.assertEqual(dispatched["dataset"], "MSMT17")
+        self.assertEqual(len(dispatched["decision_sha256"]), 64)
+        stored = self.store.get_retraining_decision(cycle["id"])
+        self.assertEqual(stored["decision"]["status"], "RETRAIN_APPROVED")
 
     def test_approval_rejects_cycle_without_uploaded_evidence(self) -> None:
         cycle, _ = self.lifecycle.start(

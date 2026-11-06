@@ -1,0 +1,53 @@
+project_name: person-reid-mlops
+experiment_name: market1501-msmt17-vit-bnneck-v2
+seed: 42
+device: auto
+num_workers: 2
+
+release:
+  id: market1501-msmt17-vit-bnneck:v2
+  base_release_id: market1501-vit-bnneck:v1-dvc
+
+data:
+  source_type: image_folder
+  dataset:
+    name: msmt17
+    version: MSMT17_V1
+  location:
+    root: datasets/MSMT17_V1
+    splits:
+      train: train
+      query: test
+      gallery: test
+    list_files:
+      train: datasets/MSMT17_V1/list_train.txt
+      query: datasets/MSMT17_V1/list_query.txt
+      gallery: datasets/MSMT17_V1/list_gallery.txt
+  image_height: 224
+  image_width: 224
+  preserve_aspect_ratio: true
+  batch_size: 16
+  eval_batch_size: 32
+  instances_per_identity: 4
+
+model:
+  variant: vit
+  backbone: vit_b_16
+  pretrained: false
+  embedding_dim: 512
+  dropout: 0.1
+  use_local_branch: true
+  num_local_stripes: 4
+  local_branch_dropout: 0.1
+  use_bnneck: true
+  use_auxiliary_branch_loss: true
+
+evaluation:
+  use_rerank: false
+  flip_test: false
+  dataset_pointer: datasets/MSMT17_V1.dvc
+  report_filename: evaluation_msmt17.json
+
+artifacts:
+  root: artifacts
+  run_root: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/msmt17

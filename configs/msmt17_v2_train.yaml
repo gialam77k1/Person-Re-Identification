@@ -89,6 +89,7 @@ augmentation:
 evaluation:
   use_rerank: false
   flip_test: false
+  dataset_pointer: datasets/MSMT17_V1.dvc
 
 logging:
   enable_mlflow: true

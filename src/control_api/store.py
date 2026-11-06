@@ -72,6 +72,13 @@ class CycleStore:
                     payload TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS retraining_decisions (
+                    cycle_id TEXT PRIMARY KEY REFERENCES cycles(id) ON DELETE CASCADE,
+                    status TEXT NOT NULL,
+                    decision_json TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -238,6 +245,38 @@ class CycleStore:
                 "SELECT * FROM audit_log WHERE cycle_id = ? ORDER BY id", (cycle_id,)
             ).fetchall()
         return [self._decode_payload(row) for row in rows]
+
+    def save_retraining_decision(
+        self, cycle_id: str, decision: dict[str, Any], sha256: str
+    ) -> dict[str, Any]:
+        encoded = json.dumps(decision, sort_keys=True, separators=(",", ":"))
+        created_at = utc_now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO retraining_decisions (
+                    cycle_id, status, decision_json, sha256, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(cycle_id) DO UPDATE SET
+                    status = excluded.status,
+                    decision_json = excluded.decision_json,
+                    sha256 = excluded.sha256,
+                    created_at = excluded.created_at
+                """,
+                (cycle_id, decision["status"], encoded, sha256, created_at),
+            )
+        return self.get_retraining_decision(cycle_id)
+
+    def get_retraining_decision(self, cycle_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM retraining_decisions WHERE cycle_id = ?", (cycle_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(cycle_id)
+        result = dict(row)
+        result["decision"] = json.loads(result.pop("decision_json"))
+        return result
 
     @staticmethod
     def _decode_payload(row: sqlite3.Row) -> dict[str, Any]:

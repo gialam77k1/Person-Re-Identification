@@ -96,6 +96,20 @@ def create_app(
             raise HTTPException(status_code=404, detail="Cycle not found") from exc
         return {"audit": cycle_store.audit_entries(cycle_id)}
 
+    @api.get("/control/cycles/{cycle_id}/retraining-decision")
+    async def get_retraining_decision(
+        cycle_id: str,
+        x_control_callback_token: str = Header(default=""),
+    ) -> dict:
+        if not secrets.compare_digest(
+            x_control_callback_token, configured.callback_token
+        ):
+            raise HTTPException(status_code=401, detail="Invalid callback token")
+        try:
+            return cycle_store.get_retraining_decision(cycle_id)["decision"]
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Retraining decision not found") from exc
+
     @api.post("/control/cycles", response_model=CycleCreateResponse)
     async def create_cycle(request: CycleCreate) -> CycleCreateResponse:
         if request.dataset not in configured.allowed_datasets:

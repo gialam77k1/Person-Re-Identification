@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.common.config import load_runtime_config
+from src.common.mlflow_utils import get_dvc_revision, get_git_commit
 from src.common.utils import (
     configure_torch_home,
     ensure_dir,
@@ -20,6 +22,22 @@ from src.common.utils import (
     tee_output,
 )
 from src.models.reid_model import build_model_from_config
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def repository_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(ROOT))
+    except ValueError:
+        return str(resolved)
 
 
 class EmbeddingExportWrapper(torch.nn.Module):
@@ -106,16 +124,46 @@ def run_export_command(config: dict, checkpoint_path: str, output_path: str, ops
             },
         )
 
+    checkpoint_resolved = resolve_path(checkpoint_path)
+    external_weights_path = export_path.with_name(f"{export_path.name}.data")
+    if not external_weights_path.is_file():
+        raise FileNotFoundError(
+            f"Expected ONNX external weights were not created: {external_weights_path}"
+        )
+    dataset_pointer = config.get("evaluation", {}).get("dataset_pointer")
+
     metadata = {
+        "schema_version": 2,
+        "release_id": config.get("release", {}).get("id"),
         "run_slug": config["runtime"]["run_slug"],
         "run_root": config["runtime"]["run_root"],
         "dataset": config["data"]["dataset"]["name"],
-        "checkpoint": str(Path(checkpoint_path).resolve()),
-        "onnx_path": str(export_path.resolve()),
+        "dataset_revision": get_dvc_revision(dataset_pointer) if dataset_pointer else None,
+        "git_commit": get_git_commit(),
+        "checkpoint": repository_path(checkpoint_resolved),
+        "checkpoint_sha256": sha256_file(checkpoint_resolved),
+        "onnx_path": repository_path(export_path),
+        "external_weights_path": repository_path(external_weights_path),
+        "files": {
+            "graph": {
+                "path": repository_path(export_path),
+                "sha256": sha256_file(export_path),
+                "size_bytes": export_path.stat().st_size,
+            },
+            "external_weights": {
+                "path": repository_path(external_weights_path),
+                "sha256": sha256_file(external_weights_path),
+                "size_bytes": external_weights_path.stat().st_size,
+            },
+        },
         "opset": opset,
+        "input_name": "images",
         "input_shape": [1, 3, height, width],
+        "input_dtype": "float32",
         "preserve_aspect_ratio": bool(config["data"].get("preserve_aspect_ratio", False)),
         "output_name": "embeddings",
+        "output_shape": ["batch_size", int(config["model"]["embedding_dim"])],
+        "output_dtype": "float32",
         "embedding_dim": int(config["model"]["embedding_dim"]),
         "loaded_epoch": checkpoint.get("epoch"),
         "model_variant": config["model"].get("variant", "vit"),
