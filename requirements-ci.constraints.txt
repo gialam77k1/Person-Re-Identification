@@ -9,4 +9,5 @@ prometheus-client==0.26.0
 python-multipart==0.0.32
 PyYAML==6.0.3
 ruff==0.17.1
+tqdm==4.70.1
 uvicorn==0.54.0
