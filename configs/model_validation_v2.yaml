@@ -1,0 +1,31 @@
+schema_version: 1
+release_id: market1501-msmt17-vit-bnneck:v2
+
+# These thresholds are versioned before v2 evaluation. Do not relax them after
+# inspecting a candidate's results merely to turn a FAIL into a PASS.
+quality:
+  msmt17:
+    rank1_min: 0.30
+    rank5_min: 0.50
+    map_min: 0.15
+    minp_min: 0.02
+  market1501:
+    rank1_min: 0.87
+    rank5_min: 0.92
+    map_min: 0.80
+    minp_min: 0.64
+
+onnx_parity:
+  cosine_min: 0.9999
+  max_abs_error: 0.0001
+
+contract:
+  input_name: images
+  input_dtype: float32
+  input_layout: NCHW
+  input_shape: [1, 3, 224, 224]
+  output_name: embeddings
+  output_dtype: float32
+  embedding_dim: 512
+  preserve_aspect_ratio: true
+  reference_l2_norm_atol: 0.0001
