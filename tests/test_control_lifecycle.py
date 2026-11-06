@@ -65,12 +65,38 @@ class LifecycleControllerTest(unittest.TestCase):
         self.store.update_stage(
             cycle["id"], "retraining_approval", StageStatus.WAITING_APPROVAL
         )
+        self.store.record_event(
+            cycle["id"],
+            "stage.metrics",
+            "Evidence uploaded",
+            {
+                "stage": "evaluate_v1",
+                "metrics": {
+                    "workflow_run_id": "12345",
+                    "artifact_name": f"mlops-evidence-{cycle['id']}",
+                },
+            },
+        )
         approved = self.lifecycle.approve_retraining(cycle["id"], "reviewer")
 
         self.assertEqual(approved["status"], CycleStatus.RUNNING.value)
         train = next(stage for stage in approved["stages"] if stage["name"] == "train_v2")
         self.assertEqual(train["status"], StageStatus.RUNNING.value)
         self.assertEqual(self.dispatcher.calls[-1][0], self.settings.retraining_workflow)
+        dispatched = self.dispatcher.calls[-1][1]
+        self.assertEqual(dispatched["evidence_run_id"], "12345")
+        self.assertEqual(dispatched["dataset"], "MSMT17")
+
+    def test_approval_rejects_cycle_without_uploaded_evidence(self) -> None:
+        cycle, _ = self.lifecycle.start(
+            dataset="MSMT17", source_release="v1", target_release="v2",
+            idempotency_key="lifecycle-missing-evidence", actor="tester",
+        )
+        self.store.update_cycle(cycle["id"], status=CycleStatus.WAITING_APPROVAL)
+        self.store.update_stage(cycle["id"], "retraining_approval", StageStatus.WAITING_APPROVAL)
+        with self.assertRaisesRegex(InvalidTransitionError, "evidence"):
+            self.lifecycle.approve_retraining(cycle["id"], "reviewer")
+        self.assertEqual(len(self.dispatcher.calls), 1)
 
 
 if __name__ == "__main__":

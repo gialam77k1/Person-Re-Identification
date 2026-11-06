@@ -96,7 +96,7 @@ jobs:
             --base-manifest artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json \
             --source-commit "${{ github.sha }}" \
             --workflow-run-id "${{ github.run_id }}" \
-            --output artifacts/cross-domain/market1501-v1-on-msmt17/retraining/evidence_manifest.json
+            --output artifacts/cross-domain/market1501-v1-on-msmt17/retraining/bundle/evidence_manifest.json
 
       - name: Mark evidence ready for approval
         run: >-
@@ -109,12 +109,7 @@ jobs:
         with:
           name: mlops-evidence-${{ inputs.cycle_id }}
           path: |
-            artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json
-            artifacts/cross-domain/market1501-v1-on-msmt17/drift/msmt17_query_metadata.json
-            artifacts/cross-domain/market1501-v1-on-msmt17/metrics/v1_on_msmt17.json
-            artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json
-            artifacts/cross-domain/market1501-v1-on-msmt17/retraining/evidence_manifest.json
-            artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json
+            artifacts/cross-domain/market1501-v1-on-msmt17/retraining/bundle/
           if-no-files-found: error
           retention-days: 30
 

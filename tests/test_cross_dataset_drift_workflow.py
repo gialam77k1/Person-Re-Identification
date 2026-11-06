@@ -32,7 +32,7 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
     def test_workflow_uploads_drift_evidence(self) -> None:
         workflow_text = (ROOT / ".github/workflows/cross-domain-drift.yml").read_text(encoding="utf-8")
         self.assertIn("drift_report.json", workflow_text)
-        self.assertIn("msmt17_query_metadata.json", workflow_text)
+        self.assertIn("evidence_manifest.json", workflow_text)
         self.assertIn("retention-days: 30", workflow_text)
         self.assertIn("retraining_evidence.py build", workflow_text)
         self.assertIn("mlops-evidence-${{ inputs.cycle_id }}", workflow_text)

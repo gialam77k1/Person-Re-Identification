@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,10 +26,14 @@ def git_commit() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 
 
-def artifact(path: Path) -> dict[str, Any]:
+def artifact(path: Path, bundle_dir: Path, name: str) -> dict[str, Any]:
     if not path.is_file() or path.stat().st_size == 0:
         raise ValueError(f"Evidence file is missing or empty: {path}")
-    return {"path": path.name, "size_bytes": path.stat().st_size, "sha256": sha256_file(path)}
+    destination = bundle_dir / name
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    if path.resolve() != destination.resolve():
+        shutil.copy2(path, destination)
+    return {"path": name, "size_bytes": destination.stat().st_size, "sha256": sha256_file(destination)}
 
 
 def build_bundle(
@@ -66,6 +71,7 @@ def build_bundle(
     )
     if not checkpoint:
         raise ValueError("Base manifest is missing the PyTorch checkpoint lineage.")
+    bundle_dir = output_path.parent
     payload = {
         "schema_version": 1,
         "cycle_id": cycle_id,
@@ -76,14 +82,13 @@ def build_bundle(
         "dataset": dataset.lower(),
         "dataset_dvc_revision": dvc_revision,
         "base_checkpoint": checkpoint,
-        "base_manifest": artifact(base_manifest_path),
+        "base_manifest": artifact(base_manifest_path, bundle_dir, "base_model_manifest.json"),
         "evidence": {
-            "drift_report": artifact(drift_path),
-            "evaluation_report": artifact(evaluation_path),
-            "retraining_decision": artifact(decision_path),
+            "drift_report": artifact(drift_path, bundle_dir, "drift_report.json"),
+            "evaluation_report": artifact(evaluation_path, bundle_dir, "evaluation_report.json"),
+            "retraining_decision": artifact(decision_path, bundle_dir, "decision.json"),
         },
     }
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return payload
 

@@ -15,9 +15,28 @@ on:
       target_release:
         description: Target model release
         required: true
+      dataset:
+        description: Target dataset
+        required: true
+      evidence_run_id:
+        description: GitHub run that produced immutable pre-approval evidence
+        required: true
+      evidence_artifact:
+        description: Exact pre-approval artifact name
+        required: true
+      drift_report:
+        description: Drift report path inside the downloaded artifact
+        required: true
+      evaluation_report:
+        description: Evaluation report path inside the downloaded artifact
+        required: true
+      decision:
+        description: Decision path inside the downloaded artifact
+        required: true
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: retrain-msmt17-v2
@@ -35,6 +54,23 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Download exact pre-approval evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.evidence_artifact }}
+          run-id: ${{ inputs.evidence_run_id }}
+          github-token: ${{ github.token }}
+          path: evidence
+
+      - name: Verify evidence lineage and checksums
+        run: >-
+          python src/retraining_evidence.py verify
+          --manifest evidence/evidence_manifest.json
+          --cycle-id "${{ inputs.cycle_id }}"
+          --release-id "${{ inputs.source_release }}"
+          --dataset "${{ inputs.dataset }}"
+          --current-commit "${{ github.sha }}"
+
       - name: Configure local MLOps credentials
         env:
           MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
@@ -46,6 +82,9 @@ jobs:
       - name: Verify approved decision
         env:
           REQUIRE_APPROVED: "1"
+          DRIFT_REPORT: ${{ inputs.drift_report }}
+          EVALUATION_REPORT: ${{ inputs.evaluation_report }}
+          OUTPUT: evidence/approved_decision.json
         run: ./scripts/retraining_decision.sh "${{ inputs.approved_by }}"
 
       - name: Preflight model v2 training

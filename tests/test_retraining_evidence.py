@@ -34,7 +34,7 @@ class RetrainingEvidenceTest(unittest.TestCase):
         (self.root / name).write_text(json.dumps(payload), encoding="utf-8")
 
     def test_build_and_verify_are_bound_to_cycle_commit_and_checksums(self) -> None:
-        manifest = self.root / "evidence_manifest.json"
+        manifest = self.root / "bundle" / "evidence_manifest.json"
         build_bundle(
             cycle_id="cycle-1", release_id=self.release, dataset="MSMT17",
             drift_path=self.root / "drift.json", evaluation_path=self.root / "evaluation.json",
@@ -49,14 +49,16 @@ class RetrainingEvidenceTest(unittest.TestCase):
         self.assertEqual(verified["dataset_dvc_revision"], "abc.dir")
 
     def test_verify_rejects_tampered_evidence(self) -> None:
-        manifest = self.root / "evidence_manifest.json"
+        manifest = self.root / "bundle" / "evidence_manifest.json"
         build_bundle(
             cycle_id="cycle-1", release_id=self.release, dataset="MSMT17",
             drift_path=self.root / "drift.json", evaluation_path=self.root / "evaluation.json",
             decision_path=self.root / "decision.json", base_manifest_path=self.root / "base.json",
             output_path=manifest, source_commit="deadbeef",
         )
-        self._write("decision.json", {"status": "NO_RETRAIN"})
+        (manifest.parent / "decision.json").write_text(
+            json.dumps({"status": "NO_RETRAIN"}), encoding="utf-8"
+        )
         with self.assertRaisesRegex(ValueError, "checksum"):
             verify_bundle(
                 manifest, cycle_id="cycle-1", release_id=self.release, dataset="MSMT17",

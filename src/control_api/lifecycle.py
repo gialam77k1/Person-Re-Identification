@@ -76,6 +76,11 @@ class LifecycleController:
             StageStatus.PENDING.value,
         }:
             raise InvalidTransitionError("Cycle is not waiting for retraining approval.")
+        evidence = self._preapproval_evidence(cycle_id)
+        if not evidence.get("workflow_run_id") or not evidence.get("artifact_name"):
+            raise InvalidTransitionError(
+                "Pre-approval evidence is missing its workflow run ID or artifact name."
+            )
         dispatch = self.dispatcher.dispatch(
             self.settings.retraining_workflow,
             {
@@ -83,9 +88,20 @@ class LifecycleController:
                 "approved_by": actor,
                 "source_release": cycle["source_release"],
                 "target_release": cycle["target_release"],
+                "dataset": cycle["dataset"],
+                "evidence_run_id": str(evidence["workflow_run_id"]),
+                "evidence_artifact": str(evidence["artifact_name"]),
+                "drift_report": "evidence/drift_report.json",
+                "evaluation_report": "evidence/evaluation_report.json",
+                "decision": "evidence/decision.json",
             },
         )
-        self.store.audit(cycle_id, "retraining.approve", actor, dispatch)
+        self.store.audit(
+            cycle_id,
+            "retraining.approve",
+            actor,
+            {"dispatch": dispatch, "evidence": evidence},
+        )
         self.store.update_stage(
             cycle_id, "retraining_approval", StageStatus.PASS, progress=1.0, detail=f"Approved by {actor}"
         )
@@ -95,6 +111,15 @@ class LifecycleController:
         self.store.update_cycle(cycle_id, status=CycleStatus.RUNNING)
         self.store.record_event(cycle_id, "workflow.dispatched", "Retraining workflow dispatched", dispatch)
         return self.store.get_cycle(cycle_id)
+
+    def _preapproval_evidence(self, cycle_id: str) -> dict[str, Any]:
+        for event in reversed(self.store.events(cycle_id)):
+            if event["kind"] != "stage.metrics":
+                continue
+            payload = event.get("payload", {})
+            if payload.get("stage") == "evaluate_v1":
+                return dict(payload.get("metrics", {}))
+        return {}
 
     def promote(self, cycle_id: str, actor: str) -> dict[str, Any]:
         cycle = self.store.get_cycle(cycle_id)
