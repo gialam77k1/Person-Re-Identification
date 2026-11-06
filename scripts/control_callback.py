@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--progress", type=float)
     parser.add_argument("--detail", default="")
     parser.add_argument("--metrics", default="{}")
+    parser.add_argument("--metrics-file")
     return parser.parse_args()
 
 
@@ -30,7 +31,11 @@ def main() -> int:
         print("ERROR: CONTROL_CALLBACK_TOKEN is required", file=sys.stderr)
         return 1
     try:
-        metrics = json.loads(args.metrics)
+        metrics = (
+            json.loads(open(args.metrics_file, encoding="utf-8").read())
+            if args.metrics_file
+            else json.loads(args.metrics)
+        )
         payload = json.dumps(
             {
                 "status": args.status,

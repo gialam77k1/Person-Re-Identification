@@ -25,6 +25,7 @@ def main() -> int:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--validation-report", required=True)
     parser.add_argument("--alias", default="candidate")
+    parser.add_argument("--output")
     args = parser.parse_args()
     manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
     report = json.loads(Path(args.validation_report).read_text(encoding="utf-8"))
@@ -39,7 +40,12 @@ def main() -> int:
     if version is None:
         version = client.create_model_version(name=model_name, source=f"runs:/{run_id}/checkpoints", run_id=run_id, tags={"release.id": release_id, "validation.status": "PASS"})
     client.set_registered_model_alias(model_name, args.alias, version.version)
-    print(json.dumps({"registered_model": model_name, "version": str(version.version), "alias": args.alias, "release_id": release_id, "run_id": run_id}, indent=2))
+    result = {"registered_model": model_name, "version": str(version.version), "alias": args.alias, "release_id": release_id, "run_id": run_id}
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(result, indent=2))
     return 0
 
 

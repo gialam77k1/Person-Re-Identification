@@ -50,9 +50,19 @@ jobs:
       CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
       CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8090' }}
       CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
+      V2_ROOT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2
+      BASE_CHECKPOINT: artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Configure local MLOps credentials
+        env:
+          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
+        run: |
+          test -n "$MLOPS_ENV_FILE"
+          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
+          chmod 600 .env.mlops
 
       - name: Download exact pre-approval evidence
         uses: actions/download-artifact@v4
@@ -62,7 +72,12 @@ jobs:
           github-token: ${{ github.token }}
           path: evidence
 
-      - name: Verify evidence lineage and checksums
+      - name: Materialize versioned dataset and base checkpoint
+        run: |
+          ./scripts/dvc_local.sh pull datasets/MSMT17_V1.dvc
+          ./scripts/dvc_local.sh pull artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth.dvc
+
+      - name: Verify Git, DVC, dataset and checkpoint lineage
         run: >-
           python src/retraining_evidence.py verify
           --manifest evidence/evidence_manifest.json
@@ -70,14 +85,8 @@ jobs:
           --release-id "${{ inputs.source_release }}"
           --dataset "${{ inputs.dataset }}"
           --current-commit "${{ github.sha }}"
-
-      - name: Configure local MLOps credentials
-        env:
-          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
-        run: |
-          test -n "$MLOPS_ENV_FILE"
-          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
-          chmod 600 .env.mlops
+          --dataset-pointer datasets/MSMT17_V1.dvc
+          --base-checkpoint "${BASE_CHECKPOINT}"
 
       - name: Verify approved decision
         env:
@@ -88,31 +97,82 @@ jobs:
         run: ./scripts/retraining_decision.sh "${{ inputs.approved_by }}"
 
       - name: Preflight model v2 training
+        env:
+          DECISION_PATH: evidence/approved_decision.json
         run: ./scripts/train_msmt17_v2_local.sh --check
 
       - name: Train model v2
-        run: ./scripts/train_msmt17_v2_local.sh
+        env:
+          DECISION_PATH: evidence/approved_decision.json
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 RUNNING --detail "Approved retraining started"
+          ./scripts/train_msmt17_v2_local.sh
 
       - name: Mark training complete
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS
           --progress 1 --detail "Model v2 training completed"
+          --metrics-file "${V2_ROOT}/logs/mlflow_run.json"
+
+      - name: Evaluate model v2
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating v2 on MSMT17"
+          ./scripts/evaluate_msmt17_v2.sh
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 PASS --progress 1 --detail "MSMT17 v2 evaluation completed" --metrics-file "${V2_ROOT}/metrics/evaluation_latest.json"
+
+      - name: Run retraining validation gate
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release RUNNING --detail "Checking approval, lineage, MLflow and quality gates"
+          python src/retraining_validation_gate.py \
+            --evidence evidence/evidence_manifest.json \
+            --decision evidence/approved_decision.json \
+            --training-metrics "${V2_ROOT}/metrics/metrics_v2.json" \
+            --evaluation-metrics "${V2_ROOT}/metrics/evaluation_latest.json" \
+            --baseline-evaluation "${{ inputs.evaluation_report }}" \
+            --mlflow-run "${V2_ROOT}/logs/mlflow_run.json" \
+            --config configs/msmt17_v2_train.yaml \
+            --policy configs/retraining_validation.yaml \
+            --base-checkpoint "${BASE_CHECKPOINT}" \
+            --candidate-checkpoint "${V2_ROOT}/checkpoints/best_model.pth" \
+            --git-commit "${{ github.sha }}" \
+            --output "${V2_ROOT}/release/validation_report.json" \
+            --manifest-output "${V2_ROOT}/release/model_manifest.json"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release PASS --progress 1 --detail "Retraining validation gate PASS" --metrics-file "${V2_ROOT}/release/validation_report.json"
+
+      - name: Persist large candidate artifacts with DVC
+        run: |
+          ./scripts/dvc_local.sh add "${V2_ROOT}/checkpoints/best_model.pth" "${V2_ROOT}/checkpoints/last_model.pth"
+          ./scripts/dvc_local.sh push "${V2_ROOT}/checkpoints/best_model.pth.dvc" "${V2_ROOT}/checkpoints/last_model.pth.dvc"
+
+      - name: Register MLflow candidate alias
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate RUNNING --detail "Registering validated MLflow candidate"
+          conda run --no-capture-output -n reid python src/register_retraining_candidate.py \
+            --manifest "${V2_ROOT}/release/model_manifest.json" \
+            --validation-report "${V2_ROOT}/release/validation_report.json" \
+            --alias candidate \
+            --output "${V2_ROOT}/release/registration_result.json"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate PASS --progress 1 --detail "MLflow candidate alias assigned" --metrics-file "${V2_ROOT}/release/registration_result.json"
 
       - name: Upload training reports
         uses: actions/upload-artifact@v4
         with:
-          name: msmt17-v2-training-${{ inputs.cycle_id }}
+          name: msmt17-v2-retraining-reports-${{ inputs.cycle_id }}
           path: |
+            evidence/evidence_manifest.json
+            evidence/approved_decision.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/logs/*.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/metrics/*.json
+            artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/release/*.json
+            artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/checkpoints/*.dvc
           if-no-files-found: error
           retention-days: 30
 
       - name: Report training failure
         if: ${{ failure() }}
         run: >-
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
-          --detail "Retraining failed; inspect GitHub Actions and MLflow logs"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release FAIL
+          --detail "Retraining workflow failed; inspect GitHub Actions and MLflow logs"
 
       - name: Remove temporary credential file
         if: ${{ always() }}

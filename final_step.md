@@ -151,6 +151,11 @@ Gate hoàn thành:
 
 ## 2. Hoàn thiện workflow retraining khép kín
 
+**Trạng thái implementation: hoàn thành.** Workflow đã ràng buộc approval với evidence artifact theo
+`cycle_id`/GitHub run ID, xác minh checksum + Git/DVC lineage, chạy preflight → train → evaluate →
+validation, lưu checkpoint qua MLflow/DVC và chỉ gán alias `candidate` khi gate `PASS`. Cần chạy một
+cycle thật trên self-hosted GPU runner để nghiệm thu runtime.
+
 Tạo workflow retraining chạy trên self-hosted GPU runner. Sau khi workflow pre-approval hoàn thành,
 Control API giữ cycle ở `WAITING_APPROVAL`; nút `Approve Retraining` sẽ tạo decision artifact và tự
 kích hoạt workflow retraining. Các script bên dưới chỉ là implementation nội bộ và người vận hành
@@ -344,7 +349,8 @@ monitor → detect drift → approve → retrain → validate → deploy → mon
 - [ ] Toàn bộ v1 → drift → approval → retrain → v2 → staging thao tác được trên web, không cần
   terminal.
 - [ ] Không có secret trong frontend; mọi thao tác điều khiển đi qua Control API và có audit log.
-- [ ] Retraining được workflow self-hosted runner thực thi sau approval, không chỉ chạy tay.
+- [x] Retraining đã được triển khai bằng workflow self-hosted runner sau approval; còn cần chạy cycle
+  thật để nghiệm thu GPU/runtime.
 - [ ] MLflow truy ngược được model v2 về Git, DVC, config, metrics và artifact.
 - [ ] Validation gate ngăn model FAIL đi tiếp.
 - [ ] Staging test và benchmark PASS.

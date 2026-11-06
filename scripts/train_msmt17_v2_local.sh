@@ -3,10 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CONFIG_PATH="configs/msmt17_v2_train.yaml"
-DECISION_PATH="artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json"
-CHECKPOINT_PATH="artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth"
-DATASET_PATH="datasets/MSMT17_V1"
+CONFIG_PATH="${CONFIG_PATH:-configs/msmt17_v2_train.yaml}"
+DECISION_PATH="${DECISION_PATH:-artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth}"
+DATASET_PATH="${DATASET_PATH:-datasets/MSMT17_V1}"
 DATASET_DVC_PATH="datasets/MSMT17_V1.dvc"
 CHECKPOINT_DVC_PATH="artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth.dvc"
 RUN_ROOT="artifacts/msmt17/market1501-msmt17-vit-bnneck-v2"
@@ -59,6 +59,12 @@ if [[ "${CHECK_ONLY}" == true ]]; then
 fi
 
 if [[ -e "${RUN_ROOT}" ]]; then
+  if [[ -f "${RUN_ROOT}/checkpoints/best_model.pth" \
+    && -f "${RUN_ROOT}/metrics/metrics_v2.json" \
+    && -f "${RUN_ROOT}/logs/mlflow_run.json" ]]; then
+    echo "Run v2 hoàn chỉnh đã tồn tại; tái sử dụng artifact thay vì ghi đè."
+    exit 0
+  fi
   echo "Run root đã tồn tại: ${RUN_ROOT}" >&2
   echo "Không ghi đè artifact v2; hãy lưu hoặc đổi tên run hiện tại trước." >&2
   exit 1

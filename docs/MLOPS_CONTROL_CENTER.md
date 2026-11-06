@@ -21,11 +21,19 @@ Start
   → WAITING_APPROVAL
   → Approve Retraining
   → retrain-v2.yml
+  → verify evidence / approved decision / preflight
   → train-v2 với callback epoch/metrics
+  → evaluate-v2 / validation gate / DVC push
+  → MLflow alias candidate
 ```
 
-Các stage evaluation v2, validation, ONNX, registry và staging sẽ tiếp tục được nối vào workflow
-post-approval ở các giai đoạn tiếp theo; Control Center đã định nghĩa đầy đủ timeline và callback API.
+Workflow post-approval dừng sau alias `candidate`. Nó không được gán `champion` và không deploy
+production; export ONNX, parity, staging và production tiếp tục ở các gate sau của cycle.
+
+Evidence pre-approval được upload dưới tên `mlops-evidence-{cycle_id}`. Control API lưu chính xác
+GitHub run ID và artifact name, rồi chỉ dispatch retraining với bundle đó. Runner kiểm tra lại checksum,
+Git commit, DVC revision, dataset và checkpoint v1 trước khi chạy preflight/training. Report JSON nhỏ
+được lưu bằng GitHub Actions artifact; checkpoint v2 được lưu trong MLflow và DVC/MinIO.
 
 ## Cấu hình secret
 
@@ -69,6 +77,9 @@ Mở `http://localhost:3001`, chọn MSMT17 và bấm `Start MLOps lifecycle`.
 - Đóng trình duyệt không dừng cycle; state nằm ở backend và runner.
 - Start dùng idempotency key nên không dispatch trùng cycle cùng dataset/ngày/release.
 - Approval chỉ bật ở `WAITING_APPROVAL`.
+- Approval bị từ chối nếu cycle không có workflow run ID và evidence artifact bất biến.
+- Retraining có thể chạy lại an toàn: artifact v1 không bị ghi đè và run v2 hoàn chỉnh được tái sử dụng.
+- Chỉ validation `PASS` mới được gán alias `candidate`; workflow không có quyền tự gán `champion`.
 - Promote chỉ bật sau `staging_test=PASS`.
 - Callback runner phải gửi header `X-Control-Callback-Token` hợp lệ.
 - Production vẫn yêu cầu xác nhận; drift không tự động promote model.

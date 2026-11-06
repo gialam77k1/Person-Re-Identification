@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -100,6 +102,8 @@ def verify_bundle(
     release_id: str,
     dataset: str,
     current_commit: str | None = None,
+    dataset_pointer: Path | None = None,
+    base_checkpoint: Path | None = None,
 ) -> dict[str, Any]:
     manifest = read_json(manifest_path)
     expected = {
@@ -119,6 +123,18 @@ def verify_bundle(
     decision = read_json(decision_path)
     if decision.get("status") not in {"REVIEW_REQUIRED", "RETRAIN_APPROVED"}:
         raise ValueError(f"Invalid retraining decision: {decision.get('status')}")
+    if dataset_pointer is not None:
+        pointer = yaml.safe_load(dataset_pointer.read_text(encoding="utf-8"))
+        pointer_revision = pointer["outs"][0]["md5"]
+        if pointer_revision != manifest.get("dataset_dvc_revision"):
+            raise ValueError(
+                f"Dataset DVC revision mismatch: {pointer_revision!r} != "
+                f"{manifest.get('dataset_dvc_revision')!r}"
+            )
+    if base_checkpoint is not None:
+        expected_checkpoint = manifest.get("base_checkpoint", {}).get("sha256")
+        if not base_checkpoint.is_file() or sha256_file(base_checkpoint) != expected_checkpoint:
+            raise ValueError("Base checkpoint checksum does not match the approved evidence.")
     return manifest
 
 
@@ -142,6 +158,8 @@ def parse_args() -> argparse.Namespace:
     verify.add_argument("--release-id", required=True)
     verify.add_argument("--dataset", required=True)
     verify.add_argument("--current-commit")
+    verify.add_argument("--dataset-pointer")
+    verify.add_argument("--base-checkpoint")
     return parser.parse_args()
 
 
@@ -168,10 +186,12 @@ def main() -> int:
                 release_id=args.release_id,
                 dataset=args.dataset,
                 current_commit=args.current_commit,
+                dataset_pointer=Path(args.dataset_pointer) if args.dataset_pointer else None,
+                base_checkpoint=Path(args.base_checkpoint) if args.base_checkpoint else None,
             )
         print(json.dumps(payload, indent=2))
         return 0
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}")
         return 2
 
