@@ -38,9 +38,12 @@ giá trị drift và threshold. Một bản report cũng được log vào exper
 nhưng quyết định DRIFT luôn do `generate_drift_report.py` tạo trước khi gọi MLflow.
 
 Evidence pre-approval được upload dưới tên `mlops-evidence-{cycle_id}`. Control API lưu chính xác
-GitHub run ID và artifact name, rồi chỉ dispatch retraining với bundle đó. Runner kiểm tra lại checksum,
-Git commit, DVC revision, dataset và checkpoint v1 trước khi chạy preflight/training. Report JSON nhỏ
-được lưu bằng GitHub Actions artifact; checkpoint v2 được lưu trong MLflow và DVC/MinIO.
+GitHub run ID và artifact name. Khi người vận hành bấm Approve, Control API tải đúng artifact này,
+kiểm tra checksum, chạy decision policy, lưu decision `RETRAIN_APPROVED` cùng approver/thời gian/SHA256
+trong SQLite rồi mới dispatch retraining. Runner chỉ tải decision qua endpoint có callback token và
+không được tự tạo approval. Runner tiếp tục kiểm tra Git commit, DVC revision, dataset và checkpoint
+v1 trước preflight/training. Report JSON nhỏ được lưu bằng GitHub Actions artifact; checkpoint v2 được
+lưu trong MLflow và DVC/MinIO.
 
 ## Cấu hình secret
 
@@ -73,6 +76,7 @@ Mở `http://localhost:3001`, chọn MSMT17 và bấm `Start MLOps lifecycle`.
 | `GET` | `/control/cycles/{id}` | Timeline bền vững của một cycle |
 | `GET` | `/control/cycles/{id}/events` | Event và metrics phục vụ live polling |
 | `GET` | `/control/cycles/{id}/audit` | Approval/promotion/rollback audit log |
+| `GET` | `/control/cycles/{id}/retraining-decision` | Runner lấy decision đã duyệt; yêu cầu callback token |
 | `POST` | `/control/cycles` | Tạo cycle idempotent và dispatch pre-approval |
 | `POST` | `/control/cycles/{id}/approve-retraining` | Phê duyệt và dispatch retraining |
 | `POST` | `/control/cycles/{id}/promote` | Promote khi staging PASS |
@@ -85,6 +89,7 @@ Mở `http://localhost:3001`, chọn MSMT17 và bấm `Start MLOps lifecycle`.
 - Start dùng idempotency key nên không dispatch trùng cycle cùng dataset/ngày/release.
 - Approval chỉ bật ở `WAITING_APPROVAL`.
 - Approval bị từ chối nếu cycle không có workflow run ID và evidence artifact bất biến.
+- UI hiển thị drift/evaluation evidence trước khi bật nút approval và decision SHA256 sau khi duyệt.
 - Retraining có thể chạy lại an toàn: artifact v1 không bị ghi đè và run v2 hoàn chỉnh được tái sử dụng.
 - Chỉ validation `PASS` mới được gán alias `candidate`; workflow không có quyền tự gán `champion`.
 - Promote chỉ bật sau `staging_test=PASS`.

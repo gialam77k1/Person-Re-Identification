@@ -221,6 +221,12 @@ thế drift detector.
 
 ## 4. Gate phê duyệt retraining
 
+**Trạng thái implementation: hoàn thành.** Control API tải đúng GitHub evidence artifact theo run ID,
+xác minh checksum rồi chạy decision policy ở backend. Decision `RETRAIN_APPROVED` được lưu bền vững
+với approver, thời gian, model nguồn, dataset đích, giới hạn 20 epoch và checksum evidence. Runner
+chỉ được tải decision qua endpoint có callback token và phải xác minh SHA256 trước preflight; workflow
+không còn gọi `retraining_decision.sh` để tự phê duyệt.
+
 Decision gate kết hợp drift report và cross-domain evaluation. Trạng thái đầu tiên phải là
 `REVIEW_REQUIRED`; Control Center chuyển cycle sang `WAITING_APPROVAL` và hiển thị evidence cùng
 nút `Approve Retraining`. Khi người phụ trách bấm nút và xác nhận, Control API gọi decision gate ở

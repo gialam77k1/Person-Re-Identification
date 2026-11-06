@@ -87,6 +87,10 @@ export function PipelineControl() {
   }, [refreshCycle]);
 
   const metrics = useMemo(() => events.filter((event) => event.kind === "stage.metrics").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
+  const driftEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "detect_drift").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
+  const reviewEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "evaluate_v1").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
+  const approvedDecision = useMemo(() => events.filter((event) => event.kind === "retraining.decision_created").at(-1)?.payload, [events]);
+  const driftChecks = driftEvidence?.checks as Record<string, { value: number; maximum: number; passed: boolean }> | undefined;
   const stage = (name: string) => cycle?.stages.find((item) => item.name === name);
   const canApprove = cycle?.status === "WAITING_APPROVAL" && stage("retraining_approval")?.status === "WAITING_APPROVAL";
   const canPromote = cycle?.status === "WAITING_APPROVAL" && stage("staging_test")?.status === "PASS";
@@ -139,10 +143,21 @@ export function PipelineControl() {
             <div className="flex items-center justify-between"><p className="eyebrow">Cycle control</p>{cycle && <StatusPill status={cycle.status} />}</div>
             {cycle && <p className="mt-3 break-all font-mono text-[11px] text-slate-500">{cycle.id}</p>}
             <div className="mt-5 grid gap-2">
-              <button disabled={!canApprove || busy} onClick={() => action("approve-retraining", "Phê duyệt retraining model v2?")} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
+              <button disabled={!canApprove || busy} onClick={() => action("approve-retraining", `Phê duyệt retraining model v2 từ evidence ${String(reviewEvidence?.artifact_name ?? "chưa xác định")}?`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
               <button disabled={!canPromote || busy} onClick={() => action("promote", "Promote model candidate lên production?")} className="rounded-lg border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-bold text-teal-100 disabled:cursor-not-allowed disabled:opacity-30">Promote to Production</button>
               <button disabled={!cycle || busy} onClick={() => action("rollback", "Rollback production về model v1?")} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback to v1</button>
             </div>
+          </section>
+          <section className="panel rounded-2xl p-5">
+            <div className="flex items-center justify-between"><p className="eyebrow">Approval evidence</p>{Boolean(reviewEvidence?.status) && <StatusPill status={String(reviewEvidence?.status)} />}</div>
+            {driftEvidence ? <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Release</dt><dd className="mt-1 break-all font-mono text-sky-200">{String(driftEvidence.release_id)}</dd></div>
+              <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Drift</dt><dd className="mt-1 font-mono text-rose-200">{String(driftEvidence.drift_detected)}</dd></div>
+              <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Current samples</dt><dd className="mt-1 font-mono">{String(driftEvidence.current_samples)}</dd></div>
+              <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Reference samples</dt><dd className="mt-1 font-mono">{String(driftEvidence.reference_samples)}</dd></div>
+            </dl> : <p className="mt-4 text-sm text-slate-500">Evidence xuất hiện sau bước detect drift.</p>}
+            {driftChecks && <div className="mt-3 space-y-2">{Object.entries(driftChecks).map(([name, check]) => <div key={name} className="flex justify-between gap-3 text-[11px]"><span className="text-slate-400">{name}</span><span className={check.passed ? "font-mono text-teal-300" : "font-mono text-rose-300"}>{check.value.toFixed(4)} / {check.maximum}</span></div>)}</div>}
+            {approvedDecision && <div className="mt-4 rounded-lg border border-teal-300/20 bg-teal-300/5 p-3 text-xs"><p className="font-bold text-teal-200">{String(approvedDecision.status)}</p><p className="mt-1 text-slate-400">Approved by {String(approvedDecision.approved_by)} · {String(approvedDecision.approved_at)}</p><p className="mt-2 break-all font-mono text-[10px] text-slate-600">SHA256 {String(approvedDecision.decision_sha256)}</p></div>}
           </section>
           <section className="panel rounded-2xl p-5"><p className="eyebrow">Live metrics</p>{metrics ? <dl className="mt-4 grid grid-cols-2 gap-3">{Object.entries(metrics).map(([key, value]) => <div key={key} className="rounded-lg bg-[#09111b] p-3"><dt className="text-[10px] uppercase text-slate-500">{key}</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{String(value)}</dd></div>)}</dl> : <p className="mt-4 text-sm text-slate-500">Metrics sẽ xuất hiện khi runner gửi callback.</p>}</section>
           <section className="panel rounded-2xl p-5"><p className="eyebrow">Live events</p><div className="mt-4 max-h-80 space-y-3 overflow-auto">{events.slice().reverse().map((event) => <div key={event.id} className="border-l border-slate-700 pl-3"><p className="text-xs font-semibold text-slate-300">{event.message}</p><p className="mt-1 font-mono text-[10px] text-slate-600">{new Date(event.created_at).toLocaleString()}</p></div>)}</div></section>
