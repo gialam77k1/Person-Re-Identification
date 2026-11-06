@@ -51,6 +51,23 @@ class CycleStoreTest(unittest.TestCase):
         self.assertEqual(updated["stages"][0]["progress"], 0.25)
         self.assertEqual(self.store.events(cycle["id"])[-1]["payload"]["stage"], "validate_data")
 
+    def test_retraining_decision_is_persisted_with_checksum(self) -> None:
+        cycle, _ = self.store.create_cycle(
+            dataset="MSMT17",
+            source_release="v1",
+            target_release="v2",
+            idempotency_key="decision-store",
+            actor="tester",
+        )
+        saved = self.store.save_retraining_decision(
+            cycle["id"],
+            {"status": "RETRAIN_APPROVED", "approved_by": "reviewer"},
+            "a" * 64,
+        )
+        restored = self.store.get_retraining_decision(cycle["id"])
+        self.assertEqual(saved["sha256"], "a" * 64)
+        self.assertEqual(restored["decision"]["status"], "RETRAIN_APPROVED")
+
 
 if __name__ == "__main__":
     unittest.main()

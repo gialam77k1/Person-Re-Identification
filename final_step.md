@@ -221,6 +221,12 @@ thế drift detector.
 
 ## 4. Gate phê duyệt retraining
 
+**Trạng thái implementation: hoàn thành.** Control API tải đúng GitHub evidence artifact theo run ID,
+xác minh checksum rồi chạy decision policy ở backend. Decision `RETRAIN_APPROVED` được lưu bền vững
+với approver, thời gian, model nguồn, dataset đích, giới hạn 20 epoch và checksum evidence. Runner
+chỉ được tải decision qua endpoint có callback token và phải xác minh SHA256 trước preflight; workflow
+không còn gọi `retraining_decision.sh` để tự phê duyệt.
+
 Decision gate kết hợp drift report và cross-domain evaluation. Trạng thái đầu tiên phải là
 `REVIEW_REQUIRED`; Control Center chuyển cycle sang `WAITING_APPROVAL` và hiển thị evidence cùng
 nút `Approve Retraining`. Khi người phụ trách bấm nút và xác nhận, Control API gọi decision gate ở
@@ -232,6 +238,13 @@ một biến boolean tùy ý. Lệnh `scripts/retraining_decision.sh` chỉ đư
 thao tác vận hành hằng ngày.
 
 ## 5. Retrain model v2 tự động bằng self-hosted runner
+
+**Trạng thái implementation: hoàn thành.** Sau approval, workflow self-hosted tự preflight và train
+không cần lệnh terminal. Preflight khóa đúng training contract; mỗi epoch gửi loss, backbone/head LR,
+mAP, GPU, elapsed time, log gần nhất và link MLflow về Control Center. Completion gate chỉ cho stage
+`train_v2` PASS khi MLflow `FINISHED`, đủ sáu artifact, transfer đúng epoch 48/reset classifier,
+metrics hữu hạn, early-stop metadata hợp lệ và log không có CUDA/OOM. Việc sinh checkpoint v2 thật
+vẫn cần chạy một lifecycle trên GPU runner.
 
 Sau khi người dùng phê duyệt trên UI, Control API phải tiếp tục cycle và runner tự bắt đầu training;
 không yêu cầu chạy thêm lệnh trong terminal. Control Center chuyển sang màn hình training và cập
@@ -265,6 +278,13 @@ Early stopping trước epoch 20 là hợp lệ nếu epoch tốt nhất và ngu
 và `metrics_v2.json`.
 
 ## 6. Đánh giá v2 và kiểm tra catastrophic forgetting
+
+**Trạng thái implementation: hoàn thành.** Workflow đánh giá cùng SHA256 checkpoint v2 trên MSMT17
+và Market-1501, ghi Rank-1/Rank-5/mAP/mINP, query/gallery count, Git commit và DVC revision. Policy
+`configs/catastrophic_forgetting.yaml` được version hóa trước khi chạy: v2 phải tăng tối thiểu Rank-1
+`0,05` và mAP `0,03` trên MSMT17; mức giảm tuyệt đối tối đa trên Market-1501 lần lượt là Rank-1
+`0,05`, Rank-5 `0,03`, mAP `0,08`, mINP `0,10`. Cả hai report, policy và gate report được log
+vào đúng MLflow training run kể cả khi gate FAIL; chỉ PASS mới được đi tiếp tới validation/registry.
 
 Đánh giá cùng checkpoint tốt nhất trên:
 

@@ -6,9 +6,6 @@ on:
       cycle_id:
         description: Control Center cycle ID
         required: true
-      approved_by:
-        description: Retraining approver
-        required: true
       source_release:
         description: Source model release
         required: true
@@ -31,7 +28,10 @@ on:
         description: Evaluation report path inside the downloaded artifact
         required: true
       decision:
-        description: Decision path inside the downloaded artifact
+        description: Destination path for the approved Control API decision
+        required: true
+      decision_sha256:
+        description: Canonical SHA256 of the approved decision
         required: true
 
 permissions:
@@ -52,6 +52,9 @@ jobs:
       CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
       V2_ROOT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2
       BASE_CHECKPOINT: artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth
+      MSMT17_V2_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/msmt17/metrics/evaluation_msmt17.json
+      MARKET1501_V2_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/market1501/metrics/evaluation_market1501.json
+      FORGETTING_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/release/catastrophic_forgetting_report.json
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -88,13 +91,20 @@ jobs:
           --dataset-pointer datasets/MSMT17_V1.dvc
           --base-checkpoint "${BASE_CHECKPOINT}"
 
-      - name: Verify approved decision
-        env:
-          REQUIRE_APPROVED: "1"
-          DRIFT_REPORT: ${{ inputs.drift_report }}
-          EVALUATION_REPORT: ${{ inputs.evaluation_report }}
-          OUTPUT: evidence/approved_decision.json
-        run: ./scripts/retraining_decision.sh "${{ inputs.approved_by }}"
+      - name: Fetch and verify approved decision from Control API
+        run: |
+          curl --fail --silent --show-error \
+            -H "X-Control-Callback-Token: ${CONTROL_CALLBACK_TOKEN}" \
+            "${CONTROL_API_URL}/control/cycles/${{ inputs.cycle_id }}/retraining-decision" \
+            --output "${{ inputs.decision }}"
+          python src/verify_approved_decision.py \
+            --decision "${{ inputs.decision }}" \
+            --evidence-manifest evidence/evidence_manifest.json \
+            --decision-sha256 "${{ inputs.decision_sha256 }}" \
+            --cycle-id "${{ inputs.cycle_id }}" \
+            --source-release "${{ inputs.source_release }}" \
+            --dataset "${{ inputs.dataset }}" \
+            --target-epochs 20
 
       - name: Preflight model v2 training
         env:
@@ -108,17 +118,55 @@ jobs:
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 RUNNING --detail "Approved retraining started"
           ./scripts/train_msmt17_v2_local.sh
 
-      - name: Mark training complete
+      - name: Report training failure
+        if: ${{ failure() }}
         run: >-
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS
-          --progress 1 --detail "Model v2 training completed"
-          --metrics-file "${V2_ROOT}/logs/mlflow_run.json"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
+          --detail "Model v2 training or preflight failed; inspect runner and MLflow logs"
 
-      - name: Evaluate model v2
+      - name: Mark training complete
         run: |
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating v2 on MSMT17"
-          ./scripts/evaluate_msmt17_v2.sh
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 PASS --progress 1 --detail "MSMT17 v2 evaluation completed" --metrics-file "${V2_ROOT}/metrics/evaluation_latest.json"
+          conda run --no-capture-output -n reid python src/validate_v2_training_completion.py \
+            --run-root "${V2_ROOT}" \
+            --output "${V2_ROOT}/logs/training_completion_report.json"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS \
+            --progress 1 --detail "Model v2 training completed and artifact gate passed" \
+            --metrics-file "${V2_ROOT}/logs/training_completion_report.json"
+
+      - name: Evaluate model v2 on MSMT17 and Market-1501
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating the same v2 checkpoint on MSMT17 and Market-1501"
+          ./scripts/evaluate_v2_dual_domain.sh
+
+      - name: Check improvement and catastrophic forgetting
+        run: |
+          set +e
+          conda run --no-capture-output -n reid python src/catastrophic_forgetting_gate.py \
+            --msmt17-v1 "${{ inputs.evaluation_report }}" \
+            --msmt17-v2 "${MSMT17_V2_REPORT}" \
+            --market1501-v1-manifest model_releases/market1501-vit-bnneck/v1/model_manifest.json \
+            --market1501-v2 "${MARKET1501_V2_REPORT}" \
+            --policy configs/catastrophic_forgetting.yaml \
+            --mlflow-run "${V2_ROOT}/logs/mlflow_run.json" \
+            --output "${FORGETTING_REPORT}"
+          gate_status=$?
+          set -e
+          conda run --no-capture-output -n reid python src/log_v2_evaluations_mlflow.py \
+            --msmt17 "${MSMT17_V2_REPORT}" \
+            --market1501 "${MARKET1501_V2_REPORT}" \
+            --gate "${FORGETTING_REPORT}" \
+            --policy configs/catastrophic_forgetting.yaml \
+            --mlflow-run "${V2_ROOT}/logs/mlflow_run.json" \
+            --output "${V2_ROOT}/logs/evaluation_mlflow.json"
+          if [[ "${gate_status}" -ne 0 ]]; then
+            python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL \
+              --detail "Catastrophic-forgetting gate failed; reports are preserved in MLflow" \
+              --metrics-file "${FORGETTING_REPORT}"
+            exit "${gate_status}"
+          fi
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 PASS \
+            --progress 1 --detail "Cross-domain improvement and retention gates passed" \
+            --metrics-file "${FORGETTING_REPORT}"
 
       - name: Run retraining validation gate
         run: |
@@ -127,7 +175,7 @@ jobs:
             --evidence evidence/evidence_manifest.json \
             --decision evidence/approved_decision.json \
             --training-metrics "${V2_ROOT}/metrics/metrics_v2.json" \
-            --evaluation-metrics "${V2_ROOT}/metrics/evaluation_latest.json" \
+            --evaluation-metrics "${MSMT17_V2_REPORT}" \
             --baseline-evaluation "${{ inputs.evaluation_report }}" \
             --mlflow-run "${V2_ROOT}/logs/mlflow_run.json" \
             --config configs/msmt17_v2_train.yaml \
@@ -163,12 +211,13 @@ jobs:
             evidence/approved_decision.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/logs/*.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/metrics/*.json
+            artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/**/metrics/*.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/release/*.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/checkpoints/*.dvc
           if-no-files-found: error
           retention-days: 30
 
-      - name: Report training failure
+      - name: Report workflow failure
         if: ${{ failure() }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release FAIL
