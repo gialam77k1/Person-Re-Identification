@@ -51,9 +51,13 @@ Kiểm tra graph mà không chạy GPU stage:
 DVC_SITE_CACHE_DIR=/tmp/dvc-site-cache ./scripts/dvc_local.sh dag
 ```
 
-Sau khi pipeline hoàn thành:
+Sau khi pipeline hoàn thành, workflow gọi script publication duy nhất. Script push toàn bộ dependency
+của stage cuối, kiểm tra trạng thái MinIO và tạo evidence có checksum:
 
 ```bash
-./scripts/dvc_local.sh status
-./scripts/dvc_local.sh push
+./scripts/publish_v2_artifacts.sh
 ```
+
+Kết quả `release/dvc_publication.json` chỉ PASS khi `dvc status --cloud --with-deps` sạch, mọi file
+trong manifest tồn tại và SHA256 khớp. Publication report cũng được DVC-add/push; các file `.pth`,
+`.onnx` và `.npy` không được upload làm GitHub Actions artifact hoặc commit trực tiếp vào Git.

@@ -83,3 +83,12 @@ Kết quả verifier:
 - Parity report được tải lại thành công qua MLflow từ MinIO.
 
 Run v1 là bản import của lần train cũ. Thời gian train `5.208,42` giây được ước lượng từ timestamp của effective config và train log. GPU của lần train cũ chưa được ghi, vì vậy release run đánh dấu rõ thông tin phần cứng hiện tại là từ máy publish. Các training run mới ghi trực tiếp thời gian và GPU thực tế.
+
+## Đăng ký candidate v2
+
+Workflow `retrain-v2.yml` chỉ gọi `register_retraining_candidate.py` sau khi validation và DVC
+publication đều PASS. Script đọc `tracking_uri` và `run_id` từ metadata của training run, xác nhận run
+thực tế đang `FINISHED`, rồi log manifest, validation report và DVC publication report trở lại cùng
+run. Model version được gắn đầy đủ Git/DVC/config/checksum/metrics lineage và alias duy nhất được phép
+ở bước này là `candidate`. Chạy lại cùng release ID là idempotent; không có thao tác nào đổi
+`champion` hoặc deploy production.
