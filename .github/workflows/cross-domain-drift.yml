@@ -83,17 +83,38 @@ jobs:
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Running full MSMT17 deployment evaluation"
           ./scripts/evaluate_msmt17_v1.sh
           ./scripts/retraining_decision.sh
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 PASS --progress 1 --detail "Evidence ready for retraining approval"
+
+      - name: Build immutable retraining evidence
+        run: |
+          python src/retraining_evidence.py build \
+            --cycle-id "${{ inputs.cycle_id }}" \
+            --release-id "${{ inputs.release_id }}" \
+            --dataset "${{ inputs.dataset }}" \
+            --drift-report artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json \
+            --evaluation-report artifacts/cross-domain/market1501-v1-on-msmt17/metrics/v1_on_msmt17.json \
+            --decision artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json \
+            --base-manifest artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json \
+            --source-commit "${{ github.sha }}" \
+            --workflow-run-id "${{ github.run_id }}" \
+            --output artifacts/cross-domain/market1501-v1-on-msmt17/retraining/evidence_manifest.json
+
+      - name: Mark evidence ready for approval
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 PASS
+          --progress 1 --detail "Evidence ready for retraining approval"
+          --metrics '{"workflow_run_id":"${{ github.run_id }}","artifact_name":"mlops-evidence-${{ inputs.cycle_id }}"}'
 
       - name: Upload drift evidence
         uses: actions/upload-artifact@v4
         with:
-          name: msmt17-cross-domain-drift-${{ github.sha }}
+          name: mlops-evidence-${{ inputs.cycle_id }}
           path: |
             artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json
             artifacts/cross-domain/market1501-v1-on-msmt17/drift/msmt17_query_metadata.json
             artifacts/cross-domain/market1501-v1-on-msmt17/metrics/v1_on_msmt17.json
             artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json
+            artifacts/cross-domain/market1501-v1-on-msmt17/retraining/evidence_manifest.json
+            artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json
           if-no-files-found: error
           retention-days: 30
 

@@ -34,6 +34,9 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
         self.assertIn("drift_report.json", workflow_text)
         self.assertIn("msmt17_query_metadata.json", workflow_text)
         self.assertIn("retention-days: 30", workflow_text)
+        self.assertIn("retraining_evidence.py build", workflow_text)
+        self.assertIn("mlops-evidence-${{ inputs.cycle_id }}", workflow_text)
+        self.assertIn('"workflow_run_id":"${{ github.run_id }}"', workflow_text)
 
 
 if __name__ == "__main__":
