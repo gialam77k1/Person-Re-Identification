@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
+import urllib.error
+import urllib.request
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +48,40 @@ from src.reid.evaluation import (
     re_rank_distance_matrix,
 )
 from src.reid.losses import ReIDLoss
+
+
+def report_control_progress(
+    stage: str,
+    status: str,
+    *,
+    progress: float | None = None,
+    detail: str = "",
+    metrics: dict | None = None,
+) -> None:
+    cycle_id = os.getenv("CONTROL_CYCLE_ID", "")
+    token = os.getenv("CONTROL_CALLBACK_TOKEN", "")
+    if not cycle_id or cycle_id == "manual" or not token:
+        return
+    base_url = os.getenv("CONTROL_API_URL", "http://localhost:8090").rstrip("/")
+    payload = json.dumps(
+        {
+            "status": status,
+            "progress": progress,
+            "detail": detail or None,
+            "metrics": metrics or {},
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{base_url}/control/cycles/{cycle_id}/stages/{stage}",
+        data=payload,
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Control-Callback-Token": token},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5):
+            pass
+    except (OSError, urllib.error.URLError) as exc:
+        print(f"WARNING: Control Center progress callback failed: {exc}", file=sys.stderr)
 
 
 def parse_args() -> argparse.Namespace:
@@ -595,6 +633,21 @@ def run_training(config: dict) -> None:
                 "head_lr": float(optimizer.param_groups[1]["lr"]),
             }
             history.append(epoch_metrics)
+            report_control_progress(
+                "train_v2",
+                "RUNNING",
+                progress=epoch / config["train"]["epochs"],
+                detail=f"Epoch {epoch}/{config['train']['epochs']}",
+                metrics={
+                    "epoch": epoch,
+                    "epochs": config["train"]["epochs"],
+                    "train_loss": epoch_metrics["train_loss"],
+                    "rank1": epoch_metrics["rank1"],
+                    "mAP": epoch_metrics["mAP"],
+                    "mINP": epoch_metrics["mINP"],
+                    "lr": epoch_metrics["lr"],
+                },
+            )
 
             print(
                 f"Epoch {epoch}/{config['train']['epochs']} "

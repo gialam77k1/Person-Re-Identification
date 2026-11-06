@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #09111b;
+  --panel: #101b28;
+  --panel-raised: #162433;
+  --line: #26384a;
+  --muted: #8ba0b4;
+  --text: #e7f0f8;
+  --cyan: #2dd4bf;
+  --amber: #fbbf24;
+  --red: #fb7185;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--ink); }
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 82% -10%, rgba(45, 212, 191, 0.10), transparent 32rem),
+    linear-gradient(140deg, #09111b 0%, #0b1520 46%, #081019 100%);
+  font-family: Arial, Helvetica, sans-serif;
+}
+button, input, select { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.grid-noise {
+  background-image:
+    linear-gradient(rgba(139, 160, 180, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 160, 180, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(22, 36, 51, 0.92), rgba(13, 24, 36, 0.94));
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+}
+
+.eyebrow {
+  color: var(--cyan);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}

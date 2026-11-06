@@ -45,6 +45,15 @@ class MonitoringConfigTest(unittest.TestCase):
         self.assertEqual(len(dashboards), 2)
         self.assertEqual(len({dashboard["uid"] for dashboard in dashboards}), 2)
         self.assertTrue(all(dashboard["panels"] for dashboard in dashboards))
+        model_dashboard = next(item for item in dashboards if item["uid"] == "reid-model")
+        expressions = {
+            target["expr"]
+            for panel in model_dashboard["panels"]
+            for target in panel.get("targets", [])
+        }
+        self.assertIn("reid_embedding_drift_detected", expressions)
+        self.assertIn("reid_embedding_drift_metric", expressions)
+        self.assertIn("reid_embedding_drift_threshold", expressions)
 
 
 if __name__ == "__main__":

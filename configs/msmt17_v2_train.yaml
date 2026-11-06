@@ -6,7 +6,7 @@ num_workers: 2
 
 release:
   id: market1501-msmt17-vit-bnneck:v2
-  base_release_id: market1501-vit-bnneck:v1
+  base_release_id: market1501-vit-bnneck:v1-dvc
 
 data:
   source_type: image_folder

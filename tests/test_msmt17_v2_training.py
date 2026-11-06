@@ -62,7 +62,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8")
         )
         self.assertEqual(config["release"]["id"], "market1501-msmt17-vit-bnneck:v2")
-        self.assertEqual(config["release"]["base_release_id"], "market1501-vit-bnneck:v1")
+        self.assertEqual(config["release"]["base_release_id"], "market1501-vit-bnneck:v1-dvc")
         self.assertEqual(config["data"]["expected_train_images"], 30248)
         self.assertEqual(config["data"]["expected_train_identities"], 1041)
         self.assertEqual(config["transfer"]["expected_checkpoint_epoch"], 48)
@@ -128,6 +128,10 @@ class MSMT17V2TrainingTest(unittest.TestCase):
     def test_local_training_script_has_valid_shell_syntax(self) -> None:
         subprocess.run(
             ["bash", "-n", str(ROOT / "scripts/train_msmt17_v2_local.sh")],
+            check=True,
+        )
+        subprocess.run(
+            ["bash", "-n", str(ROOT / "scripts/evaluate_msmt17_v2.sh")],
             check=True,
         )
 

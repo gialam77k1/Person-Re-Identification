@@ -8,10 +8,13 @@ docs
 mlruns
 tests
 tmp
+node_modules
+**/node_modules
+.next
+**/.next
 __pycache__
 *.py[cod]
 *.log
 *.onnx
 *.pth
 *.pt
-

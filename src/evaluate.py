@@ -107,6 +107,8 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
         "run_slug": config["runtime"]["run_slug"],
         "run_root": config["runtime"]["run_root"],
         "dataset": config["data"]["dataset"]["name"],
+        "release_id": config.get("release", {}).get("id"),
+        "base_release_id": config.get("release", {}).get("base_release_id"),
         "checkpoint": str(Path(checkpoint_path).resolve()),
         "loaded_epoch": checkpoint.get("epoch"),
         "flip_test": bool(flip_test),

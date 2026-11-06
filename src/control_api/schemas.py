@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+
+class CycleCreate(BaseModel):
+    dataset: str
+    source_release: str = "market1501-vit-bnneck:v1-dvc"
+    target_release: str = "market1501-msmt17-vit-bnneck:v2"
+    idempotency_key: str = Field(min_length=4, max_length=200)
+    actor: str = Field(min_length=1, max_length=100)
+
+
+class CycleCreateResponse(BaseModel):
+    created: bool
+    cycle: dict[str, Any]
+
+
+class EventListResponse(BaseModel):
+    events: list[dict[str, Any]]
+    last_event_id: int
+
+
+class ActorRequest(BaseModel):
+    actor: str = Field(min_length=1, max_length=100)
+
+
+class StageUpdateRequest(BaseModel):
+    status: Literal["PENDING", "RUNNING", "WAITING_APPROVAL", "PASS", "FAIL", "SKIPPED"]
+    progress: float | None = Field(default=None, ge=0.0, le=1.0)
+    detail: str | None = Field(default=None, max_length=2000)
+    metrics: dict[str, float | int | str | bool | None] = Field(default_factory=dict)

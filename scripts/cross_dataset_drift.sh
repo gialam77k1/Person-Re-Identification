@@ -11,6 +11,18 @@ WORKERS="${WORKERS:-4}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-artifacts/cross-domain/market1501-v1-on-msmt17/drift}"
 REFERENCE="artifacts/pipeline/${RELEASE_SLUG}/reference/embeddings/reference_embeddings.npy"
 CURRENT="${OUTPUT_ROOT}/msmt17_query_embeddings.npy"
+METADATA="${OUTPUT_ROOT}/msmt17_query_metadata.json"
+MODEL_MANIFEST="artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
+
+if [[ -f "${PROJECT_ROOT}/.env.mlops" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${PROJECT_ROOT}/.env.mlops"
+  set +a
+fi
+MONITORING_ROOT="${MONITORING_STORAGE_PATH:-../person-reid-monitoring}"
+PROMETHEUS_OUTPUT="${MONITORING_ROOT}/textfile/reid_cross_dataset_drift.prom"
+MONITORING_REPORT="${MONITORING_ROOT}/reports/msmt17_drift_latest.json"
 
 cd "${PROJECT_ROOT}"
 curl --fail --silent --max-time 5 "${TRITON_URL}/v2/health/ready" >/dev/null
@@ -24,6 +36,10 @@ fi
 if [[ ! -f "${REFERENCE}" ]]; then
   ./scripts/dvc_local.sh pull extract_reference
 fi
+if [[ ! -f "${MODEL_MANIFEST}" ]]; then
+  ./scripts/dvc_local.sh pull validate_release
+fi
+mkdir -p "${MONITORING_ROOT}/textfile" "${MONITORING_ROOT}/reports"
 
 conda run --no-capture-output -n reid python src/capture_external_embeddings.py \
   --config configs/msmt17_v1_evaluation.yaml \
@@ -35,13 +51,27 @@ conda run --no-capture-output -n reid python src/capture_external_embeddings.py 
   --server-url "${TRITON_URL}" \
   --release-id "${RELEASE_ID}" \
   --output "${CURRENT}" \
-  --metadata-output "${OUTPUT_ROOT}/msmt17_query_metadata.json" \
+  --metadata-output "${METADATA}" \
   --jsonl-output "${OUTPUT_ROOT}/msmt17_query_embeddings.jsonl"
 
-exec conda run --no-capture-output -n reid python src/generate_drift_report.py \
+conda run --no-capture-output -n reid python src/generate_drift_report.py \
   --reference "${REFERENCE}" \
   --current "${CURRENT}" \
   --release-id "${RELEASE_ID}" \
   --config configs/drift_detection.yaml \
+  --metadata "${METADATA}" \
+  --model-manifest "${MODEL_MANIFEST}" \
   --output "${OUTPUT_ROOT}/drift_report.json" \
-  --prometheus-output "${OUTPUT_ROOT}/reid_cross_dataset_drift.prom"
+  --prometheus-output "${PROMETHEUS_OUTPUT}"
+
+cp "${PROMETHEUS_OUTPUT}" "${OUTPUT_ROOT}/reid_cross_dataset_drift.prom"
+cp "${OUTPUT_ROOT}/drift_report.json" "${MONITORING_REPORT}"
+
+if [[ "${LOG_DRIFT_MLFLOW:-0}" == "1" ]]; then
+  conda run --no-capture-output -n reid python src/log_drift_mlflow.py \
+    --report "${OUTPUT_ROOT}/drift_report.json" \
+    --prometheus-metrics "${PROMETHEUS_OUTPUT}" \
+    --policy configs/drift_detection.yaml \
+    --experiment person-reid-drift \
+    --output "${OUTPUT_ROOT}/drift_mlflow_run.json"
+fi

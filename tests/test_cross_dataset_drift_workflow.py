@@ -19,6 +19,11 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
         self.assertIn("pull datasets/MSMT17_V1.dvc", script)
         self.assertIn("pull extract_reference", script)
         self.assertNotIn('pull datasets/MSMT17_V1.dvc "${REFERENCE}"', script)
+        self.assertIn("pull validate_release", script)
+        self.assertIn("--metadata", script)
+        self.assertIn("--model-manifest", script)
+        self.assertIn("textfile/reid_cross_dataset_drift.prom", script)
+        self.assertIn("log_drift_mlflow.py", script)
 
     def test_workflow_is_manual_and_uses_self_hosted_linux(self) -> None:
         workflow = yaml.load(
@@ -32,8 +37,13 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
     def test_workflow_uploads_drift_evidence(self) -> None:
         workflow_text = (ROOT / ".github/workflows/cross-domain-drift.yml").read_text(encoding="utf-8")
         self.assertIn("drift_report.json", workflow_text)
-        self.assertIn("msmt17_query_metadata.json", workflow_text)
+        self.assertIn("evidence_manifest.json", workflow_text)
         self.assertIn("retention-days: 30", workflow_text)
+        self.assertIn("retraining_evidence.py build", workflow_text)
+        self.assertIn("dvc_local.sh pull validate_release", workflow_text)
+        self.assertIn("mlops-evidence-${{ inputs.cycle_id }}", workflow_text)
+        self.assertIn('"workflow_run_id":"${{ github.run_id }}"', workflow_text)
+        self.assertIn('LOG_DRIFT_MLFLOW: "1"', workflow_text)
 
 
 if __name__ == "__main__":

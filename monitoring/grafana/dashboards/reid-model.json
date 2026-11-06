@@ -99,7 +99,10 @@
       "gridPos": {"h": 7, "w": 16, "x": 8, "y": 22},
       "id": 9,
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
-      "targets": [{"expr": "reid_embedding_drift_metric", "legendFormat": "{{metric}}", "refId": "A"}],
+      "targets": [
+        {"expr": "reid_embedding_drift_metric", "legendFormat": "{{metric}} observed", "refId": "A"},
+        {"expr": "reid_embedding_drift_threshold", "legendFormat": "{{metric}} threshold", "refId": "B"}
+      ],
       "title": "Drift statistics",
       "type": "timeseries"
     }
@@ -112,5 +115,5 @@
   "timezone": "browser",
   "title": "Person ReID - Model Behavior",
   "uid": "reid-model",
-  "version": 2
+  "version": 3
 }

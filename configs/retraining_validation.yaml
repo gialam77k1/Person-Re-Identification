@@ -1,0 +1,10 @@
+schema_version: 1
+quality:
+  rank1_max_drop_from_v1: 0.005
+  map_max_drop_from_v1: 0.005
+  minp_max_drop_from_v1: 0.01
+  minimum_valid_queries: 1
+contract:
+  embedding_dim: 512
+  dataset: msmt17
+  approved_status: RETRAIN_APPROVED
