@@ -46,7 +46,12 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("dvc_local.sh push", self.text)
 
     def test_changed_shell_scripts_have_valid_syntax(self) -> None:
-        for script in ("train_msmt17_v2_local.sh", "evaluate_msmt17_v2.sh"):
+        for script in (
+            "train_msmt17_v2_local.sh",
+            "evaluate_msmt17_v2.sh",
+            "evaluate_market1501_v2.sh",
+            "evaluate_v2_dual_domain.sh",
+        ):
             subprocess.run(["bash", "-n", str(ROOT / "scripts" / script)], check=True)
 
 
