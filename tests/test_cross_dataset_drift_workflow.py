@@ -19,6 +19,10 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
         self.assertIn("pull datasets/MSMT17_V1.dvc", script)
         self.assertIn("pull extract_reference", script)
         self.assertNotIn('pull datasets/MSMT17_V1.dvc "${REFERENCE}"', script)
+        self.assertIn("pull validate_release", script)
+        self.assertIn("--metadata", script)
+        self.assertIn("--model-manifest", script)
+        self.assertIn("textfile/reid_cross_dataset_drift.prom", script)
 
     def test_workflow_is_manual_and_uses_self_hosted_linux(self) -> None:
         workflow = yaml.load(
