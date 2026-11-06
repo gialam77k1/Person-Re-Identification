@@ -186,6 +186,72 @@ services:
     networks:
       - mlops
 
+  control-api:
+    build:
+      context: .
+      dockerfile: docker/control-api/Dockerfile
+    image: person-reid/control-api:0.1.0
+    container_name: reid-control-api
+    restart: unless-stopped
+    env_file:
+      - .env.mlops
+    environment:
+      CONTROL_DATABASE_PATH: /data/control.db
+      CONTROL_MLFLOW_URL: http://mlflow:5000
+      CONTROL_PROMETHEUS_URL: http://prometheus:9090
+      CONTROL_QDRANT_URL: http://qdrant:6333
+      CONTROL_QDRANT_COLLECTION: ${QDRANT_COLLECTION:-reid_reference_v1}
+      CONTROL_TRITON_URL: http://triton-server:8000
+      CONTROL_TRITON_MODEL: ${TRITON_MODEL_NAME:-reid_embedding}
+      CONTROL_INFERENCE_API_URL: http://inference-api:8080
+      CONTROL_CORS_ORIGINS: http://localhost:${CONTROL_UI_PORT:-3001}
+    ports:
+      - "${CONTROL_API_PORT:-8090}:8090"
+    volumes:
+      - control_data:/data
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      inference-api:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - mlops
+
+  control-ui:
+    build:
+      context: .
+      dockerfile: docker/control-ui/Dockerfile
+    image: person-reid/control-ui:0.1.0
+    container_name: reid-control-ui
+    restart: unless-stopped
+    environment:
+      CONTROL_API_URL: http://control-api:8090
+    ports:
+      - "${CONTROL_UI_PORT:-3001}:3001"
+    depends_on:
+      control-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - mlops
+
   prometheus:
     image: prom/prometheus:v3.5.0
     container_name: reid-prometheus
@@ -314,6 +380,8 @@ volumes:
     name: reid-grafana-data
   alertmanager_data:
     name: reid-alertmanager-data
+  control_data:
+    name: reid-control-data
 
 networks:
   mlops:

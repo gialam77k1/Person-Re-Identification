@@ -30,10 +30,18 @@ concurrency:
 jobs:
   detect-drift:
     runs-on: [self-hosted, linux]
-    timeout-minutes: 90
+    timeout-minutes: 240
+    env:
+      CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8090' }}
+      CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Mark data validation running
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_data RUNNING
+          --detail "Checking MSMT17, model v1 and serving stack"
 
       - name: Configure local MLOps credentials
         env:
@@ -46,12 +54,36 @@ jobs:
       - name: Start serving stack
         run: ./scripts/mlops_stack.sh up
 
+      - name: Mark data validation complete
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_data PASS
+          --progress 1 --detail "Dataset and serving stack are ready"
+
+      - name: Mark drift stages running
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings RUNNING --detail "Capturing MSMT17 query embeddings"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift RUNNING --detail "Comparing MSMT17 against Market-1501 reference"
+
       - name: Capture MSMT17 embeddings and detect drift
         env:
           CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
           SAMPLE_SIZE: ${{ inputs.sample_size }}
           RELEASE_ID: ${{ inputs.release_id }}
         run: ./scripts/cross_dataset_drift.sh
+
+      - name: Mark drift stages complete
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings PASS --progress 1 --detail "MSMT17 embeddings captured"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift PASS --progress 1 --detail "Drift report generated"
+
+      - name: Evaluate model v1 on MSMT17
+        env:
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Running full MSMT17 deployment evaluation"
+          ./scripts/evaluate_msmt17_v1.sh
+          ./scripts/retraining_decision.sh
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 PASS --progress 1 --detail "Evidence ready for retraining approval"
 
       - name: Upload drift evidence
         uses: actions/upload-artifact@v4
@@ -60,9 +92,17 @@ jobs:
           path: |
             artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json
             artifacts/cross-domain/market1501-v1-on-msmt17/drift/msmt17_query_metadata.json
+            artifacts/cross-domain/market1501-v1-on-msmt17/metrics/v1_on_msmt17.json
+            artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json
           if-no-files-found: error
           retention-days: 30
 
       - name: Remove temporary credential file
         if: ${{ always() }}
         run: rm -f .env.mlops
+
+      - name: Report pre-approval failure
+        if: ${{ failure() }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 FAIL
+          --detail "Pre-approval workflow failed; inspect GitHub Actions logs"

@@ -1,0 +1,80 @@
+name: Retrain MSMT17 model v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      cycle_id:
+        description: Control Center cycle ID
+        required: true
+      approved_by:
+        description: Retraining approver
+        required: true
+      source_release:
+        description: Source model release
+        required: true
+      target_release:
+        description: Target model release
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retrain-msmt17-v2
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 1440
+    env:
+      CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
+      CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8090' }}
+      CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure local MLOps credentials
+        env:
+          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
+        run: |
+          test -n "$MLOPS_ENV_FILE"
+          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
+          chmod 600 .env.mlops
+
+      - name: Verify approved decision
+        env:
+          REQUIRE_APPROVED: "1"
+        run: ./scripts/retraining_decision.sh "${{ inputs.approved_by }}"
+
+      - name: Preflight model v2 training
+        run: ./scripts/train_msmt17_v2_local.sh --check
+
+      - name: Train model v2
+        run: ./scripts/train_msmt17_v2_local.sh
+
+      - name: Mark training complete
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS
+          --progress 1 --detail "Model v2 training completed"
+
+      - name: Upload training reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: msmt17-v2-training-${{ inputs.cycle_id }}
+          path: |
+            artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/logs/*.json
+            artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/metrics/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Report training failure
+        if: ${{ failure() }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
+          --detail "Retraining failed; inspect GitHub Actions and MLflow logs"
+
+      - name: Remove temporary credential file
+        if: ${{ always() }}
+        run: rm -f .env.mlops

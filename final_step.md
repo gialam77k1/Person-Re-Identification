@@ -26,7 +26,7 @@ và report lớn chỉ được lưu bằng DVC/MinIO hoặc MLflow, không comm
 - [x] Drift MSMT17 đã được xác nhận và decision gate đã trả về `RETRAIN_APPROVED`.
 - [x] Self-hosted runner có thể chạy smoke test và workload GPU.
 - [x] Script retraining v2 đã có cấu hình tối đa 20 epoch và preflight đã PASS.
-- [ ] Chưa có MLOps Control Center để theo dõi và điều phối toàn bộ vòng đời từ một UI.
+- [x] MLOps Control Center đã có UI, Control API, cycle/event/audit store và workflow dispatch.
 - [ ] Chưa có workflow nối tự động approval → retraining → validation → registry.
 - [ ] Chưa hoàn tất toàn bộ release model v2 và deployment staging/production.
 

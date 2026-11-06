@@ -237,6 +237,21 @@ Metrics, alert thresholds, embedding sampling và drift workflow được mô t�
 Cấu hình transfer learning, progressive unfreeze và cách train model v2 local được mô tả tại
 [`docs/MSMT17_V2_TRAINING.md`](docs/MSMT17_V2_TRAINING.md).
 
+### 10. MLOps Control Center
+
+Control Center gom trạng thái MLflow, Prometheus/Grafana, Qdrant, Triton và GitHub Actions vào một
+web UI. Từ `http://localhost:3001`, người vận hành có thể chọn MSMT17, bấm `Start MLOps lifecycle`,
+theo dõi timeline/epoch/metrics, phê duyệt retraining và thực hiện promote hoặc rollback mà không
+chạy script thủ công.
+
+```bash
+docker compose --env-file .env.mlops -f docker-compose.mlops.yml up -d --build
+curl --fail http://localhost:8090/health
+```
+
+Thiết lập token, callback secret, API và cách vận hành được mô tả tại
+[`docs/MLOPS_CONTROL_CENTER.md`](docs/MLOPS_CONTROL_CENTER.md).
+
 ## Model release v1
 
 - Release ID: `market1501-vit-bnneck:v1`
