@@ -45,6 +45,7 @@ v2_pipeline:
   market1501_root: datasets/Market-1501-v15.09.15
   market1501_pointer: datasets/Market-1501-v15.09.15.dvc
   preprocessing_contract: model_releases/market1501-vit-bnneck/v1/preprocessing.json
+  validation_policy: configs/model_validation_v2.yaml
   opset: 18
   parity_samples: 8
   model_version: 2

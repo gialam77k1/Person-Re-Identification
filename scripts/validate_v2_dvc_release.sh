@@ -31,5 +31,7 @@ python src/validate_v2_dvc_release.py \
   --reference-root "${REFERENCE_ROOT}" \
   --preprocessing-source model_releases/market1501-vit-bnneck/v1/preprocessing.json \
   --preprocessing-output "${PIPELINE_ROOT}/release/preprocessing.json" \
+  --policy configs/model_validation_v2.yaml \
+  --mlflow-run "${CHECKPOINT_ROOT}/mlflow_run.json" \
   --output "${PIPELINE_ROOT}/release/validation_report.json" \
   --manifest-output "${PIPELINE_ROOT}/release/model_manifest.json"

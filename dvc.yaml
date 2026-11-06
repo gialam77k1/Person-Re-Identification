@@ -500,6 +500,7 @@ stages:
       - src/catastrophic_forgetting_gate.py
       - src/validate_v2_dvc_release.py
       - configs/catastrophic_forgetting.yaml
+      - configs/model_validation_v2.yaml
       - model_releases/market1501-vit-bnneck/v1/model_manifest.json
       - model_releases/market1501-vit-bnneck/v1/msmt17_cross_domain_metrics.json
       - ${v2_pipeline.preprocessing_contract}
@@ -523,6 +524,7 @@ stages:
       - v2_pipeline.release_id
       - v2_pipeline.conda_env
       - v2_pipeline.preprocessing_contract
+      - v2_pipeline.validation_policy
       - configs/catastrophic_forgetting.yaml:
           - msmt17_improvement
           - market1501_retention
