@@ -42,6 +42,14 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertNotIn("deploy production", self.text.lower())
         self.assertNotIn("retraining_decision.sh", self.text)
 
+    def test_full_v2_release_gate_runs_before_candidate_registration(self) -> None:
+        repro = self.text.index("repro v2_package_triton")
+        registration = self.text.index("register_retraining_candidate.py")
+        self.assertLess(repro, registration)
+        self.assertIn("V2_PIPELINE_ROOT", self.text)
+        self.assertIn("parity/metrics/onnx_parity.json", self.text)
+        self.assertIn("${V2_PIPELINE_ROOT}/release/validation_report.json", self.text)
+
     def test_large_models_are_not_uploaded_as_actions_artifacts(self) -> None:
         artifact_section = self.text.split("name: msmt17-v2-retraining-reports", 1)[1]
         self.assertNotIn("*.pth\n", artifact_section)

@@ -55,6 +55,7 @@ jobs:
       MSMT17_V2_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/msmt17/metrics/evaluation_msmt17.json
       MARKET1501_V2_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/market1501/metrics/evaluation_market1501.json
       FORGETTING_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/release/catastrophic_forgetting_report.json
+      V2_PIPELINE_ROOT: artifacts/pipeline/market1501-msmt17-vit-bnneck-v2
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -168,9 +169,8 @@ jobs:
             --progress 1 --detail "Cross-domain improvement and retention gates passed" \
             --metrics-file "${FORGETTING_REPORT}"
 
-      - name: Run retraining validation gate
+      - name: Run retraining lineage gate
         run: |
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release RUNNING --detail "Checking approval, lineage, MLflow and quality gates"
           python src/retraining_validation_gate.py \
             --evidence evidence/evidence_manifest.json \
             --decision evidence/approved_decision.json \
@@ -185,19 +185,33 @@ jobs:
             --git-commit "${{ github.sha }}" \
             --output "${V2_ROOT}/release/validation_report.json" \
             --manifest-output "${V2_ROOT}/release/model_manifest.json"
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release PASS --progress 1 --detail "Retraining validation gate PASS" --metrics-file "${V2_ROOT}/release/validation_report.json"
+
+      - name: Export, verify and validate model v2 release
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" export_onnx RUNNING \
+            --detail "Exporting ONNX external weights, checking parity and extracting reference embeddings"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release RUNNING \
+            --detail "Running immutable v2 quality, contract, lineage and checksum policy"
+          ./scripts/dvc_local.sh repro v2_package_triton
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" export_onnx PASS \
+            --progress 1 --detail "ONNX export, parity and reference extraction passed" \
+            --metrics-file "${V2_PIPELINE_ROOT}/parity/metrics/onnx_parity.json"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release PASS \
+            --progress 1 --detail "Full v2 release validation gate PASS" \
+            --metrics-file "${V2_PIPELINE_ROOT}/release/validation_report.json"
 
       - name: Persist large candidate artifacts with DVC
         run: |
           ./scripts/dvc_local.sh add "${V2_ROOT}/checkpoints/best_model.pth" "${V2_ROOT}/checkpoints/last_model.pth"
           ./scripts/dvc_local.sh push "${V2_ROOT}/checkpoints/best_model.pth.dvc" "${V2_ROOT}/checkpoints/last_model.pth.dvc"
+          ./scripts/dvc_local.sh push v2_package_triton
 
       - name: Register MLflow candidate alias
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate RUNNING --detail "Registering validated MLflow candidate"
           conda run --no-capture-output -n reid python src/register_retraining_candidate.py \
-            --manifest "${V2_ROOT}/release/model_manifest.json" \
-            --validation-report "${V2_ROOT}/release/validation_report.json" \
+            --manifest "${V2_PIPELINE_ROOT}/release/model_manifest.json" \
+            --validation-report "${V2_PIPELINE_ROOT}/release/validation_report.json" \
             --alias candidate \
             --output "${V2_ROOT}/release/registration_result.json"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate PASS --progress 1 --detail "MLflow candidate alias assigned" --metrics-file "${V2_ROOT}/release/registration_result.json"
@@ -214,6 +228,11 @@ jobs:
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/**/metrics/*.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/release/*.json
             artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/checkpoints/*.dvc
+            artifacts/pipeline/market1501-msmt17-vit-bnneck-v2/onnx/exports/onnx_export_manifest.json
+            artifacts/pipeline/market1501-msmt17-vit-bnneck-v2/parity/metrics/onnx_parity.json
+            artifacts/pipeline/market1501-msmt17-vit-bnneck-v2/reference/embeddings/reference_manifest.json
+            artifacts/pipeline/market1501-msmt17-vit-bnneck-v2/release/*.json
+            dvc.lock
           if-no-files-found: error
           retention-days: 30
 

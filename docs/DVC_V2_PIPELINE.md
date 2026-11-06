@@ -37,6 +37,14 @@ Manifest cuối tại `release/model_manifest.json` chứa Git commit của pipe
 revision riêng cho MSMT17 và Market-1501, MLflow run ID, SHA256 effective training config, epoch tốt
 nhất và checksum của checkpoint, ONNX, preprocessing, embeddings cùng metadata.
 
+Release gate sử dụng policy bất biến `configs/model_validation_v2.yaml`. Ngoài quality threshold của
+MSMT17 và Market-1501, gate đọc trực tiếp file NumPy để xác nhận embedding có shape `N×512`, metadata
+thẳng hàng, không có NaN/Inf và norm L2 nằm trong sai số `0.0001`. Báo cáo ONNX phải đạt cosine
+`>=0.9999`, max absolute error `<=0.0001`, đồng thời I/O runtime phải khớp preprocessing contract.
+Report PASS/FAIL, manifest và policy đều được log vào training run trên MLflow. Gate FAIL vẫn giữ đủ
+evidence điều tra nhưng trả exit code khác 0 nên DVC không package Triton và workflow không đăng ký
+alias `candidate`.
+
 Kiểm tra graph mà không chạy GPU stage:
 
 ```bash
