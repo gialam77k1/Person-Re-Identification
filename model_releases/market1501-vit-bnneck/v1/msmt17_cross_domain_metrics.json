@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "release_id": "market1501-vit-bnneck:v1-dvc",
+  "dataset": "msmt17",
+  "protocol": "Triton HTTP, letterbox, L2-normalized embeddings, cosine distance, no flip, no rerank",
+  "dataset_dvc_revision": "c8a4c6f18b86490a45f940ab9fb0eb70.dir",
+  "query_count": 11659,
+  "gallery_count": 82161,
+  "valid_queries": 11659,
+  "rank1": 0.17720216143058662,
+  "rank5": 0.27772536239377404,
+  "mAP": 0.06209780584230918,
+  "mINP": 0.0031731325386280098
+}

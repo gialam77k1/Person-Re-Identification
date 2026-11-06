@@ -294,3 +294,265 @@ stages:
     metrics:
       - artifacts/pipeline/${pipeline.release_slug}/release/validation_report.json:
           cache: true
+
+  v2_validate_data:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/validate_v2_release_data.py
+      --msmt17-config configs/msmt17_v2_eval.yaml
+      --msmt17-pointer ${v2_pipeline.msmt17_pointer}
+      --market1501-config configs/market1501_v2_eval.yaml
+      --market1501-pointer ${v2_pipeline.market1501_pointer}
+      --output artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
+    deps:
+      - src/validate_v2_release_data.py
+      - src/validate_data.py
+      - src/common/config.py
+      - configs/msmt17_v2_eval.yaml
+      - configs/market1501_v2_eval.yaml
+      - ${v2_pipeline.msmt17_root}
+      - ${v2_pipeline.market1501_root}
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.conda_env
+      - v2_pipeline.msmt17_root
+      - v2_pipeline.market1501_root
+      - v2_pipeline.msmt17_pointer
+      - v2_pipeline.market1501_pointer
+    outs:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
+
+  v2_checkpoint:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/import_v2_checkpoint.py
+      --checkpoint ${v2_pipeline.source_root}/checkpoints/best_model.pth
+      --training-metrics ${v2_pipeline.source_root}/metrics/metrics_v2.json
+      --mlflow-run ${v2_pipeline.source_root}/logs/mlflow_run.json
+      --transfer-report ${v2_pipeline.source_root}/logs/transfer_report.json
+      --effective-config ${v2_pipeline.source_root}/logs/effective_config.json
+      --data-manifest artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
+      --output-root artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint
+    deps:
+      - src/import_v2_checkpoint.py
+      - artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
+      - ${v2_pipeline.source_root}/checkpoints/best_model.pth
+      - ${v2_pipeline.source_root}/metrics/metrics_v2.json
+      - ${v2_pipeline.source_root}/logs/mlflow_run.json
+      - ${v2_pipeline.source_root}/logs/transfer_report.json
+      - ${v2_pipeline.source_root}/logs/effective_config.json
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.source_root
+      - v2_pipeline.conda_env
+    outs:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/checkpoint_manifest.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/metrics_v2.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/mlflow_run.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/transfer_report.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/effective_config.json
+
+  v2_evaluate_msmt17:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/evaluate.py --config configs/msmt17_v2_eval.yaml
+      --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_msmt17
+    deps:
+      - src/evaluate.py
+      - src/data
+      - src/models
+      - src/reid/evaluation.py
+      - configs/msmt17_v2_eval.yaml
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      - ${v2_pipeline.msmt17_root}
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.conda_env
+      - v2_pipeline.msmt17_root
+      - configs/msmt17_v2_eval.yaml:
+          - data
+          - model
+          - evaluation
+    metrics:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_msmt17/metrics/evaluation_msmt17.json:
+          cache: true
+
+  v2_evaluate_market1501:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/evaluate.py --config configs/market1501_v2_eval.yaml
+      --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_market1501
+    deps:
+      - src/evaluate.py
+      - src/data
+      - src/models
+      - src/reid/evaluation.py
+      - configs/market1501_v2_eval.yaml
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      - ${v2_pipeline.market1501_root}
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.conda_env
+      - v2_pipeline.market1501_root
+      - configs/market1501_v2_eval.yaml:
+          - data
+          - model
+          - evaluation
+    metrics:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_market1501/metrics/evaluation_market1501.json:
+          cache: true
+
+  v2_export_onnx:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/export_onnx.py --config configs/msmt17_v2_train.yaml
+      --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      --opset ${v2_pipeline.opset}
+      --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/onnx
+    deps:
+      - src/export_onnx.py
+      - src/models
+      - configs/msmt17_v2_train.yaml
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.conda_env
+      - v2_pipeline.opset
+      - configs/msmt17_v2_train.yaml:
+          - device
+          - data.image_height
+          - data.image_width
+          - data.preserve_aspect_ratio
+          - model
+    outs:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/onnx_export_manifest.json
+
+  v2_verify_onnx:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/verify_onnx.py --config configs/msmt17_v2_train.yaml
+      --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      --onnx-path artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      --split query --num-samples ${v2_pipeline.parity_samples}
+      --atol 0.0001 --rtol 0.0001
+      --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/parity
+    deps:
+      - src/verify_onnx.py
+      - src/data
+      - src/models
+      - configs/msmt17_v2_train.yaml
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - ${v2_pipeline.msmt17_root}
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.conda_env
+      - v2_pipeline.parity_samples
+      - configs/msmt17_v2_train.yaml:
+          - device
+          - data
+          - model
+    metrics:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/parity/metrics/onnx_parity.json:
+          cache: true
+
+  v2_extract_reference:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/extract_reference.py --config configs/msmt17_v2_train.yaml
+      --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/reference
+    deps:
+      - src/extract_reference.py
+      - src/data
+      - src/models
+      - src/reid/evaluation.py
+      - configs/msmt17_v2_train.yaml
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      - ${v2_pipeline.msmt17_root}
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.conda_env
+      - configs/msmt17_v2_train.yaml:
+          - device
+          - num_workers
+          - data
+          - model
+    outs:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_embeddings.npy
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_pids.npy
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_camids.npy
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_paths.npy
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_manifest.json
+
+  v2_validate_release:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      bash scripts/validate_v2_dvc_release.sh
+    deps:
+      - scripts/validate_v2_dvc_release.sh
+      - src/catastrophic_forgetting_gate.py
+      - src/validate_v2_dvc_release.py
+      - configs/catastrophic_forgetting.yaml
+      - model_releases/market1501-vit-bnneck/v1/model_manifest.json
+      - model_releases/market1501-vit-bnneck/v1/msmt17_cross_domain_metrics.json
+      - ${v2_pipeline.preprocessing_contract}
+      - artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/checkpoint_manifest.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/mlflow_run.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_msmt17/metrics/evaluation_msmt17.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_market1501/metrics/evaluation_market1501.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/onnx_export_manifest.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/parity/metrics/onnx_parity.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_manifest.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_embeddings.npy
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_pids.npy
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_camids.npy
+      - artifacts/pipeline/${v2_pipeline.release_slug}/reference/embeddings/reference_paths.npy
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.release_id
+      - v2_pipeline.conda_env
+      - v2_pipeline.preprocessing_contract
+      - configs/catastrophic_forgetting.yaml:
+          - msmt17_improvement
+          - market1501_retention
+    outs:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/release/model_manifest.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/release/preprocessing.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/release/catastrophic_forgetting_report.json
+    metrics:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/release/validation_report.json:
+          cache: true
+
+  v2_package_triton:
+    cmd: >-
+      conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      python src/prepare_triton_model.py
+      --onnx-path artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      --output-root artifacts/pipeline/${v2_pipeline.release_slug}/triton/model_repository
+      --model-name reid_embedding --model-version ${v2_pipeline.model_version}
+      --max-batch-size 0 --input-height 224 --input-width 224 --embedding-dim 512
+      --preferred-batch-sizes 4,8,16 --instance-kind KIND_GPU
+      --validation-report artifacts/pipeline/${v2_pipeline.release_slug}/release/validation_report.json
+    deps:
+      - src/prepare_triton_model.py
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
+      - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
+      - artifacts/pipeline/${v2_pipeline.release_slug}/release/validation_report.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/release/model_manifest.json
+    params:
+      - v2_pipeline.release_slug
+      - v2_pipeline.conda_env
+      - v2_pipeline.model_version
+    outs:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/triton/model_repository

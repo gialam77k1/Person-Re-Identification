@@ -303,6 +303,14 @@ Gate:
 
 ## 7. Tạo release pipeline v2 bằng DVC
 
+**Trạng thái implementation: hoàn thành.** `dvc.yaml` có graph v2 độc lập từ validate hai dataset,
+import checkpoint đã train, đánh giá MSMT17/Market-1501, export/parity ONNX, extract reference,
+release gate đến package Triton version 2. Mọi output nằm dưới
+`artifacts/pipeline/market1501-msmt17-vit-bnneck-v2`; pipeline v1 không bị sửa hoặc ghi đè. Các nhánh
+evaluation/export/reference chỉ hội tụ ở validation nên thay đổi serving không kích hoạt retraining.
+Manifest v2 chứa Git commit, DVC revision của cả hai dataset, MLflow run ID và SHA256 effective config.
+Chi tiết chạy và graph nằm tại `docs/DVC_V2_PIPELINE.md`.
+
 Pipeline phải tách output v2 khỏi v1:
 
 ```text

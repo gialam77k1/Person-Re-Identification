@@ -1,5 +1,7 @@
 # Pipeline tái lập bằng DVC
 
+Pipeline release model v2 được mô tả riêng tại [DVC_V2_PIPELINE.md](DVC_V2_PIPELINE.md).
+
 ## Mục tiêu
 
 Pipeline biến dataset Market-1501 và cấu hình ViT-B/16 + BNNeck thành một model release có thể kiểm tra nguồn gốc. Toàn bộ luồng được chạy bằng một lệnh:

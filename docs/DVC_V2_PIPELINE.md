@@ -1,0 +1,51 @@
+# DVC release pipeline cho model v2
+
+Pipeline v2 nằm chung trong `dvc.yaml` nhưng dùng prefix stage `v2_` và output root riêng:
+
+```text
+artifacts/pipeline/market1501-msmt17-vit-bnneck-v2/
+```
+
+Pipeline v1 không bị đổi tên hoặc ghi đè. Chạy toàn bộ release v2 bằng:
+
+```bash
+./scripts/dvc_local.sh repro v2_package_triton
+```
+
+Graph thực thi:
+
+```text
+v2_validate_data
+  → v2_checkpoint
+      ├── v2_evaluate_msmt17 ────────┐
+      ├── v2_evaluate_market1501 ────┤
+      ├── v2_export_onnx             │
+      │     └── v2_verify_onnx ──────┤
+      └── v2_extract_reference ──────┤
+                                      ↓
+                            v2_validate_release
+                                      ↓
+                              v2_package_triton
+```
+
+`v2_checkpoint` import checkpoint tốt nhất đã được workflow retraining tạo ra. Stage này từ chối
+artifact nếu MLflow run chưa `FINISHED`, release ID sai, checkpoint không bắt nguồn từ epoch 48 hoặc
+classifier Market-1501 chưa được reset. DVC không tự train lại 20 epoch khi chỉ thay đổi export,
+parity, reference hoặc Triton packaging.
+
+Manifest cuối tại `release/model_manifest.json` chứa Git commit của pipeline và training run, DVC
+revision riêng cho MSMT17 và Market-1501, MLflow run ID, SHA256 effective training config, epoch tốt
+nhất và checksum của checkpoint, ONNX, preprocessing, embeddings cùng metadata.
+
+Kiểm tra graph mà không chạy GPU stage:
+
+```bash
+DVC_SITE_CACHE_DIR=/tmp/dvc-site-cache ./scripts/dvc_local.sh dag
+```
+
+Sau khi pipeline hoàn thành:
+
+```bash
+./scripts/dvc_local.sh status
+./scripts/dvc_local.sh push
+```
