@@ -32,6 +32,7 @@ class RetrainV2WorkflowTest(unittest.TestCase):
             "catastrophic_forgetting_gate.py",
             "log_v2_evaluations_mlflow.py",
             "retraining_validation_gate.py",
+            "publish_v2_artifacts.sh",
             "register_retraining_candidate.py",
         ):
             self.assertIn(command, self.text)
@@ -53,7 +54,14 @@ class RetrainV2WorkflowTest(unittest.TestCase):
     def test_large_models_are_not_uploaded_as_actions_artifacts(self) -> None:
         artifact_section = self.text.split("name: msmt17-v2-retraining-reports", 1)[1]
         self.assertNotIn("*.pth\n", artifact_section)
-        self.assertIn("dvc_local.sh push", self.text)
+        self.assertIn("publish_v2_artifacts.sh", self.text)
+
+    def test_dvc_publication_is_verified_before_registry(self) -> None:
+        publication = self.text.index("publish_v2_artifacts.sh")
+        registration = self.text.index("register_retraining_candidate.py")
+        self.assertLess(publication, registration)
+        self.assertIn("--dvc-publication", self.text)
+        self.assertIn("--mlflow-run", self.text)
 
     def test_forgetting_thresholds_are_versioned_outside_workflow(self) -> None:
         self.assertIn("configs/catastrophic_forgetting.yaml", self.text)
@@ -68,6 +76,7 @@ class RetrainV2WorkflowTest(unittest.TestCase):
             "evaluate_msmt17_v2.sh",
             "evaluate_market1501_v2.sh",
             "evaluate_v2_dual_domain.sh",
+            "publish_v2_artifacts.sh",
         ):
             subprocess.run(["bash", "-n", str(ROOT / "scripts" / script)], check=True)
 

@@ -31,6 +31,7 @@ PIPELINE_STAGES = (
     "evaluate_v2",
     "validate_release",
     "export_onnx",
+    "publish_artifacts",
     "register_candidate",
     "deploy_staging",
     "staging_test",
