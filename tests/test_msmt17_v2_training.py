@@ -102,7 +102,15 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             dataset = root / "MSMT17_V1"
             dataset.mkdir()
             decision.write_text(
-                json.dumps({"status": "RETRAIN_APPROVED", "target_epochs": 20}),
+                json.dumps(
+                    {
+                        "status": "RETRAIN_APPROVED",
+                        "base_release_id": "market1501-vit-bnneck:v1-dvc",
+                        "target_dataset": "msmt17",
+                        "target_dataset_version": "MSMT17_V1",
+                        "target_epochs": 20,
+                    }
+                ),
                 encoding="utf-8",
             )
             checkpoint.write_bytes(b"checkpoint")
@@ -144,13 +152,24 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             config = root / "config.yaml"
             dataset.mkdir()
             decision.write_text(
-                json.dumps({"status": "RETRAIN_APPROVED", "target_epochs": 10}),
+                json.dumps(
+                    {
+                        "status": "RETRAIN_APPROVED",
+                        "base_release_id": "market1501-vit-bnneck:v1-dvc",
+                        "target_dataset": "msmt17",
+                        "target_dataset_version": "MSMT17_V1",
+                        "target_epochs": 10,
+                    }
+                ),
                 encoding="utf-8",
             )
             checkpoint.write_bytes(b"checkpoint")
-            config.write_text("train:\n  epochs: 20\n", encoding="utf-8")
+            config.write_text(
+                (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
 
-            with self.assertRaisesRegex(ValueError, "do not match"):
+            with self.assertRaisesRegex(ValueError, "Approved decision mismatch"):
                 validate_inputs(
                     decision,
                     checkpoint,
@@ -159,6 +178,23 @@ class MSMT17V2TrainingTest(unittest.TestCase):
                     config,
                     require_cuda=False,
                 )
+
+    def test_preflight_rejects_changed_progressive_unfreeze_contract(self) -> None:
+        config = yaml.safe_load(
+            (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8")
+        )
+        config["train"]["progressive_unfreeze"]["freeze_lower_blocks"] = 6
+        decision = {
+            "status": "RETRAIN_APPROVED",
+            "base_release_id": "market1501-vit-bnneck:v1-dvc",
+            "target_dataset": "msmt17",
+            "target_dataset_version": "MSMT17_V1",
+            "target_epochs": 20,
+        }
+        from src.validate_msmt17_v2_training import validate_training_contract
+
+        with self.assertRaisesRegex(ValueError, "freeze_lower_blocks"):
+            validate_training_contract(config, decision)
 
 
 if __name__ == "__main__":
