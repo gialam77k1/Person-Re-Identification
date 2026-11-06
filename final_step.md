@@ -303,6 +303,14 @@ Gate:
 
 ## 7. Tạo release pipeline v2 bằng DVC
 
+**Trạng thái implementation: hoàn thành.** `dvc.yaml` có graph v2 độc lập từ validate hai dataset,
+import checkpoint đã train, đánh giá MSMT17/Market-1501, export/parity ONNX, extract reference,
+release gate đến package Triton version 2. Mọi output nằm dưới
+`artifacts/pipeline/market1501-msmt17-vit-bnneck-v2`; pipeline v1 không bị sửa hoặc ghi đè. Các nhánh
+evaluation/export/reference chỉ hội tụ ở validation nên thay đổi serving không kích hoạt retraining.
+Manifest v2 chứa Git commit, DVC revision của cả hai dataset, MLflow run ID và SHA256 effective config.
+Chi tiết chạy và graph nằm tại `docs/DVC_V2_PIPELINE.md`.
+
 Pipeline phải tách output v2 khỏi v1:
 
 ```text
@@ -321,6 +329,15 @@ Gate: `dvc repro` chỉ chạy lại stage bị ảnh hưởng; artifact v1 khô
 dataset revision, Git commit, MLflow run ID và config hash.
 
 ## 8. Export, parity và validation model v2
+
+**Trạng thái implementation: hoàn thành.** Workflow retraining tự gọi DVC release graph sau lineage
+gate. Graph tạo ONNX graph/external weights, reference bundle và preprocessing contract; từng artifact
+được ghi SHA256, Git commit, DVC revision, checkpoint checksum và MLflow run ID vào manifest. Policy
+cố định tại `configs/model_validation_v2.yaml` kiểm tra quality hai dataset, cosine parity tối thiểu
+`0.9999`, max absolute error tối đa `0.0001`, I/O/preprocessing contract và embedding 512 chiều hữu
+hạn, L2-normalize. PASS mới chạy package Triton và đăng ký alias `candidate`. FAIL ghi report/manifest
+trạng thái `rejected` vào chính MLflow run rồi dừng workflow trước registry; gate không có đường gán
+`champion` hoặc `production`.
 
 Tạo ONNX graph, external weights, preprocessing contract, reference embeddings 512 chiều, metadata,
 model manifest và SHA256. Validation gate bắt buộc kiểm tra:

@@ -34,3 +34,18 @@ triton:
   max_batch_size: 0
   preferred_batch_sizes: 4,8,16
   instance_kind: KIND_GPU
+
+v2_pipeline:
+  release_slug: market1501-msmt17-vit-bnneck-v2
+  release_id: market1501-msmt17-vit-bnneck:v2
+  conda_env: reid
+  source_root: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2
+  msmt17_root: datasets/MSMT17_V1
+  msmt17_pointer: datasets/MSMT17_V1.dvc
+  market1501_root: datasets/Market-1501-v15.09.15
+  market1501_pointer: datasets/Market-1501-v15.09.15.dvc
+  preprocessing_contract: model_releases/market1501-vit-bnneck/v1/preprocessing.json
+  validation_policy: configs/model_validation_v2.yaml
+  opset: 18
+  parity_samples: 8
+  model_version: 2
