@@ -44,6 +44,10 @@ function StageRow({ stage }: { stage: Stage }) {
   );
 }
 
+function metricText(value: unknown, digits = 4) {
+  return typeof value === "number" ? value.toFixed(digits) : String(value ?? "—");
+}
+
 export function PipelineControl() {
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -87,6 +91,7 @@ export function PipelineControl() {
   }, [refreshCycle]);
 
   const metrics = useMemo(() => events.filter((event) => event.kind === "stage.metrics").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
+  const trainingMetrics = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "train_v2").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
   const driftEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "detect_drift").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
   const reviewEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "evaluate_v1").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
   const approvedDecision = useMemo(() => events.filter((event) => event.kind === "retraining.decision_created").at(-1)?.payload, [events]);
@@ -147,6 +152,26 @@ export function PipelineControl() {
               <button disabled={!canPromote || busy} onClick={() => action("promote", "Promote model candidate lên production?")} className="rounded-lg border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-bold text-teal-100 disabled:cursor-not-allowed disabled:opacity-30">Promote to Production</button>
               <button disabled={!cycle || busy} onClick={() => action("rollback", "Rollback production về model v1?")} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback to v1</button>
             </div>
+          </section>
+          <section className="panel overflow-hidden rounded-2xl p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div><p className="eyebrow">Model v2 training</p><p className="mt-2 text-sm text-slate-400">Self-hosted GPU runner</p></div>
+              {stage("train_v2") && <StatusPill status={stage("train_v2")!.status} />}
+            </div>
+            {trainingMetrics ? <>
+              <div className="mt-5 flex items-end justify-between"><p className="text-3xl font-black text-white">Epoch {metricText(trainingMetrics.epoch, 0)}<span className="text-base font-medium text-slate-500"> / {metricText(trainingMetrics.epochs, 0)}</span></p><p className="font-mono text-xs text-slate-500">{metricText(trainingMetrics.elapsed_seconds, 1)}s</p></div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-teal-300 transition-all" style={{ width: `${Math.min(100, Math.max(2, Number(trainingMetrics.epoch ?? 0) / Math.max(1, Number(trainingMetrics.epochs ?? 20)) * 100))}%` }} /></div>
+              <dl className="mt-5 grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Train loss</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{metricText(trainingMetrics.train_loss)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">mAP</dt><dd className="mt-1 font-mono text-lg font-bold text-teal-200">{metricText(trainingMetrics.mAP)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Backbone LR</dt><dd className="mt-1 font-mono text-sm text-sky-200">{metricText(trainingMetrics.backbone_lr, 7)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Head LR</dt><dd className="mt-1 font-mono text-sm text-sky-200">{metricText(trainingMetrics.head_lr, 7)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">GPU utilization</dt><dd className="mt-1 font-mono text-sm text-amber-200">{metricText(trainingMetrics.gpu_utilization_percent, 1)}%</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">GPU memory</dt><dd className="mt-1 font-mono text-sm text-amber-200">{metricText(trainingMetrics.gpu_memory_allocated_mib, 1)} MiB</dd></div>
+              </dl>
+              <div className="mt-4 rounded-lg border border-slate-800 bg-black/30 p-3"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Latest runner log</p><p className="mt-2 break-words font-mono text-xs leading-5 text-slate-300">{metricText(trainingMetrics.latest_log)}</p></div>
+              {Boolean(trainingMetrics.mlflow_run_url) && <a href={String(trainingMetrics.mlflow_run_url)} target="_blank" rel="noreferrer" className="mt-4 inline-flex text-xs font-bold text-sky-300 hover:text-sky-200">Open live MLflow run ↗</a>}
+            </> : <p className="mt-4 text-sm text-slate-500">Telemetry sẽ xuất hiện tự động khi runner bắt đầu epoch đầu tiên.</p>}
           </section>
           <section className="panel rounded-2xl p-5">
             <div className="flex items-center justify-between"><p className="eyebrow">Approval evidence</p>{Boolean(reviewEvidence?.status) && <StatusPill status={String(reviewEvidence?.status)} />}</div>

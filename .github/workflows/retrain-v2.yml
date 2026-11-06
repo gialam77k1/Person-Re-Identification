@@ -115,6 +115,12 @@ jobs:
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 RUNNING --detail "Approved retraining started"
           ./scripts/train_msmt17_v2_local.sh
 
+      - name: Report training failure
+        if: ${{ failure() }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
+          --detail "Model v2 training or preflight failed; inspect runner and MLflow logs"
+
       - name: Mark training complete
         run: |
           conda run --no-capture-output -n reid python src/validate_v2_training_completion.py \
@@ -178,7 +184,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Report training failure
+      - name: Report workflow failure
         if: ${{ failure() }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release FAIL

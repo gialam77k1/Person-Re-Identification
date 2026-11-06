@@ -239,6 +239,13 @@ thao tác vận hành hằng ngày.
 
 ## 5. Retrain model v2 tự động bằng self-hosted runner
 
+**Trạng thái implementation: hoàn thành.** Sau approval, workflow self-hosted tự preflight và train
+không cần lệnh terminal. Preflight khóa đúng training contract; mỗi epoch gửi loss, backbone/head LR,
+mAP, GPU, elapsed time, log gần nhất và link MLflow về Control Center. Completion gate chỉ cho stage
+`train_v2` PASS khi MLflow `FINISHED`, đủ sáu artifact, transfer đúng epoch 48/reset classifier,
+metrics hữu hạn, early-stop metadata hợp lệ và log không có CUDA/OOM. Việc sinh checkpoint v2 thật
+vẫn cần chạy một lifecycle trên GPU runner.
+
 Sau khi người dùng phê duyệt trên UI, Control API phải tiếp tục cycle và runner tự bắt đầu training;
 không yêu cầu chạy thêm lệnh trong terminal. Control Center chuyển sang màn hình training và cập
 nhật epoch, loss, learning rate, mAP, GPU và log gần nhất.

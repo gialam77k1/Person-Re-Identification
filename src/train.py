@@ -700,6 +700,14 @@ def run_training(config: dict) -> None:
                     "head_lr": epoch_metrics["head_lr"],
                     "elapsed_seconds": round(time.perf_counter() - started_monotonic, 1),
                     "latest_log": latest_log,
+                    "mlflow_run_id": mlflow_metadata.get("run_id", ""),
+                    "mlflow_run_url": (
+                        f"{str(mlflow_metadata.get('tracking_uri', '')).rstrip('/')}"
+                        f"/#/experiments/{mlflow_metadata.get('experiment_id', '')}"
+                        f"/runs/{mlflow_metadata.get('run_id', '')}"
+                        if mlflow_metadata.get("run_id")
+                        else ""
+                    ),
                     **collect_gpu_telemetry(device),
                 },
             )
