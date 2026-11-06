@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -50,11 +51,45 @@ def ks_statistic(reference: np.ndarray, current: np.ndarray) -> float:
     return float(np.max(np.abs(reference_cdf - current_cdf)))
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def model_artifact(manifest: dict[str, Any], release_id: str) -> dict[str, Any]:
+    manifest_release = manifest.get("release", {}).get("release_id")
+    if manifest_release != release_id:
+        raise ValueError(
+            f"Model manifest release {manifest_release!r} does not match {release_id!r}."
+        )
+    preferred_roles = ("onnx_graph", "pytorch_checkpoint")
+    for role in preferred_roles:
+        item = next(
+            (entry for entry in manifest.get("files", []) if entry.get("role") == role),
+            None,
+        )
+        if item and len(str(item.get("sha256", ""))) == 64:
+            return {
+                "role": role,
+                "path": item.get("repository_path"),
+                "sha256": item["sha256"],
+            }
+    raise ValueError("Model manifest has no checksummed ONNX graph or PyTorch checkpoint.")
+
+
 def build_drift_report(
     reference: np.ndarray,
     current: np.ndarray,
     release_id: str,
     policy: dict[str, Any],
+    *,
+    metadata: dict[str, Any] | None = None,
+    model: dict[str, Any] | None = None,
+    reference_sha256: str | None = None,
+    current_sha256: str | None = None,
 ) -> dict[str, Any]:
     if reference.shape[1] != current.shape[1]:
         raise ValueError("Reference and current embedding dimensions differ.")
@@ -86,7 +121,7 @@ def build_drift_report(
         maximum = float(thresholds[f"{name}_max"])
         checks[name] = {"value": value, "maximum": maximum, "passed": value <= maximum}
     passed = all(check["passed"] for check in checks.values())
-    return {
+    report = {
         "schema_version": 1,
         "release_id": release_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -95,13 +130,36 @@ def build_drift_report(
         "reference_samples": int(reference.shape[0]),
         "current_samples": int(current.shape[0]),
         "embedding_dim": int(reference.shape[1]),
+        "minimum_current_samples": minimum,
+        "thresholds": {key: float(value) for key, value in thresholds.items()},
         "checks": checks,
     }
+    if metadata is not None:
+        if metadata.get("release_id") != release_id:
+            raise ValueError("Embedding metadata release does not match drift release.")
+        if int(metadata.get("num_samples", -1)) != int(current.shape[0]):
+            raise ValueError("Embedding metadata sample count does not match current embeddings.")
+        report["provenance"] = {
+            "git_commit": metadata.get("git_commit"),
+            "dataset": metadata.get("dataset"),
+            "dataset_dvc_revision": metadata.get("dataset_dvc_revision"),
+            "split": metadata.get("split"),
+            "sample_seed": metadata.get("sample_seed"),
+        }
+    if model is not None:
+        report["model_artifact"] = model
+    report["inputs"] = {
+        "reference_embeddings_sha256": reference_sha256,
+        "current_embeddings_sha256": current_sha256,
+    }
+    return report
 
 
 def prometheus_text(report: dict[str, Any]) -> str:
     release = str(report["release_id"]).replace('"', '\\"')
-    labels = f'release_id="{release}"'
+    provenance = report.get("provenance", {})
+    dataset = str(provenance.get("dataset", "unknown")).replace('"', '\\"')
+    labels = f'release_id="{release}",dataset="{dataset}"'
     timestamp = datetime.fromisoformat(report["generated_at"]).timestamp()
     lines = [
         "# HELP reid_embedding_drift_detected Whether the latest drift report failed its policy.",
@@ -111,11 +169,19 @@ def prometheus_text(report: dict[str, Any]) -> str:
         "# TYPE reid_embedding_drift_last_run_timestamp_seconds gauge",
         f"reid_embedding_drift_last_run_timestamp_seconds{{{labels}}} {timestamp:.0f}",
         f"reid_embedding_drift_current_samples{{{labels}}} {report['current_samples']}",
+        f"reid_embedding_drift_reference_samples{{{labels}}} {report['reference_samples']}",
     ]
+    seed = provenance.get("sample_seed")
+    if isinstance(seed, int):
+        lines.append(f"reid_embedding_drift_sample_seed{{{labels}}} {seed}")
     for name, check in report["checks"].items():
         if not math.isfinite(float(check["value"])):
             raise ValueError(f"Non-finite drift metric: {name}")
         lines.append(f'reid_embedding_drift_metric{{{labels},metric="{name}"}} {check["value"]:.10g}')
+        lines.append(
+            f'reid_embedding_drift_threshold{{{labels},metric="{name}"}} '
+            f'{check["maximum"]:.10g}'
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -125,6 +191,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--current", required=True)
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--config", default="configs/drift_detection.yaml")
+    parser.add_argument("--metadata")
+    parser.add_argument("--model-manifest")
     parser.add_argument("--output", required=True)
     parser.add_argument("--prometheus-output", required=True)
     parser.add_argument("--fail-on-drift", action="store_true")
@@ -135,11 +203,30 @@ def main() -> int:
     args = parse_args()
     try:
         policy = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+        reference_path = Path(args.reference)
+        current_path = Path(args.current)
+        metadata = (
+            json.loads(Path(args.metadata).read_text(encoding="utf-8"))
+            if args.metadata
+            else None
+        )
+        model = (
+            model_artifact(
+                json.loads(Path(args.model_manifest).read_text(encoding="utf-8")),
+                args.release_id,
+            )
+            if args.model_manifest
+            else None
+        )
         report = build_drift_report(
-            load_embeddings(Path(args.reference)),
-            load_embeddings(Path(args.current), release_id=args.release_id),
+            load_embeddings(reference_path),
+            load_embeddings(current_path, release_id=args.release_id),
             args.release_id,
             policy,
+            metadata=metadata,
+            model=model,
+            reference_sha256=sha256_file(reference_path),
+            current_sha256=sha256_file(current_path),
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
