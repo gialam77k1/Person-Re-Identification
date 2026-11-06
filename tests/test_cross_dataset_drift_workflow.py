@@ -23,6 +23,7 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
         self.assertIn("--metadata", script)
         self.assertIn("--model-manifest", script)
         self.assertIn("textfile/reid_cross_dataset_drift.prom", script)
+        self.assertIn("log_drift_mlflow.py", script)
 
     def test_workflow_is_manual_and_uses_self_hosted_linux(self) -> None:
         workflow = yaml.load(
@@ -42,6 +43,7 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
         self.assertIn("dvc_local.sh pull validate_release", workflow_text)
         self.assertIn("mlops-evidence-${{ inputs.cycle_id }}", workflow_text)
         self.assertIn('"workflow_run_id":"${{ github.run_id }}"', workflow_text)
+        self.assertIn('LOG_DRIFT_MLFLOW: "1"', workflow_text)
 
 
 if __name__ == "__main__":

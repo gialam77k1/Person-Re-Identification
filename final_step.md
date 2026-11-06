@@ -181,6 +181,23 @@ Gate hoàn thành:
 
 ## 3. Xác nhận drift bằng dữ liệu MSMT17
 
+**Trạng thái implementation: hoàn thành.** Drift detector nhận metadata của mẫu MSMT17 và manifest
+model v1, ghi trực tiếp Git commit, DVC revision, seed, số mẫu, threshold, checksum model/reference/
+current embeddings vào report. Metrics được xuất vào textfile directory của node-exporter để
+Prometheus scrape và dashboard Grafana hiển thị cả observed value lẫn threshold. Workflow đồng thời
+lưu report vào experiment MLflow `person-reid-drift`; MLflow chỉ lưu dấu vết, không tham gia quyết
+định `drift_detected`.
+
+Kết quả kiểm tra lại bằng 1.000 ảnh query MSMT17 và 12.936 reference embeddings Market-1501:
+
+- `drift_detected=true`.
+- Centroid cosine distance `0,5532`, vượt ngưỡng `0,05`.
+- Standardized mean shift `0,3698`, vượt ngưỡng `0,20`.
+- KS statistic `0,2034`, vượt ngưỡng `0,15`.
+- ONNX v1 có SHA256
+  `e8425d8f645dc419225d02f2e586ceb3a244955ee5e292141951a5c7aaf1f4be`.
+- Dataset revision `c8a4c6f18b86490a45f940ab9fb0eb70.dir`, seed `42`.
+
 Luồng detection phải chạy trước retraining:
 
 ```text

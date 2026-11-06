@@ -30,6 +30,13 @@ Start
 Workflow post-approval dừng sau alias `candidate`. Nó không được gán `champion` và không deploy
 production; export ONNX, parity, staging và production tiếp tục ở các gate sau của cycle.
 
+Pre-approval tạo drift report từ Market-1501 reference embeddings và mẫu query MSMT17. Report chứa
+release/checksum model, checksum hai tập embedding, Git commit, DVC revision, seed, sample count và
+toàn bộ threshold. File Prometheus được ghi vào `${MONITORING_STORAGE_PATH}/textfile` để
+node-exporter expose cho Prometheus; dashboard **Person ReID - Model Behavior** hiển thị trạng thái,
+giá trị drift và threshold. Một bản report cũng được log vào experiment `person-reid-drift` để audit,
+nhưng quyết định DRIFT luôn do `generate_drift_report.py` tạo trước khi gọi MLflow.
+
 Evidence pre-approval được upload dưới tên `mlops-evidence-{cycle_id}`. Control API lưu chính xác
 GitHub run ID và artifact name, rồi chỉ dispatch retraining với bundle đó. Runner kiểm tra lại checksum,
 Git commit, DVC revision, dataset và checkpoint v1 trước khi chạy preflight/training. Report JSON nhỏ

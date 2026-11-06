@@ -66,3 +66,12 @@ conda run --no-capture-output -n reid python src/generate_drift_report.py \
 
 cp "${PROMETHEUS_OUTPUT}" "${OUTPUT_ROOT}/reid_cross_dataset_drift.prom"
 cp "${OUTPUT_ROOT}/drift_report.json" "${MONITORING_REPORT}"
+
+if [[ "${LOG_DRIFT_MLFLOW:-0}" == "1" ]]; then
+  conda run --no-capture-output -n reid python src/log_drift_mlflow.py \
+    --report "${OUTPUT_ROOT}/drift_report.json" \
+    --prometheus-metrics "${PROMETHEUS_OUTPUT}" \
+    --policy configs/drift_detection.yaml \
+    --experiment person-reid-drift \
+    --output "${OUTPUT_ROOT}/drift_mlflow_run.json"
+fi

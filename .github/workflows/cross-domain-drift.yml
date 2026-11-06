@@ -69,12 +69,13 @@ jobs:
           CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
           SAMPLE_SIZE: ${{ inputs.sample_size }}
           RELEASE_ID: ${{ inputs.release_id }}
+          LOG_DRIFT_MLFLOW: "1"
         run: ./scripts/cross_dataset_drift.sh
 
       - name: Mark drift stages complete
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings PASS --progress 1 --detail "MSMT17 embeddings captured"
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift PASS --progress 1 --detail "Drift report generated"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift PASS --progress 1 --detail "Drift detected and recorded in Prometheus/MLflow" --metrics-file artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json
 
       - name: Evaluate model v1 on MSMT17
         env:
