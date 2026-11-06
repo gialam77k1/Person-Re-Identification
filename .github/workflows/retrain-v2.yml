@@ -202,9 +202,12 @@ jobs:
 
       - name: Persist large candidate artifacts with DVC
         run: |
-          ./scripts/dvc_local.sh add "${V2_ROOT}/checkpoints/best_model.pth" "${V2_ROOT}/checkpoints/last_model.pth"
-          ./scripts/dvc_local.sh push "${V2_ROOT}/checkpoints/best_model.pth.dvc" "${V2_ROOT}/checkpoints/last_model.pth.dvc"
-          ./scripts/dvc_local.sh push v2_package_triton
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" publish_artifacts RUNNING \
+            --detail "Publishing the complete v2 release graph to DVC / MinIO"
+          ./scripts/publish_v2_artifacts.sh
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" publish_artifacts PASS \
+            --progress 1 --detail "DVC remote is clean and publication evidence is versioned" \
+            --metrics-file "${V2_PIPELINE_ROOT}/release/dvc_publication.json"
 
       - name: Register MLflow candidate alias
         run: |
@@ -212,6 +215,8 @@ jobs:
           conda run --no-capture-output -n reid python src/register_retraining_candidate.py \
             --manifest "${V2_PIPELINE_ROOT}/release/model_manifest.json" \
             --validation-report "${V2_PIPELINE_ROOT}/release/validation_report.json" \
+            --dvc-publication "${V2_PIPELINE_ROOT}/release/dvc_publication.json" \
+            --mlflow-run "${V2_PIPELINE_ROOT}/checkpoint/mlflow_run.json" \
             --alias candidate \
             --output "${V2_ROOT}/release/registration_result.json"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate PASS --progress 1 --detail "MLflow candidate alias assigned" --metrics-file "${V2_ROOT}/release/registration_result.json"

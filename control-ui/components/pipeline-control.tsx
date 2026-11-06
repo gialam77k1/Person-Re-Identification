@@ -15,6 +15,7 @@ const labels: Record<string, string> = {
   evaluate_v2: "Evaluate model v2",
   validate_release: "Validation gate",
   export_onnx: "Export ONNX & verify parity",
+  publish_artifacts: "Publish artifacts to DVC / MinIO",
   register_candidate: "Register MLflow candidate",
   deploy_staging: "Deploy staging",
   staging_test: "Test staging",
@@ -39,7 +40,7 @@ function StageRow({ stage }: { stage: Stage }) {
       <div className={`relative z-10 grid h-8 w-8 place-items-center rounded-full border border-current bg-[#101b28] font-black ${color}`}>{symbol}</div>
       <div className="pt-1"><p className="text-sm font-bold">{labels[stage.name] ?? stage.name}</p>{stage.detail && <p className="mt-1 text-xs text-slate-500">{stage.detail}</p>}{stage.status === "RUNNING" && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${Math.max(4, stage.progress * 100)}%` }} /></div>}</div>
       <div className="pt-1"><StatusPill status={stage.status} /></div>
-      {stage.position < 12 && <span className="absolute left-[15px] top-8 h-[calc(100%-1.4rem)] w-px bg-slate-800" />}
+      {stage.name !== "production_approval" && <span className="absolute left-[15px] top-8 h-[calc(100%-1.4rem)] w-px bg-slate-800" />}
     </li>
   );
 }

@@ -354,11 +354,20 @@ Model `FAIL` vẫn được giữ trong MLflow để điều tra nhưng không �
 
 ## 9. Version hóa artifact và đăng ký Model Registry
 
-- DVC-add checkpoint, ONNX, external weights, embeddings, metadata và release report của v2.
-- Push artifact lên MinIO và xác nhận `dvc status` sạch.
-- Đăng ký v2 trong MLflow Model Registry với alias ban đầu `candidate`.
-- Liên kết registry version tới Git commit, DVC revision, config, metrics và validation report.
-- Chưa đổi alias `champion` tại bước này.
+Workflow retraining tự chạy `scripts/publish_v2_artifacts.sh` sau khi release gate PASS. Script DVC-add
+`best_model.pth`, `last_model.pth` và publication report; `dvc push --with-deps
+v2_package_triton` đồng bộ checkpoint, ONNX, external weights, embeddings, metadata, evaluation và
+release report lên MinIO. `dvc status --cloud --with-deps --json` phải sạch trước khi tạo
+`dvc_publication.json`.
+
+Sau đó workflow đăng ký đúng training run `FINISHED` vào MLflow Model Registry với alias ban đầu
+`candidate`. Registry version mang Git commit, training Git commit, DVC revision của MSMT17 và
+Market-1501, config/checkpoint/manifest/validation SHA256 và metrics của hai dataset. Thao tác
+idempotent theo release ID và từ chối nếu release cũ trỏ tới run khác. Step này tuyệt đối không đổi
+alias `champion` hoặc `production`.
+
+Gate runtime chỉ hoàn thành khi model v2 đã train xong và tạo đủ artifact. Nếu checkpoint hoặc report
+còn thiếu, script dừng trước khi DVC push/Registry; không tạo candidate giả.
 
 ## 10. Deploy staging và kiểm thử deployment
 
