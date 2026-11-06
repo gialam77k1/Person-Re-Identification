@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
 from typing import Any, Protocol
 
+from src.control_api.approval import create_approved_decision, load_policy
 from src.control_api.config import ControlSettings
 from src.control_api.state import CycleStatus, StageStatus
 from src.control_api.store import CycleStore
@@ -9,6 +13,7 @@ from src.control_api.store import CycleStore
 
 class Dispatcher(Protocol):
     def dispatch(self, workflow: str, inputs: dict[str, str]) -> dict[str, Any]: ...
+    def download_artifact(self, run_id: str, artifact_name: str) -> dict[str, bytes]: ...
 
 
 class InvalidTransitionError(RuntimeError):
@@ -81,11 +86,34 @@ class LifecycleController:
             raise InvalidTransitionError(
                 "Pre-approval evidence is missing its workflow run ID or artifact name."
             )
+        evidence_files = self.dispatcher.download_artifact(
+            str(evidence["workflow_run_id"]), str(evidence["artifact_name"])
+        )
+        policy = load_policy(
+            Path(__file__).resolve().parents[2] / "configs/retraining_decision.yaml"
+        )
+        try:
+            decision = create_approved_decision(
+                files=evidence_files,
+                policy=policy,
+                cycle_id=cycle_id,
+                actor=actor,
+                source_release=cycle["source_release"],
+                dataset=cycle["dataset"],
+                evidence_run_id=str(evidence["workflow_run_id"]),
+                evidence_artifact=str(evidence["artifact_name"]),
+            )
+        except ValueError as exc:
+            raise InvalidTransitionError(str(exc)) from exc
+        encoded_decision = json.dumps(
+            decision, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        decision_sha256 = hashlib.sha256(encoded_decision).hexdigest()
+        self.store.save_retraining_decision(cycle_id, decision, decision_sha256)
         dispatch = self.dispatcher.dispatch(
             self.settings.retraining_workflow,
             {
                 "cycle_id": cycle_id,
-                "approved_by": actor,
                 "source_release": cycle["source_release"],
                 "target_release": cycle["target_release"],
                 "dataset": cycle["dataset"],
@@ -94,13 +122,19 @@ class LifecycleController:
                 "drift_report": "evidence/drift_report.json",
                 "evaluation_report": "evidence/evaluation_report.json",
                 "decision": "evidence/decision.json",
+                "decision_sha256": decision_sha256,
             },
         )
         self.store.audit(
             cycle_id,
             "retraining.approve",
             actor,
-            {"dispatch": dispatch, "evidence": evidence},
+            {
+                "dispatch": dispatch,
+                "evidence": evidence,
+                "decision_status": decision["status"],
+                "decision_sha256": decision_sha256,
+            },
         )
         self.store.update_stage(
             cycle_id, "retraining_approval", StageStatus.PASS, progress=1.0, detail=f"Approved by {actor}"
@@ -110,6 +144,18 @@ class LifecycleController:
         )
         self.store.update_cycle(cycle_id, status=CycleStatus.RUNNING)
         self.store.record_event(cycle_id, "workflow.dispatched", "Retraining workflow dispatched", dispatch)
+        self.store.record_event(
+            cycle_id,
+            "retraining.decision_created",
+            "Approved retraining decision created by Control API",
+            {
+                "status": decision["status"],
+                "approved_by": decision["approved_by"],
+                "approved_at": decision["approved_at"],
+                "decision_sha256": decision_sha256,
+                "evidence": decision["evidence"],
+            },
+        )
         return self.store.get_cycle(cycle_id)
 
     def _preapproval_evidence(self, cycle_id: str) -> dict[str, Any]:

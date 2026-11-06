@@ -26,6 +26,9 @@ class FakeDispatcher:
     def dispatch(self, workflow: str, inputs: dict[str, str]) -> dict[str, Any]:
         return {"workflow": workflow, "inputs": inputs}
 
+    def download_artifact(self, run_id: str, artifact_name: str) -> dict[str, bytes]:
+        return {}
+
 
 class ControlApiTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -104,6 +107,29 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(train["progress"], 0.35)
         events = (await self.request("GET", f"/control/cycles/{cycle_id}/events")).json()["events"]
         self.assertEqual(events[-1]["kind"], "stage.metrics")
+
+    async def test_retraining_decision_endpoint_requires_runner_token(self) -> None:
+        created = await self.request(
+            "POST",
+            "/control/cycles",
+            json={"dataset": "MSMT17", "idempotency_key": "decision-api", "actor": "tester"},
+        )
+        cycle_id = created.json()["cycle"]["id"]
+        self.store.save_retraining_decision(
+            cycle_id,
+            {"status": "RETRAIN_APPROVED", "approved_by": "reviewer"},
+            "a" * 64,
+        )
+        unauthorized = await self.request(
+            "GET", f"/control/cycles/{cycle_id}/retraining-decision"
+        )
+        authorized = await self.request(
+            "GET",
+            f"/control/cycles/{cycle_id}/retraining-decision",
+            headers={"X-Control-Callback-Token": "change-me-control-callback-token"},
+        )
+        self.assertEqual(unauthorized.status_code, 401)
+        self.assertEqual(authorized.json()["status"], "RETRAIN_APPROVED")
 
 
 if __name__ == "__main__":
