@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -82,6 +83,34 @@ def report_control_progress(
             pass
     except (OSError, urllib.error.URLError) as exc:
         print(f"WARNING: Control Center progress callback failed: {exc}", file=sys.stderr)
+
+
+def collect_gpu_telemetry(device: torch.device) -> dict[str, float]:
+    if device.type != "cuda":
+        return {}
+
+    telemetry = {
+        "gpu_memory_allocated_mib": round(torch.cuda.memory_allocated(device) / 1024**2, 2),
+        "gpu_memory_reserved_mib": round(torch.cuda.memory_reserved(device) / 1024**2, 2),
+    }
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                f"--id={device.index or 0}",
+                "--query-gpu=utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        telemetry["gpu_utilization_percent"] = float(result.stdout.strip().splitlines()[0])
+    except (FileNotFoundError, IndexError, subprocess.SubprocessError, ValueError):
+        # CUDA memory remains useful telemetry when nvidia-smi is unavailable.
+        pass
+    return telemetry
 
 
 def parse_args() -> argparse.Namespace:
@@ -562,6 +591,18 @@ def run_training(config: dict) -> None:
                 "lr_reduce_patience": config["train"].get("lr_reduce_patience", 5),
                 "min_lr": config["train"].get("min_lr", 1e-6),
                 "warmup_epochs": config["train"].get("warmup_epochs", 0),
+                "early_stopping_enabled": config["train"].get("early_stopping", {}).get(
+                    "enabled", False
+                ),
+                "early_stopping_monitor": config["train"].get("early_stopping", {}).get(
+                    "monitor", "mAP"
+                ),
+                "early_stopping_patience": config["train"].get("early_stopping", {}).get(
+                    "patience", 10
+                ),
+                "early_stopping_min_delta": config["train"].get("early_stopping", {}).get(
+                    "min_delta", 0.0
+                ),
                 "freeze_backbone_epochs": freeze_backbone_epochs,
                 "progressive_unfreeze": progressive_enabled,
                 "frozen_lower_blocks": frozen_lower_blocks,
@@ -590,6 +631,9 @@ def run_training(config: dict) -> None:
     bad_epochs = 0
     history = []
     run_status = "FINISHED"
+    stopped_early = False
+    stop_reason = "max_epochs_completed"
+    completed_epochs = 0
 
     try:
         for epoch in range(1, config["train"]["epochs"] + 1):
@@ -633,6 +677,13 @@ def run_training(config: dict) -> None:
                 "head_lr": float(optimizer.param_groups[1]["lr"]),
             }
             history.append(epoch_metrics)
+            completed_epochs = epoch
+            latest_log = (
+                f"Epoch {epoch}/{config['train']['epochs']} | "
+                f"loss={epoch_metrics['train_loss']:.4f} | "
+                f"mAP={epoch_metrics['mAP']:.4f} | "
+                f"rank1={epoch_metrics['rank1']:.4f}"
+            )
             report_control_progress(
                 "train_v2",
                 "RUNNING",
@@ -645,7 +696,11 @@ def run_training(config: dict) -> None:
                     "rank1": epoch_metrics["rank1"],
                     "mAP": epoch_metrics["mAP"],
                     "mINP": epoch_metrics["mINP"],
-                    "lr": epoch_metrics["lr"],
+                    "backbone_lr": epoch_metrics["lr"],
+                    "head_lr": epoch_metrics["head_lr"],
+                    "elapsed_seconds": round(time.perf_counter() - started_monotonic, 1),
+                    "latest_log": latest_log,
+                    **collect_gpu_telemetry(device),
                 },
             )
 
@@ -703,6 +758,11 @@ def run_training(config: dict) -> None:
                 bad_epochs += 1
 
             if early_stopping_enabled and bad_epochs >= early_stopping_patience:
+                stopped_early = True
+                stop_reason = (
+                    f"early_stopping:{early_stopping_monitor}:"
+                    f"no_improvement_{bad_epochs}_epochs"
+                )
                 print(
                     f"Early stopping triggered at epoch {epoch} "
                     f"after {bad_epochs} epochs without improvement in {early_stopping_monitor}."
@@ -716,6 +776,18 @@ def run_training(config: dict) -> None:
             "release_id": config.get("release", {}).get("id"),
             "base_release_id": config.get("release", {}).get("base_release_id"),
             "transfer": transfer_report,
+            "configured_epochs": int(config["train"]["epochs"]),
+            "completed_epochs": completed_epochs,
+            "stopped_early": stopped_early,
+            "stop_reason": stop_reason,
+            "early_stopping": {
+                "enabled": early_stopping_enabled,
+                "monitor": early_stopping_monitor,
+                "patience": early_stopping_patience,
+                "min_delta": early_stopping_min_delta,
+                "bad_epochs_at_stop": bad_epochs,
+                "best_monitored_value": best_monitored_metric,
+            },
             "best_epoch": max(history, key=lambda item: item["mAP"])["epoch"],
             "best_rank1": max(history, key=lambda item: item["mAP"])["rank1"],
             "best_rank5": max(history, key=lambda item: item["mAP"])["rank5"],
@@ -736,6 +808,14 @@ def run_training(config: dict) -> None:
                     "best_mAP": summary["best_mAP"],
                     "best_mINP": summary["best_mINP"],
                     "best_epoch": summary["best_epoch"],
+                    "completed_epochs": summary["completed_epochs"],
+                    "stopped_early": int(summary["stopped_early"]),
+                }
+            )
+            mlflow.set_tags(
+                {
+                    "training.stop_reason": summary["stop_reason"],
+                    "training.stopped_early": str(summary["stopped_early"]).lower(),
                 }
             )
             mlflow.log_artifact(str(saved_metrics), artifact_path="metrics")
@@ -755,6 +835,10 @@ def run_training(config: dict) -> None:
                     "ended_at": datetime.now(timezone.utc).isoformat(),
                     "duration_seconds": duration_seconds,
                     "status": run_status,
+                    "configured_epochs": int(config["train"]["epochs"]),
+                    "completed_epochs": completed_epochs,
+                    "stopped_early": stopped_early,
+                    "stop_reason": stop_reason if run_status == "FINISHED" else "training_failed",
                 }
             )
             mlflow_run_path = save_json(

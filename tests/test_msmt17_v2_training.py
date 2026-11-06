@@ -8,8 +8,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
+import torch
 
 from src.models.transfer import is_task_head_parameter, set_vit_lower_blocks_trainable
+from src.train import collect_gpu_telemetry
 from src.validate_msmt17_v2_training import MINIMUM_FREE_BYTES, validate_inputs
 
 
@@ -57,6 +59,9 @@ class FakeModel:
 
 
 class MSMT17V2TrainingTest(unittest.TestCase):
+    def test_cpu_training_telemetry_does_not_require_nvidia_smi(self) -> None:
+        self.assertEqual(collect_gpu_telemetry(torch.device("cpu")), {})
+
     def test_config_matches_approved_training_contract(self) -> None:
         config = yaml.safe_load(
             (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8")
