@@ -279,6 +279,13 @@ và `metrics_v2.json`.
 
 ## 6. Đánh giá v2 và kiểm tra catastrophic forgetting
 
+**Trạng thái implementation: hoàn thành.** Workflow đánh giá cùng SHA256 checkpoint v2 trên MSMT17
+và Market-1501, ghi Rank-1/Rank-5/mAP/mINP, query/gallery count, Git commit và DVC revision. Policy
+`configs/catastrophic_forgetting.yaml` được version hóa trước khi chạy: v2 phải tăng tối thiểu Rank-1
+`0,05` và mAP `0,03` trên MSMT17; mức giảm tuyệt đối tối đa trên Market-1501 lần lượt là Rank-1
+`0,05`, Rank-5 `0,03`, mAP `0,08`, mINP `0,10`. Cả hai report, policy và gate report được log
+vào đúng MLflow training run kể cả khi gate FAIL; chỉ PASS mới được đi tiếp tới validation/registry.
+
 Đánh giá cùng checkpoint tốt nhất trên:
 
 - MSMT17 để đo mức cải thiện so với model v1 cross-domain.

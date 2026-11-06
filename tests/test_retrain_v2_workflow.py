@@ -28,7 +28,9 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         for command in (
             "train_msmt17_v2_local.sh --check",
             "train_msmt17_v2_local.sh",
-            "evaluate_msmt17_v2.sh",
+            "evaluate_v2_dual_domain.sh",
+            "catastrophic_forgetting_gate.py",
+            "log_v2_evaluations_mlflow.py",
             "retraining_validation_gate.py",
             "register_retraining_candidate.py",
         ):
@@ -44,6 +46,13 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         artifact_section = self.text.split("name: msmt17-v2-retraining-reports", 1)[1]
         self.assertNotIn("*.pth\n", artifact_section)
         self.assertIn("dvc_local.sh push", self.text)
+
+    def test_forgetting_thresholds_are_versioned_outside_workflow(self) -> None:
+        self.assertIn("configs/catastrophic_forgetting.yaml", self.text)
+        self.assertNotIn("rank1_min_absolute_gain:", self.text)
+        self.assertIn("model_releases/market1501-vit-bnneck/v1/model_manifest.json", self.text)
+        self.assertIn("evaluation_msmt17.json", self.text)
+        self.assertIn("evaluation_market1501.json", self.text)
 
     def test_changed_shell_scripts_have_valid_syntax(self) -> None:
         for script in (
