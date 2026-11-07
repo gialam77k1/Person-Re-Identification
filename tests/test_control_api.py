@@ -108,6 +108,45 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         events = (await self.request("GET", f"/control/cycles/{cycle_id}/events")).json()["events"]
         self.assertEqual(events[-1]["kind"], "stage.metrics")
 
+    async def test_runner_callback_accepts_nested_report_metrics(self) -> None:
+        created = await self.request(
+            "POST",
+            "/control/cycles",
+            json={
+                "dataset": "MSMT17",
+                "idempotency_key": "nested-drift-report",
+                "actor": "tester",
+            },
+        )
+        cycle_id = created.json()["cycle"]["id"]
+        updated = await self.request(
+            "POST",
+            f"/control/cycles/{cycle_id}/stages/detect_drift",
+            headers={"X-Control-Callback-Token": "change-me-control-callback-token"},
+            json={
+                "status": "PASS",
+                "progress": 1.0,
+                "metrics": {
+                    "drift_detected": True,
+                    "checks": {
+                        "centroid_cosine_distance": {
+                            "value": 0.42,
+                            "maximum": 0.15,
+                            "passed": False,
+                        }
+                    },
+                },
+            },
+        )
+
+        self.assertEqual(updated.status_code, 200)
+        events = (await self.request("GET", f"/control/cycles/{cycle_id}/events")).json()["events"]
+        self.assertEqual(
+            events[-1]["payload"]["metrics"]["checks"]
+            ["centroid_cosine_distance"]["value"],
+            0.42,
+        )
+
     async def test_retraining_decision_endpoint_requires_runner_token(self) -> None:
         created = await self.request(
             "POST",
