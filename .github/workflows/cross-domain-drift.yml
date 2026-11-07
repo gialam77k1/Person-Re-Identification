@@ -51,8 +51,8 @@ jobs:
           printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
           chmod 600 .env.mlops
 
-      - name: Start serving stack
-        run: ./scripts/mlops_stack.sh up
+      - name: Verify persistent serving stack
+        run: ./scripts/mlops_stack.sh verify
 
       - name: Mark data validation complete
         run: >-
