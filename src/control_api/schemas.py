@@ -31,4 +31,6 @@ class StageUpdateRequest(BaseModel):
     status: Literal["PENDING", "RUNNING", "WAITING_APPROVAL", "PASS", "FAIL", "SKIPPED"]
     progress: float | None = Field(default=None, ge=0.0, le=1.0)
     detail: str | None = Field(default=None, max_length=2000)
-    metrics: dict[str, float | int | str | bool | None] = Field(default_factory=dict)
+    # Drift and validation reports include nested checks and provenance. Keep
+    # the complete JSON payload so the UI and audit trail receive all evidence.
+    metrics: dict[str, Any] = Field(default_factory=dict)
