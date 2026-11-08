@@ -8,7 +8,7 @@ MARKET1501_REPORT="${PIPELINE_ROOT}/evaluate_market1501/metrics/evaluation_marke
 FORGETTING_REPORT="${PIPELINE_ROOT}/release/catastrophic_forgetting_report.json"
 REFERENCE_ROOT="${PIPELINE_ROOT}/reference/embeddings"
 
-python src/catastrophic_forgetting_gate.py \
+python -m src.catastrophic_forgetting_gate \
   --msmt17-v1 model_releases/market1501-vit-bnneck/v1/msmt17_cross_domain_metrics.json \
   --msmt17-v2 "${MSMT17_REPORT}" \
   --market1501-v1-manifest model_releases/market1501-vit-bnneck/v1/model_manifest.json \
@@ -17,7 +17,7 @@ python src/catastrophic_forgetting_gate.py \
   --mlflow-run "${CHECKPOINT_ROOT}/mlflow_run.json" \
   --output "${FORGETTING_REPORT}"
 
-python src/validate_v2_dvc_release.py \
+python -m src.validate_v2_dvc_release \
   --checkpoint-manifest "${CHECKPOINT_ROOT}/checkpoint_manifest.json" \
   --data-manifest "${PIPELINE_ROOT}/validate/data_manifest.json" \
   --msmt17-evaluation "${MSMT17_REPORT}" \

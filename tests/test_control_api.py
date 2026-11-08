@@ -147,6 +147,39 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             0.42,
         )
 
+    async def test_failed_stage_closes_other_running_stages(self) -> None:
+        created = await self.request(
+            "POST",
+            "/control/cycles",
+            json={
+                "dataset": "MSMT17",
+                "idempotency_key": "terminal-failure-closes-running",
+                "actor": "tester",
+            },
+        )
+        cycle_id = created.json()["cycle"]["id"]
+        headers = {"X-Control-Callback-Token": "change-me-control-callback-token"}
+        await self.request(
+            "POST",
+            f"/control/cycles/{cycle_id}/stages/train_v2",
+            headers=headers,
+            json={"status": "RUNNING", "progress": 0.4, "detail": "Epoch 20/50"},
+        )
+        failed = await self.request(
+            "POST",
+            f"/control/cycles/{cycle_id}/stages/validate_release",
+            headers=headers,
+            json={"status": "FAIL", "detail": "Completion gate failed"},
+        )
+
+        self.assertEqual(failed.status_code, 200)
+        self.assertEqual(failed.json()["status"], "FAIL")
+        stages = {stage["name"]: stage for stage in failed.json()["stages"]}
+        self.assertEqual(stages["validate_release"]["status"], "FAIL")
+        self.assertEqual(stages["train_v2"]["status"], "FAIL")
+        self.assertEqual(stages["train_v2"]["progress"], 0.4)
+        self.assertIn("validate_release failed", stages["train_v2"]["detail"])
+
     async def test_retraining_decision_endpoint_requires_runner_token(self) -> None:
         created = await self.request(
             "POST",

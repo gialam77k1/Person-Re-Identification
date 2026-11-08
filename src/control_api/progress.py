@@ -31,6 +31,17 @@ class ProgressService:
                 {"stage": stage, "metrics": metrics},
             )
         if status == StageStatus.FAIL:
+            for active_stage in cycle["stages"]:
+                if active_stage["name"] == stage:
+                    continue
+                if active_stage["status"] == StageStatus.RUNNING.value:
+                    self.store.update_stage(
+                        cycle_id,
+                        active_stage["name"],
+                        StageStatus.FAIL,
+                        progress=active_stage["progress"],
+                        detail=f"Stopped because {stage} failed: {detail or 'no detail'}",
+                    )
             return self.store.update_cycle(
                 cycle_id, status=CycleStatus.FAIL, error=detail or f"{stage} failed"
             )

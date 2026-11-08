@@ -18,7 +18,7 @@ class ControlApprovalTest(unittest.TestCase):
             "mAP": 0.01, "mINP": 0.01,
         }
         self.policy = {
-            "policy_name": "test", "candidate": {"base_release_id": self.release, "target_dataset": "msmt17", "target_dataset_version": "MSMT17_V1", "target_epochs": 20},
+            "policy_name": "test", "candidate": {"base_release_id": self.release, "target_dataset": "msmt17", "target_dataset_version": "MSMT17_V1", "target_epochs": 50},
             "evidence": {"minimum_query_samples": 10000, "minimum_gallery_samples": 80000, "minimum_query_coverage": 0.99, "required_embedding_dim": 512, "require_drift_detected": True},
             "quality": {"retrain_when_any_below": {"rank1": 0.3, "mAP": 0.2, "mINP": 0.1}},
             "approval": {"manual_approval_required": True, "minimum_approver_name_length": 2},
@@ -51,7 +51,7 @@ class ControlApprovalTest(unittest.TestCase):
         )
         self.assertEqual(decision["status"], "RETRAIN_APPROVED")
         self.assertEqual(decision["approved_by"], "reviewer")
-        self.assertEqual(decision["target_epochs"], 20)
+        self.assertEqual(decision["target_epochs"], 50)
         self.assertEqual(len(decision["evidence"]["manifest_sha256"]), 64)
 
     def test_backend_rejects_tampered_evidence(self) -> None:

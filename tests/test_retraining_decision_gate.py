@@ -36,10 +36,10 @@ class RetrainingDecisionGateTest(unittest.TestCase):
         self.assertEqual(result["status"], "REVIEW_REQUIRED")
         self.assertTrue(result["retraining_signal"])
 
-    def test_named_approval_allows_twenty_epoch_retraining(self) -> None:
+    def test_named_approval_allows_fifty_epoch_retraining(self) -> None:
         result = build_retraining_decision(self.drift, self.evaluation, self.policy, approved_by="gialam77k1")
         self.assertEqual(result["status"], "RETRAIN_APPROVED")
-        self.assertEqual(result["target_epochs"], 20)
+        self.assertEqual(result["target_epochs"], 50)
 
     def test_no_drift_does_not_request_retraining(self) -> None:
         self.drift["drift_detected"] = False

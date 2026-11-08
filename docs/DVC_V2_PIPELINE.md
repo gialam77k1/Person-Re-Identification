@@ -30,7 +30,7 @@ v2_validate_data
 
 `v2_checkpoint` import checkpoint tốt nhất đã được workflow retraining tạo ra. Stage này từ chối
 artifact nếu MLflow run chưa `FINISHED`, release ID sai, checkpoint không bắt nguồn từ epoch 48 hoặc
-classifier Market-1501 chưa được reset. DVC không tự train lại 20 epoch khi chỉ thay đổi export,
+classifier Market-1501 chưa được reset. DVC không tự train lại 50 epoch khi chỉ thay đổi export,
 parity, reference hoặc Triton packaging.
 
 Manifest cuối tại `release/model_manifest.json` chứa Git commit của pipeline và training run, DVC

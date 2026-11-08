@@ -16,7 +16,7 @@ EXPECTED_BASE_RELEASE_ID = "market1501-vit-bnneck:v1-dvc"
 EXPECTED_DATASET = "msmt17"
 EXPECTED_DATASET_VERSION = "MSMT17_V1"
 EXPECTED_CHECKPOINT_EPOCH = 48
-EXPECTED_EPOCHS = 20
+EXPECTED_EPOCHS = 50
 
 
 def validate_training_contract(config: dict, decision: dict) -> None:

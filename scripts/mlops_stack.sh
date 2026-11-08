@@ -79,7 +79,8 @@ verify() {
   load_env
   compose exec -T postgres pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null
   echo "PostgreSQL: healthy"
-  verify_url "MinIO" "http://localhost:${MINIO_API_PORT:-9000}/minio/health/live"
+  verify_url "MinIO API" "http://localhost:${MINIO_API_PORT:-9000}/minio/health/live"
+  verify_url "MinIO Console" "http://localhost:${MINIO_CONSOLE_PORT:-9001}/"
   verify_url "MLflow" "http://localhost:${MLFLOW_PORT:-5000}/health"
   verify_url "Qdrant" "http://localhost:${QDRANT_HTTP_PORT:-6333}/healthz"
   verify_url "Triton" "http://localhost:${TRITON_HTTP_PORT:-8000}/v2/health/ready"

@@ -76,7 +76,16 @@ Job `minio-init` tự tạo hai bucket private và có thể chạy lại an to�
 ./scripts/mlops_stack.sh logs mlflow
 ```
 
-Lệnh `verify` kiểm tra PostgreSQL, các HTTP health/readiness endpoint (bao gồm FastAPI `/ready`) và bảo đảm hai MinIO bucket tồn tại.
+Lệnh `verify` kiểm tra PostgreSQL, MinIO API, MinIO Console, các HTTP
+health/readiness endpoint (bao gồm FastAPI `/ready`) và bảo đảm hai MinIO
+bucket tồn tại. Nếu Console tại `http://localhost:9001` bị reset sau khi thay
+đổi cấu hình, recreate riêng service mà không xóa volume:
+
+```bash
+docker compose --env-file .env.mlops -f docker-compose.mlops.yml \
+  up -d --force-recreate minio
+./scripts/mlops_stack.sh verify
+```
 
 ## Dừng stack
 

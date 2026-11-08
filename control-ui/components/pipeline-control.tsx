@@ -164,7 +164,7 @@ export function PipelineControl() {
             </div>
             {trainingMetrics ? <>
               <div className="mt-5 flex items-end justify-between"><p className="text-3xl font-black text-white">Epoch {metricText(trainingMetrics.epoch, 0)}<span className="text-base font-medium text-slate-500"> / {metricText(trainingMetrics.epochs, 0)}</span></p><p className="font-mono text-xs text-slate-500">{metricText(trainingMetrics.elapsed_seconds, 1)}s</p></div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-teal-300 transition-all" style={{ width: `${Math.min(100, Math.max(2, Number(trainingMetrics.epoch ?? 0) / Math.max(1, Number(trainingMetrics.epochs ?? 20)) * 100))}%` }} /></div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-teal-300 transition-all" style={{ width: `${Math.min(100, Math.max(2, Number(trainingMetrics.epoch ?? 0) / Math.max(1, Number(trainingMetrics.epochs ?? 50)) * 100))}%` }} /></div>
               <dl className="mt-5 grid grid-cols-2 gap-3 text-xs">
                 <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Train loss</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{metricText(trainingMetrics.train_loss)}</dd></div>
                 <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">mAP</dt><dd className="mt-1 font-mono text-lg font-bold text-teal-200">{metricText(trainingMetrics.mAP)}</dd></div>

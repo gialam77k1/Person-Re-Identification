@@ -15,7 +15,7 @@ class ControlCallbackTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "decision.json")
             with open(path, "w", encoding="utf-8") as handle:
-                json.dump({"status": "REVIEW_REQUIRED", "target_epochs": 20}, handle)
+                json.dump({"status": "REVIEW_REQUIRED", "target_epochs": 50}, handle)
             metrics = control_callback.load_metrics(
                 '{"workflow_run_id":"123"}', path
             )

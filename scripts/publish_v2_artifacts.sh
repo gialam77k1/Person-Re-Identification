@@ -30,7 +30,7 @@ cd "${ROOT_DIR}"
 ./scripts/dvc_local.sh push --with-deps v2_package_triton
 ./scripts/dvc_local.sh status --cloud --with-deps --json v2_package_triton > "${STATUS_FILE}"
 
-conda run --no-capture-output -n reid python src/verify_v2_artifact_publication.py \
+conda run --no-capture-output -n reid python -m src.verify_v2_artifact_publication \
   --manifest "${PIPELINE_ROOT}/release/model_manifest.json" \
   --validation-report "${PIPELINE_ROOT}/release/validation_report.json" \
   --dvc-status "${STATUS_FILE}" \

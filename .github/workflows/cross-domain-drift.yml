@@ -121,7 +121,7 @@ jobs:
         run: rm -f .env.mlops
 
       - name: Report pre-approval failure
-        if: ${{ failure() }}
+        if: ${{ failure() || cancelled() }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 FAIL
-          --detail "Pre-approval workflow failed; inspect GitHub Actions logs"
+          --detail "Pre-approval workflow failed or was cancelled; inspect GitHub Actions logs"

@@ -298,7 +298,7 @@ stages:
   v2_validate_data:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/validate_v2_release_data.py
+      python -m src.validate_v2_release_data
       --msmt17-config configs/msmt17_v2_eval.yaml
       --msmt17-pointer ${v2_pipeline.msmt17_pointer}
       --market1501-config configs/market1501_v2_eval.yaml
@@ -325,7 +325,7 @@ stages:
   v2_checkpoint:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/import_v2_checkpoint.py
+      python -m src.import_v2_checkpoint
       --checkpoint ${v2_pipeline.source_root}/checkpoints/best_model.pth
       --training-metrics ${v2_pipeline.source_root}/metrics/metrics_v2.json
       --mlflow-run ${v2_pipeline.source_root}/logs/mlflow_run.json
@@ -356,7 +356,7 @@ stages:
   v2_evaluate_msmt17:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/evaluate.py --config configs/msmt17_v2_eval.yaml
+      python -m src.evaluate --config configs/msmt17_v2_eval.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_msmt17
     deps:
@@ -382,7 +382,7 @@ stages:
   v2_evaluate_market1501:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/evaluate.py --config configs/market1501_v2_eval.yaml
+      python -m src.evaluate --config configs/market1501_v2_eval.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_market1501
     deps:
@@ -408,7 +408,7 @@ stages:
   v2_export_onnx:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/export_onnx.py --config configs/msmt17_v2_train.yaml
+      python -m src.export_onnx --config configs/msmt17_v2_train.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --opset ${v2_pipeline.opset}
       --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/onnx
@@ -435,7 +435,7 @@ stages:
   v2_verify_onnx:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/verify_onnx.py --config configs/msmt17_v2_train.yaml
+      python -m src.verify_onnx --config configs/msmt17_v2_train.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --onnx-path artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
       --split query --num-samples ${v2_pipeline.parity_samples}
@@ -465,7 +465,7 @@ stages:
   v2_extract_reference:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/extract_reference.py --config configs/msmt17_v2_train.yaml
+      python -m src.extract_reference --config configs/msmt17_v2_train.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/reference
     deps:
@@ -539,7 +539,7 @@ stages:
   v2_package_triton:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python src/prepare_triton_model.py
+      python -m src.prepare_triton_model
       --onnx-path artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
       --output-root artifacts/pipeline/${v2_pipeline.release_slug}/triton/model_repository
       --model-name reid_embedding --model-version ${v2_pipeline.model_version}
