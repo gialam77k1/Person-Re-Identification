@@ -53,6 +53,14 @@ class V2DVCPipelineTest(unittest.TestCase):
             check=True,
         )
 
+    def test_v2_python_stages_use_package_entrypoints(self) -> None:
+        for stage_name, stage in self.pipeline.items():
+            if not stage_name.startswith("v2_"):
+                continue
+            command = str(stage["cmd"])
+            if "python" in command:
+                self.assertNotIn("python src/", command)
+
 
 if __name__ == "__main__":
     unittest.main()

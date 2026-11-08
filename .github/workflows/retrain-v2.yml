@@ -83,7 +83,7 @@ jobs:
 
       - name: Verify Git, DVC, dataset and checkpoint lineage
         run: >-
-          python src/retraining_evidence.py verify
+          python -m src.retraining_evidence verify
           --manifest evidence/evidence_manifest.json
           --cycle-id "${{ inputs.cycle_id }}"
           --release-id "${{ inputs.source_release }}"
@@ -98,7 +98,7 @@ jobs:
             -H "X-Control-Callback-Token: ${CONTROL_CALLBACK_TOKEN}" \
             "${CONTROL_API_URL}/control/cycles/${{ inputs.cycle_id }}/retraining-decision" \
             --output "${{ inputs.decision }}"
-          python src/verify_approved_decision.py \
+          python -m src.verify_approved_decision \
             --decision "${{ inputs.decision }}" \
             --evidence-manifest evidence/evidence_manifest.json \
             --decision-sha256 "${{ inputs.decision_sha256 }}" \
@@ -142,7 +142,7 @@ jobs:
       - name: Check improvement and catastrophic forgetting
         run: |
           set +e
-          conda run --no-capture-output -n reid python src/catastrophic_forgetting_gate.py \
+          conda run --no-capture-output -n reid python -m src.catastrophic_forgetting_gate \
             --msmt17-v1 "${{ inputs.evaluation_report }}" \
             --msmt17-v2 "${MSMT17_V2_REPORT}" \
             --market1501-v1-manifest model_releases/market1501-vit-bnneck/v1/model_manifest.json \
@@ -152,7 +152,7 @@ jobs:
             --output "${FORGETTING_REPORT}"
           gate_status=$?
           set -e
-          conda run --no-capture-output -n reid python src/log_v2_evaluations_mlflow.py \
+          conda run --no-capture-output -n reid python -m src.log_v2_evaluations_mlflow \
             --msmt17 "${MSMT17_V2_REPORT}" \
             --market1501 "${MARKET1501_V2_REPORT}" \
             --gate "${FORGETTING_REPORT}" \
@@ -171,7 +171,7 @@ jobs:
 
       - name: Run retraining lineage gate
         run: |
-          python src/retraining_validation_gate.py \
+          python -m src.retraining_validation_gate \
             --evidence evidence/evidence_manifest.json \
             --decision evidence/approved_decision.json \
             --training-metrics "${V2_ROOT}/metrics/metrics_v2.json" \
@@ -212,7 +212,7 @@ jobs:
       - name: Register MLflow candidate alias
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate RUNNING --detail "Registering validated MLflow candidate"
-          conda run --no-capture-output -n reid python src/register_retraining_candidate.py \
+          conda run --no-capture-output -n reid python -m src.register_retraining_candidate \
             --manifest "${V2_PIPELINE_ROOT}/release/model_manifest.json" \
             --validation-report "${V2_PIPELINE_ROOT}/release/validation_report.json" \
             --dvc-publication "${V2_PIPELINE_ROOT}/release/dvc_publication.json" \

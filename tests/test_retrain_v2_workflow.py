@@ -20,8 +20,8 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         job = self.workflow["jobs"]["retrain"]
         self.assertEqual(job["runs-on"], ["self-hosted", "linux"])
         self.assertIn("run-id: ${{ inputs.evidence_run_id }}", self.text)
-        self.assertIn("retraining_evidence.py verify", self.text)
-        self.assertIn("verify_approved_decision.py", self.text)
+        self.assertIn("src.retraining_evidence verify", self.text)
+        self.assertIn("src.verify_approved_decision", self.text)
         self.assertIn("/retraining-decision", self.text)
 
     def test_workflow_preflights_trains_evaluates_and_gates(self) -> None:
@@ -29,11 +29,11 @@ class RetrainV2WorkflowTest(unittest.TestCase):
             "train_msmt17_v2_local.sh --check",
             "train_msmt17_v2_local.sh",
             "evaluate_v2_dual_domain.sh",
-            "catastrophic_forgetting_gate.py",
-            "log_v2_evaluations_mlflow.py",
-            "retraining_validation_gate.py",
+            "src.catastrophic_forgetting_gate",
+            "src.log_v2_evaluations_mlflow",
+            "src.retraining_validation_gate",
             "publish_v2_artifacts.sh",
-            "register_retraining_candidate.py",
+            "src.register_retraining_candidate",
         ):
             self.assertIn(command, self.text)
 
@@ -45,7 +45,7 @@ class RetrainV2WorkflowTest(unittest.TestCase):
 
     def test_full_v2_release_gate_runs_before_candidate_registration(self) -> None:
         repro = self.text.index("repro v2_package_triton")
-        registration = self.text.index("register_retraining_candidate.py")
+        registration = self.text.index("src.register_retraining_candidate")
         self.assertLess(repro, registration)
         self.assertIn("V2_PIPELINE_ROOT", self.text)
         self.assertIn("parity/metrics/onnx_parity.json", self.text)
@@ -58,7 +58,7 @@ class RetrainV2WorkflowTest(unittest.TestCase):
 
     def test_dvc_publication_is_verified_before_registry(self) -> None:
         publication = self.text.index("publish_v2_artifacts.sh")
-        registration = self.text.index("register_retraining_candidate.py")
+        registration = self.text.index("src.register_retraining_candidate")
         self.assertLess(publication, registration)
         self.assertIn("--dvc-publication", self.text)
         self.assertIn("--mlflow-run", self.text)
@@ -79,6 +79,19 @@ class RetrainV2WorkflowTest(unittest.TestCase):
             "publish_v2_artifacts.sh",
         ):
             subprocess.run(["bash", "-n", str(ROOT / "scripts" / script)], check=True)
+
+    def test_python_package_entrypoints_are_import_safe(self) -> None:
+        self.assertNotIn("python src/", self.text)
+        for module in (
+            "retraining_evidence",
+            "verify_approved_decision",
+            "validate_v2_training_completion",
+            "catastrophic_forgetting_gate",
+            "log_v2_evaluations_mlflow",
+            "retraining_validation_gate",
+            "register_retraining_candidate",
+        ):
+            self.assertIn(f"python -m src.{module}", self.text)
 
 
 if __name__ == "__main__":
