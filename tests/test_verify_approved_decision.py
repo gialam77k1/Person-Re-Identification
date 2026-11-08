@@ -16,7 +16,7 @@ class VerifyApprovedDecisionTest(unittest.TestCase):
             "cycle_id": "cycle-1",
             "base_release_id": "model:v1",
             "target_dataset": "msmt17",
-            "target_epochs": 20,
+            "target_epochs": 50,
             "approved_by": "reviewer",
             "approved_at": "2026-11-06T10:00:00+00:00",
             "evidence": {"manifest_sha256": self.manifest_sha, "workflow_run_id": "123"},
@@ -31,7 +31,7 @@ class VerifyApprovedDecisionTest(unittest.TestCase):
             cycle_id="cycle-1",
             source_release="model:v1",
             dataset="MSMT17",
-            target_epochs=20,
+            target_epochs=50,
         )
 
     def test_rejects_boolean_or_tampered_approval(self) -> None:
@@ -45,7 +45,7 @@ class VerifyApprovedDecisionTest(unittest.TestCase):
                 cycle_id="cycle-1",
                 source_release="model:v1",
                 dataset="MSMT17",
-                target_epochs=20,
+                target_epochs=50,
             )
 
 

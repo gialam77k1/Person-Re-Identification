@@ -26,7 +26,7 @@ class V2TrainingCompletionTest(unittest.TestCase):
         (run_root / "logs/effective_config.json").write_text(
             json.dumps(config), encoding="utf-8"
         )
-        completed = 8 if stopped_early else 20
+        completed = 8 if stopped_early else 50
         stop_reason = (
             "early_stopping:mAP:no_improvement_3_epochs"
             if stopped_early
@@ -49,7 +49,7 @@ class V2TrainingCompletionTest(unittest.TestCase):
         metrics = {
             "release_id": "market1501-msmt17-vit-bnneck:v2",
             "base_release_id": "market1501-vit-bnneck:v1-dvc",
-            "configured_epochs": 20,
+            "configured_epochs": 50,
             "completed_epochs": completed,
             "best_epoch": 5,
             "stopped_early": stopped_early,

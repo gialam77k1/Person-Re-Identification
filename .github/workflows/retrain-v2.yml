@@ -105,7 +105,7 @@ jobs:
             --cycle-id "${{ inputs.cycle_id }}" \
             --source-release "${{ inputs.source_release }}" \
             --dataset "${{ inputs.dataset }}" \
-            --target-epochs 20
+            --target-epochs 50
 
       - name: Preflight model v2 training
         env:
@@ -127,7 +127,7 @@ jobs:
 
       - name: Mark training complete
         run: |
-          conda run --no-capture-output -n reid python src/validate_v2_training_completion.py \
+          conda run --no-capture-output -n reid python -m src.validate_v2_training_completion \
             --run-root "${V2_ROOT}" \
             --output "${V2_ROOT}/logs/training_completion_report.json"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS \

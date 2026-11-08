@@ -73,7 +73,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
         self.assertEqual(config["transfer"]["expected_checkpoint_epoch"], 48)
         self.assertTrue(config["transfer"]["reset_classifier_heads"])
         self.assertFalse(config["model"]["pretrained"])
-        self.assertEqual(config["train"]["epochs"], 20)
+        self.assertEqual(config["train"]["epochs"], 50)
         self.assertEqual(config["train"]["progressive_unfreeze"]["freeze_lower_blocks"], 8)
         self.assertEqual(config["train"]["progressive_unfreeze"]["full_unfreeze_epoch"], 3)
         self.assertEqual(config["train"]["backbone_lr_factor"], 0.1)
@@ -113,7 +113,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
                         "base_release_id": "market1501-vit-bnneck:v1-dvc",
                         "target_dataset": "msmt17",
                         "target_dataset_version": "MSMT17_V1",
-                        "target_epochs": 20,
+                        "target_epochs": 50,
                     }
                 ),
                 encoding="utf-8",
@@ -134,7 +134,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
                 )
 
             self.assertEqual(result["decision"], "RETRAIN_APPROVED")
-            self.assertEqual(result["target_epochs"], 20)
+            self.assertEqual(result["target_epochs"], 50)
             self.assertEqual(result["train_images"], 30248)
             self.assertEqual(result["train_identities"], 1041)
 
@@ -194,7 +194,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             "base_release_id": "market1501-vit-bnneck:v1-dvc",
             "target_dataset": "msmt17",
             "target_dataset_version": "MSMT17_V1",
-            "target_epochs": 20,
+            "target_epochs": 50,
         }
         from src.validate_msmt17_v2_training import validate_training_contract
 

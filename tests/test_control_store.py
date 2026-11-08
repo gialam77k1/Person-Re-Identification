@@ -21,7 +21,7 @@ class CycleStoreTest(unittest.TestCase):
             "dataset": "MSMT17",
             "source_release": "market1501-vit-bnneck:v1",
             "target_release": "market1501-msmt17-vit-bnneck:v2",
-            "idempotency_key": "msmt17-v2-epoch20",
+            "idempotency_key": "msmt17-v2-epoch50",
             "actor": "gialam77k1",
         }
         first, created = self.store.create_cycle(**arguments)
