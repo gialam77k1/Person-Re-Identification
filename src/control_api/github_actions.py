@@ -15,6 +15,20 @@ class WorkflowDispatchError(RuntimeError):
     pass
 
 
+class _CrossHostAuthRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Do not forward the GitHub bearer token to artifact storage hosts."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        source = urllib.parse.urlsplit(req.full_url)
+        destination = urllib.parse.urlsplit(newurl)
+        if (source.scheme, source.netloc) != (destination.scheme, destination.netloc):
+            redirected.remove_header("Authorization")
+        return redirected
+
+
 class GitHubActionsClient:
     def __init__(self, settings: ControlSettings) -> None:
         self.settings = settings
@@ -103,8 +117,9 @@ class GitHubActionsClient:
 
     def _request_bytes(self, url: str) -> bytes:
         request = urllib.request.Request(url, headers=self._headers())
+        opener = urllib.request.build_opener(_CrossHostAuthRedirectHandler())
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with opener.open(request, timeout=30) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
