@@ -120,10 +120,10 @@ jobs:
           ./scripts/train_msmt17_v2_local.sh
 
       - name: Report training failure
-        if: ${{ failure() }}
+        if: ${{ failure() || cancelled() }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
-          --detail "Model v2 training or preflight failed; inspect runner and MLflow logs"
+          --detail "Model v2 training failed or was cancelled; inspect runner RAM and MLflow logs"
 
       - name: Mark training complete
         run: |
@@ -242,7 +242,7 @@ jobs:
           retention-days: 30
 
       - name: Report workflow failure
-        if: ${{ failure() }}
+        if: ${{ failure() || cancelled() }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release FAIL
           --detail "Retraining workflow failed; inspect GitHub Actions and MLflow logs"

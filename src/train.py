@@ -42,8 +42,8 @@ from src.common.utils import (
 from src.data.dataset import RandomIdentitySampler, build_dataset_splits, build_transforms
 from src.models.reid_model import build_model_from_config
 from src.models.transfer import load_transfer_checkpoint, set_vit_lower_blocks_trainable
+from src.reid.cross_domain import evaluate_cross_domain_retrieval
 from src.reid.evaluation import (
-    compute_distance_matrix,
     evaluate_market1501,
     extract_features,
     re_rank_distance_matrix,
@@ -321,28 +321,29 @@ def run_evaluation(model, query_loader, gallery_loader, device, config):
         device,
         flip_test=flip_test,
     )
-    base_distance_matrix = compute_distance_matrix(query_features, gallery_features)
-    cmc, mean_ap, mean_inp, valid_queries = evaluate_market1501(
-        base_distance_matrix,
+    base_results = evaluate_cross_domain_retrieval(
+        query_features,
+        gallery_features,
         query_pid,
         gallery_pid,
         query_cam,
         gallery_cam,
+        query_batch_size=int(config["evaluation"].get("query_batch_size", 64)),
     )
     results = {
-        "rank1": float(cmc[0]),
-        "rank5": float(cmc[4]),
-        "rank10": float(cmc[9]),
-        "rank20": float(cmc[19]),
-        "mAP": mean_ap,
-        "mINP": mean_inp,
-        "valid_queries": int(valid_queries),
-        "rank1_base": float(cmc[0]),
-        "rank5_base": float(cmc[4]),
-        "rank10_base": float(cmc[9]),
-        "rank20_base": float(cmc[19]),
-        "mAP_base": mean_ap,
-        "mINP_base": mean_inp,
+        "rank1": base_results["rank1"],
+        "rank5": base_results["rank5"],
+        "rank10": base_results["rank10"],
+        "rank20": base_results["rank20"],
+        "mAP": base_results["mAP"],
+        "mINP": base_results["mINP"],
+        "valid_queries": base_results["valid_queries"],
+        "rank1_base": base_results["rank1"],
+        "rank5_base": base_results["rank5"],
+        "rank10_base": base_results["rank10"],
+        "rank20_base": base_results["rank20"],
+        "mAP_base": base_results["mAP"],
+        "mINP_base": base_results["mINP"],
     }
 
     if config["evaluation"].get("use_rerank", False):

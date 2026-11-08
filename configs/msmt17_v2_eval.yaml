@@ -45,6 +45,7 @@ model:
 evaluation:
   use_rerank: false
   flip_test: false
+  query_batch_size: 64
   dataset_pointer: datasets/MSMT17_V1.dvc
   report_filename: evaluation_msmt17.json
 
