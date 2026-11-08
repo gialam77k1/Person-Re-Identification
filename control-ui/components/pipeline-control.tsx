@@ -110,7 +110,10 @@ export function PipelineControl() {
 
   async function start() {
     await perform(async () => {
-      const idempotency = `${dataset.toLowerCase()}-${new Date().toISOString().slice(0, 10)}-v2`;
+      // A deliberate Start creates a new lifecycle cycle. The busy state still
+      // protects the same click from being submitted twice, while the UUID
+      // prevents a failed cycle from being returned for every retry that day.
+      const idempotency = `${dataset.toLowerCase()}-${new Date().toISOString()}-${crypto.randomUUID()}`;
       const response = await jsonRequest<{ cycle: Cycle }>("/control/cycles", { method: "POST", body: JSON.stringify({ dataset, actor, idempotency_key: idempotency }) });
       setActiveId(response.cycle.id); setCycle(response.cycle);
     });

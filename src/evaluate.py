@@ -18,8 +18,8 @@ from src.common.mlflow_utils import get_dvc_revision, get_git_commit
 from src.common.utils import configure_torch_home, ensure_dir, infer_device, save_json, tee_output
 from src.data.dataset import build_dataset_splits, build_transforms
 from src.models.reid_model import build_model_from_config
+from src.reid.cross_domain import evaluate_cross_domain_retrieval
 from src.reid.evaluation import (
-    compute_distance_matrix,
     evaluate_market1501,
     extract_features,
     re_rank_distance_matrix,
@@ -151,13 +151,14 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
         device,
         flip_test=flip_test,
     )
-    base_distance_matrix = compute_distance_matrix(query_features, gallery_features)
-    base_cmc, base_mean_ap, base_mean_inp, valid_queries = evaluate_market1501(
-        base_distance_matrix,
+    base_results = evaluate_cross_domain_retrieval(
+        query_features,
+        gallery_features,
         query_pid,
         gallery_pid,
         query_cam,
         gallery_cam,
+        query_batch_size=int(config["evaluation"].get("query_batch_size", 64)),
     )
 
     results = {
@@ -179,13 +180,13 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
         "use_rerank": bool(config["evaluation"].get("use_rerank", False)),
         "query_count": len(query_dataset),
         "gallery_count": len(gallery_dataset),
-        "valid_queries": int(valid_queries),
-        "rank1_base": float(base_cmc[0]),
-        "rank5_base": float(base_cmc[4]),
-        "rank10_base": float(base_cmc[9]),
-        "rank20_base": float(base_cmc[19]),
-        "mAP_base": float(base_mean_ap),
-        "mINP_base": float(base_mean_inp),
+        "valid_queries": base_results["valid_queries"],
+        "rank1_base": base_results["rank1"],
+        "rank5_base": base_results["rank5"],
+        "rank10_base": base_results["rank10"],
+        "rank20_base": base_results["rank20"],
+        "mAP_base": base_results["mAP"],
+        "mINP_base": base_results["mINP"],
     }
 
     if config["evaluation"].get("use_rerank", False):
@@ -222,12 +223,12 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
     else:
         results.update(
             {
-                "rank1": float(base_cmc[0]),
-                "rank5": float(base_cmc[4]),
-                "rank10": float(base_cmc[9]),
-                "rank20": float(base_cmc[19]),
-                "mAP": float(base_mean_ap),
-                "mINP": float(base_mean_inp),
+                "rank1": base_results["rank1"],
+                "rank5": base_results["rank5"],
+                "rank10": base_results["rank10"],
+                "rank20": base_results["rank20"],
+                "mAP": base_results["mAP"],
+                "mINP": base_results["mINP"],
             }
         )
     print(results)
