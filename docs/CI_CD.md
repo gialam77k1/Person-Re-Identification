@@ -80,7 +80,8 @@ Docker Desktop; không yêu cầu root mount propagation kiểu `rslave`.
 ### Chạy runner như systemd service
 
 Trên máy runner, dừng tiến trình `./run.sh` chạy thủ công rồi chạy script cài đặt. Script tạo systemd
-drop-in cố định Docker Engine native, bật tự khởi động và khởi chạy service:
+drop-in cố định Docker Engine native, bật tự khởi động, tự phục hồi sau OOM với
+`Restart=always` và khởi chạy service:
 
 ```bash
 ./scripts/install_self_hosted_runner_service.sh ~/actions-runner "$USER"
@@ -88,6 +89,8 @@ drop-in cố định Docker Engine native, bật tự khởi động và khởi 
 
 Lệnh sẽ yêu cầu `sudo` một lần. Kiểm tra lại bằng
 `systemctl status "$(cat ~/actions-runner/.service)"`; trạng thái đúng là `active (running)` và `enabled`.
+Nếu runner từng bị OOM-kill, không chạy thêm `./run.sh` song song với service. Chạy lại script trên để
+áp dụng drop-in và để systemd giữ duy nhất một runner session.
 
 Tạo hai GitHub Environments:
 

@@ -33,9 +33,14 @@ install -d -m 0755 "${dropin_dir}"
 dropin_file="$(mktemp)"
 trap 'rm -f "${dropin_file}"' EXIT
 printf '%s\n' \
+  '[Unit]' \
+  'StartLimitIntervalSec=0' \
+  '' \
   '[Service]' \
   'Environment=DOCKER_CONTEXT=default' \
-  'Environment=DOCKER_HOST=unix:///var/run/docker.sock' >"${dropin_file}"
+  'Environment=DOCKER_HOST=unix:///var/run/docker.sock' \
+  'Restart=always' \
+  'RestartSec=10s' >"${dropin_file}"
 install -m 0644 "${dropin_file}" "${dropin_dir}/10-docker-native.conf"
 
 systemctl daemon-reload
