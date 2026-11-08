@@ -13,6 +13,10 @@ RUN_ROOT="artifacts/msmt17/market1501-msmt17-vit-bnneck-v2"
 CONDA_ENV="${REID_CONDA_ENV:-reid}"
 CHECK_ONLY=false
 
+# Keep allocator behavior identical between a local run and GitHub Actions.
+# The value can still be overridden explicitly by the operator.
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,max_split_size_mb:128}"
+
 if [[ "${1:-}" == "--check" ]]; then
   CHECK_ONLY=true
 elif [[ -n "${1:-}" ]]; then

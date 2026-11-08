@@ -27,7 +27,7 @@ data:
   image_width: 224
   preserve_aspect_ratio: true
   batch_size: 16
-  eval_batch_size: 32
+  eval_batch_size: 16
   instances_per_identity: 4
 
 model:
@@ -45,7 +45,7 @@ model:
 evaluation:
   use_rerank: false
   flip_test: false
-  query_batch_size: 64
+  query_batch_size: 32
   dataset_pointer: datasets/MSMT17_V1.dvc
   report_filename: evaluation_msmt17.json
 

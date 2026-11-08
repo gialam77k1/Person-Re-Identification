@@ -11,10 +11,12 @@ Tài liệu này ghi lại thay đổi so với model v1 và cách chạy retrai
 - Backbone, embedding projection và BNNeck được kế thừa từ v1.
 - Classifier chính và ba auxiliary classifier của Market-1501 bị loại khỏi checkpoint; code tạo
   head mới có 1.041 outputs theo nhãn MSMT17.
-- Epoch 1–2: freeze patch projection, positional/class token và 8 block ViT thấp; 4 block trên
+- Epoch 1–5: freeze patch projection, positional/class token và 8 block ViT thấp; 4 block trên
   cùng ReID heads vẫn được train.
-- Từ epoch 3: unfreeze toàn bộ model. Learning rate backbone bằng `0,1 ×` learning rate head.
-- Tối đa 50 epoch, warmup 2 epoch, cosine scheduler và early stopping theo mAP với patience 3.
+- Từ epoch 6: unfreeze toàn bộ model. Learning rate backbone bằng `0,05 ×` learning rate head.
+- Tối đa 30 epoch, warmup 3 epoch, cosine scheduler và early stopping theo mAP với patience 5.
+- Batch train vật lý giữ ở 16; eval batch 16 và distance query batch 32 để giới hạn cả CUDA lẫn host RAM.
+- Tám block ViT thấp được giữ freeze đến hết epoch 5; từ epoch 6 mới full-unfreeze với backbone LR bằng `0,05 ×` head LR để giảm catastrophic forgetting trên Market-1501.
 - Evaluation trong vòng train không dùng re-ranking để tránh cấp phát ma trận rất lớn của MSMT17.
 
 ## Gate bắt buộc
@@ -44,7 +46,7 @@ artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json
 ```
 
 Preflight từ chối chạy nếu thiếu GPU CUDA, checkpoint v1, dataset, dung lượng đĩa, approval hoặc
-nếu số ảnh/ID không đúng contract. Số epoch trong decision phải khớp cấu hình 50 epoch; MLflow
+nếu số ảnh/ID không đúng contract. Số epoch trong decision phải khớp cấu hình 30 epoch; MLflow
 tracking server phải healthy và DVC remote phải có dataset cùng checkpoint. Checkpoint được nạp thử
 trong training và bắt buộc phải là epoch 48; classifier cũ luôn bị reset.
 

@@ -16,7 +16,10 @@ EXPECTED_BASE_RELEASE_ID = "market1501-vit-bnneck:v1-dvc"
 EXPECTED_DATASET = "msmt17"
 EXPECTED_DATASET_VERSION = "MSMT17_V1"
 EXPECTED_CHECKPOINT_EPOCH = 48
-EXPECTED_EPOCHS = 50
+EXPECTED_EPOCHS = 30
+EXPECTED_TRAIN_BATCH_SIZE = 16
+EXPECTED_EVAL_BATCH_SIZE = 16
+EXPECTED_QUERY_BATCH_SIZE = 32
 
 
 def validate_training_contract(config: dict, decision: dict) -> None:
@@ -44,6 +47,11 @@ def validate_training_contract(config: dict, decision: dict) -> None:
             data.get("expected_train_identities"),
             EXPECTED_TRAIN_IDENTITIES,
         ),
+        "data.batch_size": (data.get("batch_size"), EXPECTED_TRAIN_BATCH_SIZE),
+        "data.eval_batch_size": (
+            data.get("eval_batch_size"),
+            EXPECTED_EVAL_BATCH_SIZE,
+        ),
         "transfer.expected_checkpoint_epoch": (
             transfer.get("expected_checkpoint_epoch"),
             EXPECTED_CHECKPOINT_EPOCH,
@@ -55,9 +63,9 @@ def validate_training_contract(config: dict, decision: dict) -> None:
         ),
         "train.progressive_unfreeze.full_unfreeze_epoch": (
             progressive.get("full_unfreeze_epoch"),
-            3,
+            6,
         ),
-        "train.warmup_epochs": (train.get("warmup_epochs"), 2),
+        "train.warmup_epochs": (train.get("warmup_epochs"), 3),
         "train.scheduler_type": (str(train.get("scheduler_type", "")).lower(), "cosine"),
         "train.early_stopping.monitor": (
             early_stopping.get("monitor"),
@@ -65,7 +73,11 @@ def validate_training_contract(config: dict, decision: dict) -> None:
         ),
         "train.early_stopping.patience": (
             early_stopping.get("patience"),
-            3,
+            5,
+        ),
+        "evaluation.query_batch_size": (
+            config.get("evaluation", {}).get("query_batch_size"),
+            EXPECTED_QUERY_BATCH_SIZE,
         ),
     }
     for field, (actual, expected) in expected_values.items():
@@ -86,8 +98,8 @@ def validate_training_contract(config: dict, decision: dict) -> None:
 
     if int(train.get("freeze_backbone_epochs", -1)) != 0:
         raise ValueError("Training contract requires train.freeze_backbone_epochs=0")
-    if float(train.get("backbone_lr_factor", -1)) != 0.1:
-        raise ValueError("Training contract requires train.backbone_lr_factor=0.1")
+    if float(train.get("backbone_lr_factor", -1)) != 0.05:
+        raise ValueError("Training contract requires train.backbone_lr_factor=0.05")
 
     decision_values = {
         "base_release_id": EXPECTED_BASE_RELEASE_ID,
