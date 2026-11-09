@@ -1,102 +1,102 @@
-# Person Re-Identification với ViT-B/16
+# Person Re-Identification MLOps với ViT-B/16
 
-Repository này chỉ duy trì pipeline tốt nhất hiện tại cho bài toán Person Re-Identification trên Market-1501: **ViT-B/16 + BNNeck**, phát hành với tên `market1501-vit-bnneck:v1`.
+Hệ thống Person Re-Identification chạy local, sử dụng **ViT-B/16 + BNNeck** và cung cấp
+vòng đời MLOps khép kín qua một Control Center: phát hiện drift, phê duyệt retraining,
+train model v2 trên self-hosted GPU runner, đánh giá, validation, quản lý artifact và triển khai.
 
-## Kết quả hiện tại
+Model production hiện tại là `market1501-vit-bnneck:v1`. Pipeline MSMT17 tạo model
+`market1501-msmt17-vit-bnneck:v2` dưới alias `candidate`; hệ thống không tự động thay
+`champion` hoặc deploy production nếu chưa có phê duyệt.
 
-Checkpoint tốt nhất được chọn tại epoch 48 trên 3.368 query hợp lệ.
+## Trạng thái model hiện tại
 
-| Chế độ đánh giá | Rank-1 | Rank-5 | mAP | mINP |
+### Model v1 — production/champion
+
+- Dataset: Market-1501.
+- Backbone: ViT-B/16 pretrained ImageNet.
+- Embedding: 512 chiều với BNNeck.
+- Checkpoint tốt nhất: epoch 48.
+- Input/output: `1×3×224×224` → `1×512`.
+- Preprocessing: giữ tỉ lệ ảnh và padding ở giữa.
+
+| Đánh giá | Rank-1 | Rank-5 | mAP | mINP |
 |---|---:|---:|---:|---:|
 | Flip test | 91,18% | 96,50% | 80,21% | 51,61% |
 | Flip test + re-ranking | **92,07%** | 95,72% | **88,77%** | **74,94%** |
 
-Re-ranking chỉ dùng khi đánh giá hoặc truy hồi, không nằm trong graph ONNX phục vụ online.
+Re-ranking chỉ dùng khi đánh giá hoặc truy hồi offline, không nằm trong ONNX graph phục vụ online.
 
-## Mô hình và cách train
+### Model v2 — candidate pipeline
 
-- Backbone: ViT-B/16 pretrained trên ImageNet.
-- Embedding: 512 chiều, có BNNeck.
-- Nhánh đặc trưng: CLS/global và local branch 4 vùng.
-- Loss: ID loss + triplet loss + auxiliary branch loss.
-- Fine-tuning theo giai đoạn: freeze backbone trong 5 epoch đầu, sau đó unfreeze và fine-tune toàn bộ mô hình đến tối đa 50 epoch.
-- Cosine learning-rate scheduler, warmup 5 epoch, gradient clipping và early stopping.
-- Ảnh đầu vào `1×3×224×224`, giữ tỉ lệ ảnh và padding ở giữa.
+Model v2 được transfer learning từ checkpoint v1 sang MSMT17:
 
-Cấu hình duy nhất được hỗ trợ là [`configs/vit_reid.yaml`](configs/vit_reid.yaml).
+- 30.248 ảnh train, 1.041 identity.
+- Tối đa 30 epoch; AMP, cosine scheduler và warmup 3 epoch.
+- Freeze 8 ViT block thấp đến hết epoch 5; full unfreeze từ epoch 6.
+- Learning rate backbone bằng `0,05 ×` learning rate head.
+- Early stopping theo mAP, patience 5.
+- Batch train/eval 16 và distance query chunk 32 để giới hạn bộ nhớ.
+- Đánh giá trên cả MSMT17 và Market-1501 để kiểm tra catastrophic forgetting.
 
-## Cấu trúc chính
+Cấu hình chuẩn nằm tại [`configs/msmt17_v2_train.yaml`](configs/msmt17_v2_train.yaml).
+
+## Kiến trúc
 
 ```text
-configs/vit_reid.yaml                         Cấu hình train/evaluate hiện tại
-scripts/train_local.sh                        Kiểm tra môi trường và train local
-src/train.py                                  Train ViT ReID
-src/evaluate.py                               Đánh giá checkpoint
-src/export_onnx.py                            Export ONNX
-src/verify_onnx.py                            Kiểm tra PyTorch–ONNX parity
-src/extract_reference.py                      Trích xuất reference embeddings
-src/prepare_triton_model.py                    Đóng gói Triton model repository
-src/qdrant_local.py                            Tạo collection và nạp Qdrant
-src/evaluate_deployment_retrieval.py           Đánh giá pipeline đã deploy
-src/api/                                       FastAPI embedding và person search
-model_releases/market1501-vit-bnneck/v1/       Manifest và preprocessing contract
+Control Center (Next.js, :3001)
+  → Control API (FastAPI, :8090)
+  → GitHub Actions trên self-hosted GPU runner
+  → drift → approval → retrain → evaluate → validate → publish
+
+Inference API (:8080)
+  → Triton (:8000) tạo embedding 512 chiều
+  → Qdrant (:6333) tìm kiếm cosine top-k
+
+MLflow + PostgreSQL + MinIO   tracking, registry và artifact
+Prometheus + Grafana          system/model metrics và drift
+DVC + MinIO                   version hóa dataset và model artifact
 ```
 
-## Chuẩn bị môi trường local
+## Yêu cầu
+
+- Linux, Docker Engine và Docker Compose v2.
+- NVIDIA GPU, driver và NVIDIA Container Toolkit cho Triton/training.
+- Conda với môi trường Python 3.10.
+- Self-hosted GitHub Actions runner online trên cùng máy.
+- Dataset Market-1501, MSMT17 và model artifact được quản lý bằng DVC/MinIO.
+
+Tạo môi trường local:
 
 ```bash
 conda create -n reid python=3.10 -y
 conda activate reid
 pip install -r requirements.txt
+pip install -r requirements-ci.txt
 ```
 
-Đặt Market-1501 theo cấu trúc:
+## Khởi động nhanh
 
-```text
-datasets/Market-1501-v15.09.15/
-├── bounding_box_train/
-├── bounding_box_test/
-└── query/
-```
-
-Kiểm tra CUDA, dataset và dung lượng đĩa trước khi train:
+### 1. Chuẩn bị cấu hình
 
 ```bash
-./scripts/train_local.sh --check
+cp .env.mlops.example .env.mlops
 ```
 
-## Train
+Thay tất cả giá trị `change-me` trong `.env.mlops`. Tối thiểu cần cấu hình:
 
-Tạo một run mới bằng tên không trùng với thư mục artifact đã có:
+- credential PostgreSQL, MinIO và Grafana;
+- `CONTROL_GITHUB_TOKEN` có quyền Actions read/write cho repository;
+- `CONTROL_CALLBACK_TOKEN` là chuỗi ngẫu nhiên dài;
+- `CONTROL_WORKFLOW_REF=main`;
+- `DOCKER_CONTEXT=default`.
 
-```bash
-./scripts/train_local.sh market1501-vit-bnneck-local
-```
+Không commit `.env.mlops`, token hoặc secret. GitHub Actions cần có:
 
-Hoặc chạy trực tiếp:
+- secret `MLOPS_ENV_FILE`: toàn bộ nội dung `.env.mlops`;
+- secret `CONTROL_CALLBACK_TOKEN`: giống giá trị local;
+- variable `CONTROL_API_URL=http://localhost:8090`.
 
-```bash
-conda run --no-capture-output -n reid python src/train.py \
-  --config configs/vit_reid.yaml \
-  --set runtime.run_slug=market1501-vit-bnneck-local \
-  --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-local
-```
-
-## Đánh giá checkpoint tốt nhất
-
-```bash
-conda run -n reid python src/evaluate.py \
-  --config configs/vit_reid.yaml \
-  --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth \
-  --set runtime.run_slug=market1501-vit-bnneck-v1-eval \
-  --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-eval
-```
-
-`evaluation.flip_test=true` và `evaluation.use_rerank=true` đã được bật trong config để tái tạo bộ metrics cao nhất.
-
-## Chuẩn bị model cho MLOps
-
-Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant, Triton và FastAPI trong một stack chung. Hướng dẫn vận hành nằm tại [`docs/MLOPS_LOCAL.md`](docs/MLOPS_LOCAL.md); API inference nằm tại [`docs/FASTAPI_INFERENCE.md`](docs/FASTAPI_INFERENCE.md); kiểm thử deployment nằm tại [`docs/DEPLOYMENT_TESTING.md`](docs/DEPLOYMENT_TESTING.md); pipeline tái lập nằm tại [`docs/DVC_PIPELINE.md`](docs/DVC_PIPELINE.md); model validation gate nằm tại [`docs/MODEL_VALIDATION_GATE.md`](docs/MODEL_VALIDATION_GATE.md); kế hoạch đầy đủ nằm tại [`KE_HOACH_MLOPS.md`](KE_HOACH_MLOPS.md).
+### 2. Khởi động stack
 
 ```bash
 ./scripts/mlops_stack.sh validate
@@ -104,98 +104,134 @@ Hạ tầng local dùng PostgreSQL, MinIO, MLflow, Qdrant, Triton và FastAPI tr
 ./scripts/mlops_stack.sh verify
 ```
 
-Chạy toàn bộ pipeline theo dependency graph và chỉ tái chạy stage bị ảnh hưởng:
+Kiểm tra container:
 
 ```bash
-./scripts/dvc_local.sh repro
-./scripts/dvc_local.sh metrics show
+docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
 ```
 
-### 1. Export ONNX
+### 3. Mở Control Center
 
-```bash
-conda run -n reid python src/export_onnx.py \
-  --config configs/vit_reid.yaml \
-  --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth \
-  --set runtime.run_slug=market1501-vit-bnneck-v1-onnx \
-  --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-onnx
+Mở **http://localhost:3001**, chọn `MSMT17` và bấm **Start MLOps lifecycle**.
+Luồng vận hành bình thường không yêu cầu chạy từng script bằng terminal.
+
+```text
+Validate dataset
+  → Extract current embeddings
+  → Detect drift
+  → Evaluate model v1 on MSMT17
+  → WAITING_APPROVAL
+  → Approve Retraining
+  → Train model v2 (tối đa 30 epoch)
+  → Evaluate MSMT17 + Market-1501
+  → Validation/forgetting gate
+  → Export ONNX + parity
+  → DVC push + MLflow candidate
+  → Release workflow: staging → manual production approval
 ```
 
-### 2. Kiểm tra PyTorch–ONNX parity
+Cycle tiếp tục chạy trên self-hosted runner khi đóng trình duyệt. Khi mở lại, UI phục hồi
+timeline từ Control API. Approval, promotion và rollback đều được ghi audit log.
+
+## Giao diện và endpoint local
+
+| Thành phần | URL | Ghi chú |
+|---|---|---|
+| Control Center | http://localhost:3001 | Vận hành toàn bộ lifecycle |
+| Control API | http://localhost:8090/docs | API điều phối và audit |
+| Inference API | http://localhost:8080/docs | Swagger cho `/embed` và `/search` |
+| MLflow | http://localhost:5000 | Runs, artifacts và Model Registry |
+| Grafana | http://localhost:3000 | Monitoring và drift dashboards |
+| Prometheus | http://localhost:9090 | Metrics và alert rules |
+| MinIO Console | http://localhost:9001 | MLflow/DVC object storage |
+| Qdrant Dashboard | http://localhost:6333/dashboard | Collection và vector |
+| Triton metadata | http://localhost:8000/v2 | Server name, version và extensions |
+
+`http://localhost:8000/v2/health/ready` là health endpoint của Triton. Khi service khỏe,
+endpoint này trả HTTP `200` với body rỗng; trang trắng trong trình duyệt là hành vi bình thường.
+
+Kiểm tra nhanh:
 
 ```bash
-conda run -n reid python src/verify_onnx.py \
-  --config configs/vit_reid.yaml \
-  --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth \
-  --onnx-path artifacts/market1501/market1501-vit-bnneck-v1-onnx/exports/model_embedding.onnx \
-  --num-samples 8 \
-  --set runtime.run_slug=market1501-vit-bnneck-v1-onnx-parity \
-  --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-onnx-parity
-```
-
-Release v1 đã đạt parity: max absolute error `1,335144e-5`, cosine similarity nhỏ nhất `0,99999988`.
-
-### 3. Trích xuất reference embeddings
-
-```bash
-conda run -n reid python src/extract_reference.py \
-  --config configs/vit_reid.yaml \
-  --checkpoint artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth \
-  --set runtime.run_slug=market1501-vit-bnneck-v1-reference \
-  --set artifacts.run_root=artifacts/market1501/market1501-vit-bnneck-v1-reference
-```
-
-### 4. Đóng gói Triton
-
-```bash
-conda run -n reid python src/prepare_triton_model.py \
-  --onnx-path artifacts/pipeline/market1501-vit-bnneck-v1-dvc/onnx/exports/model_embedding.onnx \
-  --output-root artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository \
-  --model-name reid_embedding \
-  --model-version 1 \
-  --validation-report artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/validation_report.json \
-  --instance-kind KIND_GPU
-
-docker compose -f docker-compose.triton.yml up -d
-```
-
-### 5. Nạp embeddings vào Qdrant
-
-```bash
-docker compose -f docker-compose.qdrant.yml up -d
-
-conda run -n reid python src/qdrant_local.py create-collection \
-  --collection-name reid_reference_v1 \
-  --vector-size 512 \
-  --distance Cosine
-
-conda run -n reid python src/qdrant_local.py upsert-reference \
-  --collection-name reid_reference_v1 \
-  --embeddings-path artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings/reference_embeddings.npy \
-  --pids-path artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings/reference_pids.npy \
-  --camids-path artifacts/market1501/market1501-vit-bnneck-v1-reference/embeddings/reference_camids.npy
-```
-
-Reference set hiện tại gồm 12.936 vector.
-
-### 6. Chạy FastAPI inference
-
-```bash
-./scripts/mlops_stack.sh up
+curl --fail http://localhost:8090/health
 curl --fail http://localhost:8080/ready
-curl --fail http://localhost:8080/model-info
+curl --fail http://localhost:8000/v2/health/ready
+curl --silent http://localhost:8000/v2 | jq .
 ```
 
-Search bằng ảnh JPG/PNG:
+## Inference
+
+API nhận JPG/PNG, preprocess giống training, gọi Triton, L2-normalize embedding và tìm top-k
+trên Qdrant.
 
 ```bash
+curl --fail http://localhost:8080/model-info
+
 curl --fail -X POST 'http://localhost:8080/search?top_k=5' \
   -F 'image=@datasets/Market-1501-v15.09.15/query/0001_c1s1_001051_00.jpg;type=image/jpeg'
 ```
 
-Chi tiết endpoint, response và giới hạn upload nằm trong [`docs/FASTAPI_INFERENCE.md`](docs/FASTAPI_INFERENCE.md).
+Response `/search` chứa model release, person ID, camera ID, similarity score và định danh ảnh nguồn.
 
-### 7. Kiểm thử deployment
+## Train và đánh giá thủ công
+
+Control Center là cách vận hành khuyến nghị. Các lệnh dưới đây dành cho phát triển hoặc chẩn đoán.
+
+Train Market-1501:
+
+```bash
+./scripts/train_local.sh --check
+./scripts/train_local.sh market1501-vit-bnneck-local
+```
+
+Preflight và train MSMT17 v2:
+
+```bash
+./scripts/train_msmt17_v2_local.sh --check
+./scripts/train_msmt17_v2_local.sh
+```
+
+Output v2 được tách khỏi v1 tại:
+
+```text
+artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/
+├── checkpoints/best_model.pth
+├── checkpoints/last_model.pth
+├── logs/effective_config.json
+├── logs/mlflow_run.json
+├── logs/transfer_report.json
+└── metrics/metrics_v2.json
+```
+
+Không tạo trước hoặc ghi đè release directory đang được một run khác sử dụng.
+
+## DVC, release và validation
+
+Chạy pipeline tái lập:
+
+```bash
+./scripts/dvc_local.sh status
+./scripts/dvc_local.sh repro
+./scripts/dvc_local.sh push
+```
+
+Release gate kiểm tra quality metrics, catastrophic forgetting, embedding 512 chiều hữu hạn,
+L2 normalization, PyTorch–ONNX cosine parity tối thiểu `0,9999`, max absolute error tối đa
+`0,0001`, preprocessing contract, checksum và lineage Git/DVC/MLflow.
+
+Model FAIL vẫn được giữ trong MLflow để điều tra nhưng không được gán alias `candidate`,
+`champion` hoặc `production`. V1 không bị ghi đè hoặc xóa khi tạo v2.
+
+## Kiểm thử
+
+Chạy cùng bộ kiểm tra CI:
+
+```bash
+conda activate reid
+./scripts/ci.sh
+```
+
+Kiểm thử deployment:
 
 ```bash
 ./scripts/test_deployment.sh unit
@@ -206,70 +242,54 @@ Chi tiết endpoint, response và giới hạn upload nằm trong [`docs/FASTAPI
 ./scripts/test_deployment.sh persistence
 ```
 
-Full deployment đạt Rank-1 `91,36%`, quality gate PASS và `/search` local có p50/p95/p99 lần lượt `86,97/92,10/97,11 ms`. Quy trình và report nằm tại [`docs/DEPLOYMENT_TESTING.md`](docs/DEPLOYMENT_TESTING.md).
+Pull request phải qua lint, unit tests, repository validation và API image smoke test. Production
+luôn cần manual approval và có thể rollback đồng bộ API image, Triton model và Qdrant collection.
 
-### 8. CI/CD
+## Cấu trúc repository
 
-Chạy cùng bộ kiểm tra của pull request trên local:
-
-```bash
-conda activate reid
-pip install -r requirements-ci.txt
-./scripts/ci.sh
+```text
+configs/                 Training, evaluation và validation policy
+src/                     Model, training, evaluation, API và Control API
+control-ui/              Next.js MLOps Control Center
+scripts/                 Entry point local, CI, DVC và deployment
+.github/workflows/       CI, drift, retraining, release và rollback
+model_releases/          Manifest, contract và checksum nhỏ theo release
+monitoring/              Prometheus, Grafana và Alertmanager configuration
+tests/                   Unit, contract và deployment tests
+docker-compose.mlops.yml Stack MLOps local
+dvc.yaml                 Pipeline tái lập v1
+dvc.yaml (stage v2_*)    Release pipeline v2 với output tách biệt
 ```
 
-GitHub Actions chỉ build image sau khi model candidate qua validation gate, deploy staging trước, smoke-test `/ready` và `/model-info`, rồi mới cho phép production qua GitHub Environment approval. Image được tag bằng Git commit và model version; workflow rollback phục hồi cả image lẫn model release trước đó. Thiết lập runner, branch protection, environment approval và cách vận hành nằm tại [`docs/CI_CD.md`](docs/CI_CD.md).
+Checkpoint, ONNX external weights, embedding, dataset, MLflow artifact và Triton model repository
+không được commit vào Git. Git chỉ lưu code, config, DVC pointer, manifest, contract và checksum.
 
-### 9. Monitoring
+## Tài liệu chi tiết
 
-Stack local có Prometheus, Grafana, Alertmanager, node-exporter, cAdvisor và NVIDIA DCGM exporter. API xuất system/model metrics tại `/metrics`; hai dashboard được provision tự động và drift report chạy hằng ngày trên self-hosted runner.
+- [MLOps Control Center](docs/MLOPS_CONTROL_CENTER.md)
+- [Hạ tầng MLOps local](docs/MLOPS_LOCAL.md)
+- [MSMT17 v2 training](docs/MSMT17_V2_TRAINING.md)
+- [Cross-domain drift](docs/MSMT17_CROSS_DOMAIN.md)
+- [DVC v2 release pipeline](docs/DVC_V2_PIPELINE.md)
+- [MLflow tracking và registry](docs/MLFLOW_TRACKING.md)
+- [Model validation gate](docs/MODEL_VALIDATION_GATE.md)
+- [FastAPI inference](docs/FASTAPI_INFERENCE.md)
+- [Deployment testing](docs/DEPLOYMENT_TESTING.md)
+- [CI/CD](docs/CI_CD.md)
+- [Monitoring](docs/MONITORING.md)
 
-```bash
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml up -d
-curl --fail http://localhost:8080/metrics
-```
-
-Metrics, alert thresholds, embedding sampling và drift workflow được mô tả tại [`docs/MONITORING.md`](docs/MONITORING.md).
-
-Đánh giá cross-domain model v1 trên MSMT17, DVC revision và cách chạy full/smoke được mô tả tại
-[`docs/MSMT17_CROSS_DOMAIN.md`](docs/MSMT17_CROSS_DOMAIN.md).
-
-Cấu hình transfer learning, progressive unfreeze và cách train model v2 local được mô tả tại
-[`docs/MSMT17_V2_TRAINING.md`](docs/MSMT17_V2_TRAINING.md).
-
-### 10. MLOps Control Center
-
-Control Center gom trạng thái MLflow, Prometheus/Grafana, Qdrant, Triton và GitHub Actions vào một
-web UI. Từ `http://localhost:3001`, người vận hành có thể chọn MSMT17, bấm `Start MLOps lifecycle`,
-theo dõi timeline/epoch/metrics, phê duyệt retraining và thực hiện promote hoặc rollback mà không
-chạy script thủ công.
-
-```bash
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml up -d --build
-curl --fail http://localhost:8090/health
-```
-
-Thiết lập token, callback secret, API và cách vận hành được mô tả tại
-[`docs/MLOPS_CONTROL_CENTER.md`](docs/MLOPS_CONTROL_CENTER.md).
-
-## Model release v1
+## Model v1 release
 
 - Release ID: `market1501-vit-bnneck:v1`
 - Git tag: `model-v1.0.0`
-- Commit ghi trong manifest: `3d4d97e`
-- Checkpoint epoch: 48
-- Contract đầu vào/đầu ra: `1×3×224×224` → `1×512`
+- Source commit trong manifest: `3d4d97e`
+- MLflow registered model: `market1501-vit-bnneck`, version `1`, alias `champion`
 
-Kiểm tra checksum của checkpoint, ONNX, external weights và preprocessing contract:
+Xác minh release:
 
 ```bash
 conda run -n reid python src/verify_model_release.py
 ```
 
-Thông tin truy vết đầy đủ nằm trong [`model_releases/market1501-vit-bnneck/v1/model_manifest.json`](model_releases/market1501-vit-bnneck/v1/model_manifest.json).
-
-Model v1 đã được đăng ký trên MLflow Model Registry với tên `market1501-vit-bnneck`, version `1` và alias `champion`. Xem cách publish và kiểm tra tại [`docs/MLFLOW_TRACKING.md`](docs/MLFLOW_TRACKING.md).
-
-## Quy ước artifact
-
-Checkpoint, ONNX weights, embeddings, MLflow runs và model repository của Triton không được commit vào Git. Git chỉ lưu code, config, manifest, preprocessing contract và checksum để tái tạo hoặc xác minh release.
+Lineage và checksum nằm tại
+[`model_releases/market1501-vit-bnneck/v1/model_manifest.json`](model_releases/market1501-vit-bnneck/v1/model_manifest.json).
