@@ -36,6 +36,9 @@ class LifecycleController:
         target_release: str,
         idempotency_key: str,
         actor: str,
+        inbox_batch_id: str | None = None,
+        dataset_revision: str | None = None,
+        dataset_path: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         cycle, created = self.store.create_cycle(
             dataset=dataset,
@@ -43,6 +46,9 @@ class LifecycleController:
             target_release=target_release,
             idempotency_key=idempotency_key,
             actor=actor,
+            inbox_batch_id=inbox_batch_id,
+            dataset_revision=dataset_revision,
+            dataset_path=dataset_path,
         )
         if not created:
             return cycle, False
@@ -55,6 +61,9 @@ class LifecycleController:
                     "dataset": dataset,
                     "sample_size": "1000",
                     "release_id": source_release,
+                    "inbox_batch_id": inbox_batch_id or "",
+                    "dataset_revision": dataset_revision or "",
+                    "dataset_path": dataset_path or "",
                 },
             )
         except Exception as exc:
@@ -123,6 +132,9 @@ class LifecycleController:
                 "evaluation_report": "evidence/evaluation_report.json",
                 "decision": "evidence/approved_decision.json",
                 "decision_sha256": decision_sha256,
+                "inbox_batch_id": str(cycle.get("inbox_batch_id") or ""),
+                "dataset_revision": str(cycle.get("dataset_revision") or ""),
+                "dataset_path": str(cycle.get("dataset_path") or ""),
             },
         )
         self.store.audit(

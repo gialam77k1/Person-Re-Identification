@@ -39,10 +39,16 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             allowed_datasets=("dukemtmc-reid",),
             dataset_root=Path(self.temporary.name) / "datasets",
             evaluation_artifacts_root=Path(self.temporary.name) / "artifacts",
+            inbox_min_valid_images=1,
+            inbox_min_identities=1,
+            inbox_min_cameras=1,
         )
         query_dir = settings.dataset_root / "dukemtmc-reid" / "query"
         query_dir.mkdir(parents=True)
         (query_dir / "0001_c2_sample.jpg").write_bytes(b"fake-jpeg")
+        train_dir = settings.dataset_root / "dukemtmc-reid" / "bounding_box_train"
+        train_dir.mkdir(parents=True)
+        (train_dir / "0001_c2_train.jpg").write_bytes(b"\xff\xd8\xfftrain")
         self.store = CycleStore(settings.database_path)
         lifecycle = LifecycleController(settings, self.store, FakeDispatcher())
         self.app = create_app(settings, self.store, FakeOverview(), lifecycle)
@@ -73,6 +79,25 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         events = (await self.request("GET", f"/control/cycles/{cycle_id}/events")).json()
         self.assertEqual(events["events"][0]["kind"], "cycle.created")
         self.assertEqual((await self.request("GET", "/control/overview")).json()["latest_cycle"]["id"], cycle_id)
+
+    async def test_data_inbox_validates_and_dispatches_cycle(self) -> None:
+        response = await self.request(
+            "POST",
+            "/control/inbox/import",
+            json={
+                "actor": "operator",
+                "dataset": "dukemtmc-reid",
+                "source_path": "dukemtmc-reid/bounding_box_train",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["created"])
+        self.assertEqual(payload["batch"]["status"], "DISPATCHED")
+        self.assertTrue(payload["batch"]["cycle_id"])
+        inbox = (await self.request("GET", "/control/inbox")).json()
+        self.assertEqual(inbox["batches"][0]["fingerprint"], payload["batch"]["fingerprint"])
 
     async def test_rejects_unknown_dataset_and_missing_cycle(self) -> None:
         invalid = await self.request(

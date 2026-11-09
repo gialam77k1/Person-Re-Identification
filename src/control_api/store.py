@@ -41,6 +41,9 @@ class CycleStore:
                     target_release TEXT NOT NULL,
                     status TEXT NOT NULL,
                     workflow_run_id TEXT,
+                    inbox_batch_id TEXT,
+                    dataset_revision TEXT,
+                    dataset_path TEXT,
                     error TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -79,8 +82,128 @@ class CycleStore:
                     sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS inbox_batches (
+                    id TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL UNIQUE,
+                    dataset TEXT NOT NULL,
+                    source_split TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    valid_images INTEGER NOT NULL,
+                    rejected_images INTEGER NOT NULL,
+                    duplicate_images INTEGER NOT NULL,
+                    identities INTEGER NOT NULL,
+                    cameras INTEGER NOT NULL,
+                    total_bytes INTEGER NOT NULL,
+                    cycle_id TEXT REFERENCES cycles(id),
+                    actor TEXT NOT NULL,
+                    summary_json TEXT NOT NULL,
+                    error TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
+            cycle_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(cycles)").fetchall()
+            }
+            for name in ("inbox_batch_id", "dataset_revision", "dataset_path"):
+                if name not in cycle_columns:
+                    connection.execute(f"ALTER TABLE cycles ADD COLUMN {name} TEXT")
+
+    def active_cycle_for_dataset(self, dataset: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id FROM cycles
+                WHERE dataset = ? AND status IN (?, ?, ?)
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (
+                    dataset,
+                    CycleStatus.PENDING.value,
+                    CycleStatus.RUNNING.value,
+                    CycleStatus.WAITING_APPROVAL.value,
+                ),
+            ).fetchone()
+        return self.get_cycle(str(row["id"])) if row else None
+
+    def create_inbox_batch(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        now = utc_now()
+        batch_id = str(uuid.uuid4())
+        with self._lock, self._connect() as connection:
+            existing = connection.execute(
+                "SELECT id FROM inbox_batches WHERE fingerprint = ?",
+                (payload["fingerprint"],),
+            ).fetchone()
+            if existing:
+                return self.get_inbox_batch(str(existing["id"])), False
+            connection.execute(
+                """
+                INSERT INTO inbox_batches (
+                    id, fingerprint, dataset, source_split, status, valid_images,
+                    rejected_images, duplicate_images, identities, cameras,
+                    total_bytes, actor, summary_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    batch_id,
+                    payload["fingerprint"],
+                    payload["dataset"],
+                    payload["source_split"],
+                    payload["status"],
+                    payload["valid_images"],
+                    payload["rejected_images"],
+                    payload["duplicate_images"],
+                    payload["identities"],
+                    payload["cameras"],
+                    payload["total_bytes"],
+                    payload["actor"],
+                    json.dumps(payload.get("summary", {}), sort_keys=True),
+                    now,
+                    now,
+                ),
+            )
+        return self.get_inbox_batch(batch_id), True
+
+    def update_inbox_batch(
+        self,
+        batch_id: str,
+        *,
+        status: str,
+        cycle_id: str | None = None,
+        error: str | None = None,
+    ) -> dict[str, Any]:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE inbox_batches
+                SET status = ?, cycle_id = COALESCE(?, cycle_id), error = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (status, cycle_id, error, utc_now(), batch_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(batch_id)
+        return self.get_inbox_batch(batch_id)
+
+    def get_inbox_batch(self, batch_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM inbox_batches WHERE id = ?", (batch_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(batch_id)
+        payload = dict(row)
+        payload["summary"] = json.loads(payload.pop("summary_json"))
+        return payload
+
+    def list_inbox_batches(self, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id FROM inbox_batches ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [self.get_inbox_batch(str(row["id"])) for row in rows]
 
     def create_cycle(
         self,
@@ -90,6 +213,9 @@ class CycleStore:
         target_release: str,
         idempotency_key: str,
         actor: str,
+        inbox_batch_id: str | None = None,
+        dataset_revision: str | None = None,
+        dataset_path: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         now = utc_now()
         cycle_id = str(uuid.uuid4())
@@ -103,8 +229,9 @@ class CycleStore:
                 """
                 INSERT INTO cycles (
                     id, idempotency_key, dataset, source_release, target_release,
-                    status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    status, inbox_batch_id, dataset_revision, dataset_path,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     cycle_id,
@@ -113,6 +240,9 @@ class CycleStore:
                     source_release,
                     target_release,
                     CycleStatus.PENDING.value,
+                    inbox_batch_id,
+                    dataset_revision,
+                    dataset_path,
                     now,
                     now,
                 ),
@@ -130,7 +260,13 @@ class CycleStore:
                 cycle_id,
                 "cycle.create",
                 actor,
-                {"dataset": dataset, "idempotency_key": idempotency_key},
+                {
+                    "dataset": dataset,
+                    "idempotency_key": idempotency_key,
+                    "inbox_batch_id": inbox_batch_id,
+                    "dataset_revision": dataset_revision,
+                    "dataset_path": dataset_path,
+                },
             )
         return self.get_cycle(cycle_id), True
 

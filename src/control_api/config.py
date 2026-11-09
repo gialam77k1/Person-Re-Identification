@@ -42,6 +42,11 @@ class ControlSettings:
     allowed_datasets: tuple[str, ...]
     dataset_root: Path
     evaluation_artifacts_root: Path
+    inbox_min_valid_images: int
+    inbox_min_identities: int
+    inbox_min_cameras: int
+    inbox_source_release: str
+    inbox_target_release: str
 
     @classmethod
     def from_env(cls) -> "ControlSettings":
@@ -111,4 +116,13 @@ class ControlSettings:
             allowed_datasets=datasets,
             dataset_root=dataset_root,
             evaluation_artifacts_root=artifacts_root,
+            inbox_min_valid_images=int(os.getenv("CONTROL_INBOX_MIN_VALID_IMAGES", "1000")),
+            inbox_min_identities=int(os.getenv("CONTROL_INBOX_MIN_IDENTITIES", "50")),
+            inbox_min_cameras=int(os.getenv("CONTROL_INBOX_MIN_CAMERAS", "2")),
+            inbox_source_release=os.getenv(
+                "CONTROL_INBOX_SOURCE_RELEASE", "market1501-vit-bnneck:v1-dvc"
+            ),
+            inbox_target_release=os.getenv(
+                "CONTROL_INBOX_TARGET_RELEASE", "market1501-duke-vit-bnneck:v2"
+            ),
         )

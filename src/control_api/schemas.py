@@ -27,6 +27,16 @@ class ActorRequest(BaseModel):
     actor: str = Field(min_length=1, max_length=100)
 
 
+class InboxImportResponse(BaseModel):
+    created: bool
+    batch: dict[str, Any]
+
+
+class InboxImportRequest(ActorRequest):
+    dataset: str = Field(min_length=1, max_length=100)
+    source_path: str = Field(min_length=1, max_length=500)
+
+
 class StageUpdateRequest(BaseModel):
     status: Literal["PENDING", "RUNNING", "WAITING_APPROVAL", "PASS", "FAIL", "SKIPPED"]
     progress: float | None = Field(default=None, ge=0.0, le=1.0)
