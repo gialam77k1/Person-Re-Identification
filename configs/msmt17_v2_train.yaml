@@ -29,7 +29,9 @@ data:
   image_width: 224
   preserve_aspect_ratio: true
   batch_size: 16
-  eval_batch_size: 32
+  # Keep the physical batch conservative on the self-hosted GPU. The previous
+  # run completed without CUDA OOM at batch 16; do not raise it implicitly.
+  eval_batch_size: 16
   instances_per_identity: 4
 
 model:
@@ -51,14 +53,16 @@ transfer:
   reset_classifier_heads: true
 
 train:
-  epochs: 50
+  epochs: 30
   freeze_backbone_epochs: 0
   progressive_unfreeze:
     enabled: true
     freeze_lower_blocks: 8
-    full_unfreeze_epoch: 3
+    # Preserve more of the Market-1501 representation before full adaptation.
+    # The previous run only failed the Market-1501 mINP retention gate.
+    full_unfreeze_epoch: 6
   learning_rate: 0.00005
-  backbone_lr_factor: 0.1
+  backbone_lr_factor: 0.05
   weight_decay: 0.0005
   ce_weight: 1.0
   triplet_weight: 1.2
@@ -69,13 +73,13 @@ train:
   normalize_triplet_embeddings: true
   label_smoothing: 0.02
   scheduler_type: cosine
-  warmup_epochs: 2
+  warmup_epochs: 3
   min_lr_scale: 0.02
   grad_clip_norm: 1.0
   amp: true
   early_stopping:
     enabled: true
-    patience: 3
+    patience: 5
     min_delta: 0.001
     monitor: mAP
 
@@ -89,7 +93,9 @@ augmentation:
 evaluation:
   use_rerank: false
   flip_test: false
-  query_batch_size: 64
+  # Distance rows are evaluated in bounded chunks to prevent host OOM on the
+  # 82,161-image MSMT17 gallery.
+  query_batch_size: 32
   dataset_pointer: datasets/MSMT17_V1.dvc
 
 logging:

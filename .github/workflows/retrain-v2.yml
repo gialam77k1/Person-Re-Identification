@@ -56,6 +56,8 @@ jobs:
       MARKET1501_V2_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/market1501/metrics/evaluation_market1501.json
       FORGETTING_REPORT: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/release/catastrophic_forgetting_report.json
       V2_PIPELINE_ROOT: artifacts/pipeline/market1501-msmt17-vit-bnneck-v2
+      # Reduce CUDA allocator fragmentation on the long-lived self-hosted runner.
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True,max_split_size_mb:128
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -105,7 +107,7 @@ jobs:
             --cycle-id "${{ inputs.cycle_id }}" \
             --source-release "${{ inputs.source_release }}" \
             --dataset "${{ inputs.dataset }}" \
-            --target-epochs 50
+            --target-epochs 30
 
       - name: Preflight model v2 training
         env:
