@@ -777,11 +777,10 @@ stages:
       md5: d33da963cf577cc3935ad45a87521528
       size: 8011
   v2_validate_data:
-    cmd: conda run --no-capture-output -n reid python -m 
-      src.validate_v2_release_data --duke-config configs/duke_v2_eval.yaml 
-      --duke-pointer datasets/dukemtmc-reid.dvc --market1501-config 
-      configs/market1501_v2_eval.yaml --market1501-pointer 
-      datasets/Market-1501-v15.09.15.dvc --output 
+    cmd: conda run --no-capture-output -n reid python -m src.validate_v2_release_data
+      --duke-config configs/duke_v2_eval.yaml --duke-pointer
+      datasets/dukemtmc-reid.dvc --market1501-config configs/market1501_v2_eval.yaml
+      --market1501-pointer datasets/Market-1501-v15.09.15.dvc --output
       artifacts/pipeline/market1501-duke-vit-bnneck-v2/validate/data_manifest.json
     deps:
     - path: configs/duke_v2_eval.yaml
