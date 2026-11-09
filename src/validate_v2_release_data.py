@@ -31,8 +31,8 @@ def inspect_config(config_path: Path, pointer_path: Path) -> dict:
 
 
 def build_manifest(
-    msmt17_config: Path,
-    msmt17_pointer: Path,
+    duke_config: Path,
+    duke_pointer: Path,
     market1501_config: Path,
     market1501_pointer: Path,
 ) -> dict:
@@ -41,7 +41,7 @@ def build_manifest(
         "passed": True,
         "git_commit": git_commit(),
         "datasets": {
-            "msmt17": inspect_config(msmt17_config, msmt17_pointer),
+            "duke": inspect_config(duke_config, duke_pointer),
             "market1501": inspect_config(market1501_config, market1501_pointer),
         },
     }
@@ -49,15 +49,15 @@ def build_manifest(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--msmt17-config", required=True)
-    parser.add_argument("--msmt17-pointer", required=True)
+    parser.add_argument("--duke-config", required=True)
+    parser.add_argument("--duke-pointer", required=True)
     parser.add_argument("--market1501-config", required=True)
     parser.add_argument("--market1501-pointer", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     report = build_manifest(
-        Path(args.msmt17_config).resolve(),
-        Path(args.msmt17_pointer).resolve(),
+        Path(args.duke_config).resolve(),
+        Path(args.duke_pointer).resolve(),
         Path(args.market1501_config).resolve(),
         Path(args.market1501_pointer).resolve(),
     )

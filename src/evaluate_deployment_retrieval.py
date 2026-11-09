@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-gallery", type=int, default=0)
     parser.add_argument("--query-batch-size", type=int, default=128)
     parser.add_argument("--release-id", default="market1501-vit-bnneck:v1-dvc")
-    parser.add_argument("--dataset-pointer", default="datasets/MSMT17_V1.dvc")
+    parser.add_argument("--dataset-pointer", default="datasets/dukemtmc-reid.dvc")
     parser.add_argument("--output", default="")
     parser.add_argument("--save-embeddings", action="store_true")
     parser.add_argument("--log-mlflow", action="store_true")

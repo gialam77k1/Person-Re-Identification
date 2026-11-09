@@ -497,7 +497,7 @@ def run_training(config: dict) -> None:
             "Loaded transfer checkpoint "
             f"epoch {transfer_report['source_epoch']} with "
             f"{transfer_report['loaded_backbone_tensors']} backbone tensors; "
-            "MSMT17 classifier heads remain newly initialized."
+            "DukeMTMC-reID classifier heads remain newly initialized."
         )
 
     transfer_report_path = save_json(

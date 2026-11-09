@@ -777,31 +777,31 @@ stages:
       md5: d33da963cf577cc3935ad45a87521528
       size: 8011
   v2_validate_data:
-    cmd: conda run --no-capture-output -n reid python 
-      src/validate_v2_release_data.py --msmt17-config 
-      configs/msmt17_v2_eval.yaml --msmt17-pointer datasets/MSMT17_V1.dvc 
-      --market1501-config configs/market1501_v2_eval.yaml --market1501-pointer 
+    cmd: conda run --no-capture-output -n reid python -m 
+      src.validate_v2_release_data --duke-config configs/duke_v2_eval.yaml 
+      --duke-pointer datasets/dukemtmc-reid.dvc --market1501-config 
+      configs/market1501_v2_eval.yaml --market1501-pointer 
       datasets/Market-1501-v15.09.15.dvc --output 
-      artifacts/pipeline/market1501-msmt17-vit-bnneck-v2/validate/data_manifest.json
+      artifacts/pipeline/market1501-duke-vit-bnneck-v2/validate/data_manifest.json
     deps:
+    - path: configs/duke_v2_eval.yaml
+      hash: md5
+      md5: 634759a0aef73d1b0c38da01283e6a0c
+      size: 1078
     - path: configs/market1501_v2_eval.yaml
       hash: md5
-      md5: 56f758bb727432a0467ae218f7425b38
-      size: 1146
-    - path: configs/msmt17_v2_eval.yaml
-      hash: md5
-      md5: 0bd32b012db9103065277d175e0f82ba
-      size: 1182
-    - path: datasets/MSMT17_V1
-      hash: md5
-      md5: c8a4c6f18b86490a45f940ab9fb0eb70.dir
-      size: 2560531534
-      nfiles: 126447
+      md5: 8878452bf7b2865de4cefa44d127733f
+      size: 1138
     - path: datasets/Market-1501-v15.09.15
       hash: md5
       md5: 0d61c823b34177c53e9e2161db8257b3.dir
       size: 145885626
       nfiles: 68036
+    - path: datasets/dukemtmc-reid
+      hash: md5
+      md5: 6f2c045609466b6d941b34c1af197628.dir
+      size: 146128230
+      nfiles: 36415
     - path: src/common/config.py
       hash: md5
       md5: f968c13bc2eb4b606d75b9bc6d3c3bc6
@@ -812,19 +812,19 @@ stages:
       size: 6710
     - path: src/validate_v2_release_data.py
       hash: md5
-      md5: fadf10994c7532e19c16fba170fdb462
-      size: 2247
+      md5: 783b88294d7c7e83c6c970c5b0543116
+      size: 2229
     params:
       params.yaml:
         v2_pipeline.conda_env: reid
+        v2_pipeline.duke_pointer: datasets/dukemtmc-reid.dvc
+        v2_pipeline.duke_root: datasets/dukemtmc-reid
         v2_pipeline.market1501_pointer: datasets/Market-1501-v15.09.15.dvc
         v2_pipeline.market1501_root: datasets/Market-1501-v15.09.15
-        v2_pipeline.msmt17_pointer: datasets/MSMT17_V1.dvc
-        v2_pipeline.msmt17_root: datasets/MSMT17_V1
-        v2_pipeline.release_slug: market1501-msmt17-vit-bnneck-v2
+        v2_pipeline.release_slug: market1501-duke-vit-bnneck-v2
     outs:
     - path: 
-        artifacts/pipeline/market1501-msmt17-vit-bnneck-v2/validate/data_manifest.json
+        artifacts/pipeline/market1501-duke-vit-bnneck-v2/validate/data_manifest.json
       hash: md5
-      md5: 07b4e4698ae01592f65d4cdc0618d20b
-      size: 3082
+      md5: 9bf26f0781ad2a3e832bfb58b20d8a78
+      size: 2791

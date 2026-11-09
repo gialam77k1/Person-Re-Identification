@@ -30,8 +30,8 @@ def deterministic_sample(samples: list[dict], limit: int, seed: int) -> list[dic
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Capture labeled external-dataset embeddings from Triton.")
-    parser.add_argument("--config", default="configs/msmt17_v1_evaluation.yaml")
-    parser.add_argument("--dataset-pointer", default="datasets/MSMT17_V1.dvc")
+    parser.add_argument("--config", default="configs/duke_v1_evaluation.yaml")
+    parser.add_argument("--dataset-pointer", default="datasets/dukemtmc-reid.dvc")
     parser.add_argument("--split", choices=("train", "query", "gallery"), default="query")
     parser.add_argument("--max-samples", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=42)

@@ -36,7 +36,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         settings = replace(
             ControlSettings.from_env(),
             database_path=Path(self.temporary.name) / "control.db",
-            allowed_datasets=("MSMT17",),
+            allowed_datasets=("dukemtmc-reid",),
         )
         self.store = CycleStore(settings.database_path)
         lifecycle = LifecycleController(settings, self.store, FakeDispatcher())
@@ -52,8 +52,8 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_list_get_events_and_restore_latest_cycle(self) -> None:
         payload = {
-            "dataset": "MSMT17",
-            "idempotency_key": "msmt17-v2-cycle",
+            "dataset": "dukemtmc-reid",
+            "idempotency_key": "duke-v2-cycle",
             "actor": "gialam77k1",
         }
         created = await self.request("POST", "/control/cycles", json=payload)
@@ -82,7 +82,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         created = await self.request(
             "POST",
             "/control/cycles",
-            json={"dataset": "MSMT17", "idempotency_key": "callback-cycle", "actor": "tester"},
+            json={"dataset": "dukemtmc-reid", "idempotency_key": "callback-cycle", "actor": "tester"},
         )
         cycle_id = created.json()["cycle"]["id"]
         payload = {
@@ -113,7 +113,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             "POST",
             "/control/cycles",
             json={
-                "dataset": "MSMT17",
+                "dataset": "dukemtmc-reid",
                 "idempotency_key": "nested-drift-report",
                 "actor": "tester",
             },
@@ -152,7 +152,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             "POST",
             "/control/cycles",
             json={
-                "dataset": "MSMT17",
+                "dataset": "dukemtmc-reid",
                 "idempotency_key": "terminal-failure-closes-running",
                 "actor": "tester",
             },
@@ -184,7 +184,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         created = await self.request(
             "POST",
             "/control/cycles",
-            json={"dataset": "MSMT17", "idempotency_key": "decision-api", "actor": "tester"},
+            json={"dataset": "dukemtmc-reid", "idempotency_key": "decision-api", "actor": "tester"},
         )
         cycle_id = created.json()["cycle"]["id"]
         self.store.save_retraining_decision(

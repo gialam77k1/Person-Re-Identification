@@ -14,8 +14,8 @@ from src.validate_v2_evaluation import validate_report
 class V2EvaluationReportTest(unittest.TestCase):
     def report(self) -> dict:
         return {
-            "release_id": "market1501-msmt17-vit-bnneck:v2",
-            "dataset": "msmt17",
+            "release_id": "market1501-duke-vit-bnneck:v2",
+            "dataset": "dukemtmc-reid",
             "rank1": 0.5,
             "rank5": 0.7,
             "mAP": 0.4,
@@ -33,7 +33,7 @@ class V2EvaluationReportTest(unittest.TestCase):
             path = Path(directory) / "report.json"
             path.write_text(json.dumps(self.report()), encoding="utf-8")
             report = validate_report(
-                path, "market1501-msmt17-vit-bnneck:v2", "msmt17"
+                path, "market1501-duke-vit-bnneck:v2", "dukemtmc-reid"
             )
         self.assertEqual(report["query_count"], 100)
 
@@ -44,7 +44,7 @@ class V2EvaluationReportTest(unittest.TestCase):
             report.pop("checkpoint_sha256")
             path.write_text(json.dumps(report), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "checkpoint_sha256"):
-                validate_report(path, "market1501-msmt17-vit-bnneck:v2", "msmt17")
+                validate_report(path, "market1501-duke-vit-bnneck:v2", "dukemtmc-reid")
 
     def test_evaluation_loader_only_skips_incompatible_task_head(self) -> None:
         class TinyModel(torch.nn.Module):

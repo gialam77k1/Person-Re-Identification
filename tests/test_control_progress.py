@@ -15,7 +15,7 @@ class ProgressServiceTest(unittest.TestCase):
         self.store = CycleStore(Path(self.temporary.name) / "control.db")
         self.progress = ProgressService(self.store)
         self.cycle, _ = self.store.create_cycle(
-            dataset="MSMT17",
+            dataset="dukemtmc-reid",
             source_release="v1",
             target_release="v2",
             idempotency_key="progress-test",

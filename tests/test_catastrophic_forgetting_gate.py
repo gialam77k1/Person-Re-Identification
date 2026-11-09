@@ -11,7 +11,7 @@ class CatastrophicForgettingGateTest(unittest.TestCase):
     def policy(self) -> dict:
         return {
             "release_id": "model:v2",
-            "msmt17_improvement": {
+            "duke_improvement": {
                 "rank1_min_absolute_gain": 0.05,
                 "map_min_absolute_gain": 0.03,
             },
@@ -40,9 +40,10 @@ class CatastrophicForgettingGateTest(unittest.TestCase):
 
     def build(self, market_rank1: float = 0.89, msmt_map: float = 0.25):
         return build_forgetting_gate(
-            msmt17_v1={"rank1": 0.10, "rank5": 0.20, "mAP": 0.10, "mINP": 0.05},
-            msmt17_v2=self.candidate(
-                "msmt17", {"rank1": 0.25, "rank5": 0.40, "mAP": msmt_map, "mINP": 0.15}
+            duke_v1={"rank1": 0.10, "rank5": 0.20, "mAP": 0.10, "mINP": 0.05},
+            duke_v2=self.candidate(
+                "dukemtmc-reid",
+                {"rank1": 0.25, "rank5": 0.40, "mAP": msmt_map, "mINP": 0.15},
             ),
             market1501_v1_manifest={
                 "quality_metrics": {
@@ -70,7 +71,7 @@ class CatastrophicForgettingGateTest(unittest.TestCase):
     def test_rejects_non_finite_metrics(self) -> None:
         report = self.build(msmt_map=math.nan)
         self.assertFalse(report["passed"])
-        self.assertIn("finite_msmt17_v2", report["failed_checks"])
+        self.assertIn("finite_duke_v2", report["failed_checks"])
 
     def test_mlflow_bundle_must_share_release_and_finished_run(self) -> None:
         run_id, release = validate_bundle(

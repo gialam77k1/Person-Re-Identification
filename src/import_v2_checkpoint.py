@@ -56,7 +56,7 @@ def import_checkpoint(
     mlflow_run = read_json(mlflow_run_path)
     transfer = read_json(transfer_report_path)
     data = read_json(data_manifest_path)
-    release_id = "market1501-msmt17-vit-bnneck:v2"
+    release_id = "market1501-duke-vit-bnneck:v2"
     if training.get("release_id") != release_id:
         raise ValueError("Training metrics do not belong to the v2 release")
     if mlflow_run.get("status") != "FINISHED" or not mlflow_run.get("run_id"):

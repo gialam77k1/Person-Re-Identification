@@ -32,9 +32,9 @@ def approval_artifact(cycle_id: str) -> dict[str, bytes]:
     evaluation = json.dumps(
         {
             "release_id": release,
-            "dataset": "msmt17",
-            "num_query_samples": 11659,
-            "num_gallery_samples": 82161,
+            "dataset": "dukemtmc-reid",
+            "num_query_samples": 2228,
+            "num_gallery_samples": 17661,
             "query_coverage": 1.0,
             "embedding_dim": 512,
             "embeddings_finite": True,
@@ -48,7 +48,7 @@ def approval_artifact(cycle_id: str) -> dict[str, bytes]:
         "cycle_id": cycle_id,
         "workflow_run_id": "12345",
         "release_id": release,
-        "dataset": "msmt17",
+        "dataset": "dukemtmc-reid",
         "dataset_dvc_revision": "abc.dir",
         "source_git_commit": "deadbeef",
         "evidence": {
@@ -89,7 +89,7 @@ class LifecycleControllerTest(unittest.TestCase):
 
     def test_start_is_idempotent_and_dispatches_preapproval_once(self) -> None:
         arguments = {
-            "dataset": "MSMT17",
+            "dataset": "dukemtmc-reid",
             "source_release": "v1",
             "target_release": "v2",
             "idempotency_key": "lifecycle-1",
@@ -106,7 +106,7 @@ class LifecycleControllerTest(unittest.TestCase):
 
     def test_approval_requires_waiting_state_and_dispatches_retraining(self) -> None:
         cycle, _ = self.lifecycle.start(
-            dataset="MSMT17",
+            dataset="dukemtmc-reid",
             source_release="market1501-vit-bnneck:v1-dvc",
             target_release="v2",
             idempotency_key="lifecycle-2",
@@ -140,14 +140,14 @@ class LifecycleControllerTest(unittest.TestCase):
         self.assertEqual(self.dispatcher.calls[-1][0], self.settings.retraining_workflow)
         dispatched = self.dispatcher.calls[-1][1]
         self.assertEqual(dispatched["evidence_run_id"], "12345")
-        self.assertEqual(dispatched["dataset"], "MSMT17")
+        self.assertEqual(dispatched["dataset"], "dukemtmc-reid")
         self.assertEqual(len(dispatched["decision_sha256"]), 64)
         stored = self.store.get_retraining_decision(cycle["id"])
         self.assertEqual(stored["decision"]["status"], "RETRAIN_APPROVED")
 
     def test_approval_rejects_cycle_without_uploaded_evidence(self) -> None:
         cycle, _ = self.lifecycle.start(
-            dataset="MSMT17", source_release="v1", target_release="v2",
+            dataset="dukemtmc-reid", source_release="v1", target_release="v2",
             idempotency_key="lifecycle-missing-evidence", actor="tester",
         )
         self.store.update_cycle(cycle["id"], status=CycleStatus.WAITING_APPROVAL)

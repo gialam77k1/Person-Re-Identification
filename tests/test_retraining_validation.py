@@ -21,13 +21,13 @@ class RetrainingCandidateTest(unittest.TestCase):
             base.write_bytes(b"base")
             candidate.write_bytes(b"candidate")
             report, manifest = build_gate(
-                evidence={"source_git_commit": "abc", "release_id": "base:v1", "dataset": "msmt17", "dataset_dvc_revision": "dvc.dir", "base_checkpoint": {"sha256": sha256(base)}},
-                decision={"status": "RETRAIN_APPROVED", "base_release_id": "base:v1", "target_dataset": "msmt17"},
+                evidence={"source_git_commit": "abc", "release_id": "base:v1", "dataset": "dukemtmc-reid", "dataset_dvc_revision": "dvc.dir", "base_checkpoint": {"sha256": sha256(base)}},
+                decision={"status": "RETRAIN_APPROVED", "base_release_id": "base:v1", "target_dataset": "dukemtmc-reid"},
                 training={"release_id": "model:v2", "base_release_id": "base:v1"},
                 evaluation={"release_id": "model:v2", "valid_queries": 10, "rank1": 0.6, "rank5": 0.8, "mAP": 0.5, "mINP": 0.3},
                 baseline={"dataset_dvc_revision": "dvc.dir", "rank1": 0.5, "mAP": 0.4, "mINP": 0.2},
                 mlflow_run={"run_id": "run-1", "status": "FINISHED"},
-                config={"release": {"id": "model:v2", "base_release_id": "base:v1"}, "data": {"dataset": {"name": "msmt17"}}, "model": {"backbone": "vit_b_16", "embedding_dim": 512}},
+                config={"release": {"id": "model:v2", "base_release_id": "base:v1"}, "data": {"dataset": {"name": "dukemtmc-reid"}}, "model": {"backbone": "vit_b_16", "embedding_dim": 512}},
                 policy={"quality": {"rank1_max_drop_from_v1": 0.005, "map_max_drop_from_v1": 0.005, "minp_max_drop_from_v1": 0.01, "minimum_valid_queries": 1}, "contract": {"approved_status": "RETRAIN_APPROVED"}},
                 base_checkpoint=base, candidate_checkpoint=candidate, git_commit="abc",
             )
@@ -64,10 +64,10 @@ class RetrainingCandidateTest(unittest.TestCase):
                     "git_commit": "pipeline-commit",
                     "training_git_commit": "training-commit",
                     "config_sha256": "a" * 64,
-                    "dataset_revisions": {"msmt17": "msmt.dir", "market1501": "market.dir"},
+                    "dataset_revisions": {"duke": "msmt.dir", "market1501": "market.dir"},
                 },
                 "quality_metrics": {
-                    "msmt17": {"rank1": 0.7, "rank5": 0.8, "mAP": 0.6, "mINP": 0.5},
+                    "duke": {"rank1": 0.7, "rank5": 0.8, "mAP": 0.6, "mINP": 0.5},
                     "market1501": {"rank1": 0.9, "rank5": 0.95, "mAP": 0.8, "mINP": 0.7},
                 },
                 "files": [{"role": "pytorch_checkpoint", "sha256": "b" * 64}],
@@ -81,7 +81,7 @@ class RetrainingCandidateTest(unittest.TestCase):
                 "dvc": {"remote": "minio", "stage": "v2_package_triton"},
             }
             tags = build_lineage_tags(manifest, validation_path, manifest_path, publication)
-            self.assertEqual(tags["dvc.msmt17.revision"], "msmt.dir")
+            self.assertEqual(tags["dvc.duke.revision"], "msmt.dir")
             self.assertEqual(tags["metrics.market1501.mAP"], "0.8")
             self.assertEqual(tags["registry.alias.policy"], "candidate-only")
 

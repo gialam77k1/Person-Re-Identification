@@ -36,8 +36,8 @@ def _finite_metrics(report: dict[str, Any]) -> bool:
 
 def build_forgetting_gate(
     *,
-    msmt17_v1: dict[str, Any],
-    msmt17_v2: dict[str, Any],
+    duke_v1: dict[str, Any],
+    duke_v2: dict[str, Any],
     market1501_v1_manifest: dict[str, Any],
     market1501_v2: dict[str, Any],
     policy: dict[str, Any],
@@ -60,61 +60,66 @@ def build_forgetting_gate(
     release_id = str(policy["release_id"])
     protocol = str(policy["market1501_retention"]["baseline_protocol"])
     market_v1 = market1501_v1_manifest.get("quality_metrics", {}).get(protocol, {})
-    check("release_msmt17", msmt17_v2.get("release_id") == release_id, msmt17_v2.get("release_id"), release_id)
+    check("release_duke", duke_v2.get("release_id") == release_id, duke_v2.get("release_id"), release_id)
     check("release_market1501", market1501_v2.get("release_id") == release_id, market1501_v2.get("release_id"), release_id)
-    check("dataset_msmt17", str(msmt17_v2.get("dataset", "")).lower() == "msmt17", msmt17_v2.get("dataset"), "msmt17")
+    check(
+        "dataset_duke",
+        str(duke_v2.get("dataset", "")).lower() == "dukemtmc-reid",
+        duke_v2.get("dataset"),
+        "dukemtmc-reid",
+    )
     check("dataset_market1501", str(market1501_v2.get("dataset", "")).lower() == "market1501", market1501_v2.get("dataset"), "market1501")
-    check("finite_msmt17_v1", _finite_metrics(msmt17_v1), {key: msmt17_v1.get(key) for key in METRICS}, "all finite")
-    check("finite_msmt17_v2", _finite_metrics(msmt17_v2), {key: msmt17_v2.get(key) for key in METRICS}, "all finite")
+    check("finite_duke_v1", _finite_metrics(duke_v1), {key: duke_v1.get(key) for key in METRICS}, "all finite")
+    check("finite_duke_v2", _finite_metrics(duke_v2), {key: duke_v2.get(key) for key in METRICS}, "all finite")
     check("finite_market1501_v1", _finite_metrics(market_v1), {key: market_v1.get(key) for key in METRICS}, "all finite")
     check("finite_market1501_v2", _finite_metrics(market1501_v2), {key: market1501_v2.get(key) for key in METRICS}, "all finite")
 
     same_checkpoint = (
-        bool(msmt17_v2.get("checkpoint_sha256"))
-        and msmt17_v2.get("checkpoint_sha256") == market1501_v2.get("checkpoint_sha256")
+        bool(duke_v2.get("checkpoint_sha256"))
+        and duke_v2.get("checkpoint_sha256") == market1501_v2.get("checkpoint_sha256")
     )
     check(
         "same_candidate_checkpoint",
         same_checkpoint,
         {
-            "msmt17": msmt17_v2.get("checkpoint_sha256"),
+            "duke": duke_v2.get("checkpoint_sha256"),
             "market1501": market1501_v2.get("checkpoint_sha256"),
         },
         "identical non-empty SHA256",
     )
     check(
         "same_git_commit",
-        bool(msmt17_v2.get("git_commit"))
-        and msmt17_v2.get("git_commit") == market1501_v2.get("git_commit"),
-        {"msmt17": msmt17_v2.get("git_commit"), "market1501": market1501_v2.get("git_commit")},
+        bool(duke_v2.get("git_commit"))
+        and duke_v2.get("git_commit") == market1501_v2.get("git_commit"),
+        {"duke": duke_v2.get("git_commit"), "market1501": market1501_v2.get("git_commit")},
         "identical non-empty commit",
     )
     check(
         "dataset_dvc_revisions",
-        bool(msmt17_v2.get("dataset_dvc_revision"))
+        bool(duke_v2.get("dataset_dvc_revision"))
         and bool(market1501_v2.get("dataset_dvc_revision")),
         {
-            "msmt17": msmt17_v2.get("dataset_dvc_revision"),
+            "duke": duke_v2.get("dataset_dvc_revision"),
             "market1501": market1501_v2.get("dataset_dvc_revision"),
         },
         "both non-empty",
     )
 
     minimum = policy["minimum_counts"]
-    for dataset, report in (("msmt17", msmt17_v2), ("market1501", market1501_v2)):
+    for dataset, report in (("duke", duke_v2), ("market1501", market1501_v2)):
         for key in ("query_count", "gallery_count", "valid_queries"):
             threshold_key = "valid_queries" if key == "valid_queries" else key.removesuffix("_count")
             threshold = int(minimum[threshold_key])
             actual = int(report.get(key, 0))
             check(f"{dataset}_{key}", actual >= threshold, actual, {"minimum": threshold})
 
-    improvement = policy["msmt17_improvement"]
+    improvement = policy["duke_improvement"]
     for metric, threshold_key in (
         ("rank1", "rank1_min_absolute_gain"),
         ("mAP", "map_min_absolute_gain"),
     ):
-        baseline = msmt17_v1.get(metric)
-        candidate = msmt17_v2.get(metric)
+        baseline = duke_v1.get(metric)
+        candidate = duke_v2.get(metric)
         delta = (
             float(candidate) - float(baseline)
             if isinstance(candidate, (int, float)) and isinstance(baseline, (int, float))
@@ -122,7 +127,7 @@ def build_forgetting_gate(
         )
         threshold = float(improvement[threshold_key])
         check(
-            f"msmt17_{metric}_improvement",
+            f"duke_{metric}_improvement",
             delta is not None and math.isfinite(delta) and delta >= threshold,
             {"baseline": baseline, "candidate": candidate, "absolute_gain": delta},
             {"minimum_absolute_gain": threshold},
@@ -159,9 +164,9 @@ def build_forgetting_gate(
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "policy_sha256": policy_sha256,
         "mlflow_run_id": mlflow_run_id,
-        "candidate_checkpoint_sha256": msmt17_v2.get("checkpoint_sha256"),
+        "candidate_checkpoint_sha256": duke_v2.get("checkpoint_sha256"),
         "reports": {
-            "msmt17": {key: msmt17_v2.get(key) for key in METRICS},
+            "duke": {key: duke_v2.get(key) for key in METRICS},
             "market1501": {key: market1501_v2.get(key) for key in METRICS},
         },
         "checks": checks,
@@ -171,8 +176,8 @@ def build_forgetting_gate(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--msmt17-v1", required=True)
-    parser.add_argument("--msmt17-v2", required=True)
+    parser.add_argument("--duke-v1", required=True)
+    parser.add_argument("--duke-v2", required=True)
     parser.add_argument("--market1501-v1-manifest", required=True)
     parser.add_argument("--market1501-v2", required=True)
     parser.add_argument("--policy", required=True)
@@ -182,8 +187,8 @@ def main() -> int:
     policy_path = Path(args.policy)
     mlflow_run = read_json(Path(args.mlflow_run))
     report = build_forgetting_gate(
-        msmt17_v1=read_json(Path(args.msmt17_v1)),
-        msmt17_v2=read_json(Path(args.msmt17_v2)),
+        duke_v1=read_json(Path(args.duke_v1)),
+        duke_v2=read_json(Path(args.duke_v2)),
         market1501_v1_manifest=read_json(Path(args.market1501_v1_manifest)),
         market1501_v2=read_json(Path(args.market1501_v2)),
         policy=yaml.safe_load(policy_path.read_text(encoding="utf-8")),

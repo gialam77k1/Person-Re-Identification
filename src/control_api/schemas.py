@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class CycleCreate(BaseModel):
     dataset: str
     source_release: str = "market1501-vit-bnneck:v1-dvc"
-    target_release: str = "market1501-msmt17-vit-bnneck:v2"
+    target_release: str = "market1501-duke-vit-bnneck:v2"
     idempotency_key: str = Field(min_length=4, max_length=200)
     actor: str = Field(min_length=1, max_length=100)
 

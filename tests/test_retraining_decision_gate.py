@@ -20,10 +20,10 @@ class RetrainingDecisionGateTest(unittest.TestCase):
         }
         self.evaluation = {
             "release_id": "market1501-vit-bnneck:v1-dvc",
-            "dataset": "msmt17",
+            "dataset": "dukemtmc-reid",
             "dataset_dvc_revision": "dataset-revision.dir",
-            "num_query_samples": 11659,
-            "num_gallery_samples": 82161,
+            "num_query_samples": 2228,
+            "num_gallery_samples": 17661,
             "query_coverage": 1.0,
             "embedding_dim": 512,
             "embeddings_finite": True,

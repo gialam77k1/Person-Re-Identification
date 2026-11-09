@@ -16,9 +16,9 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
 
     def test_script_pulls_missing_inputs_separately(self) -> None:
         script = (ROOT / "scripts/cross_dataset_drift.sh").read_text(encoding="utf-8")
-        self.assertIn("pull datasets/MSMT17_V1.dvc", script)
+        self.assertIn("pull datasets/dukemtmc-reid.dvc", script)
         self.assertIn("pull extract_reference", script)
-        self.assertNotIn('pull datasets/MSMT17_V1.dvc "${REFERENCE}"', script)
+        self.assertNotIn('pull datasets/dukemtmc-reid.dvc "${REFERENCE}"', script)
         self.assertIn("pull validate_release", script)
         self.assertIn("--metadata", script)
         self.assertIn("--model-manifest", script)

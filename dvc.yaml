@@ -299,8 +299,8 @@ stages:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
       python -m src.validate_v2_release_data
-      --msmt17-config configs/msmt17_v2_eval.yaml
-      --msmt17-pointer ${v2_pipeline.msmt17_pointer}
+      --duke-config configs/duke_v2_eval.yaml
+      --duke-pointer ${v2_pipeline.duke_pointer}
       --market1501-config configs/market1501_v2_eval.yaml
       --market1501-pointer ${v2_pipeline.market1501_pointer}
       --output artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
@@ -308,16 +308,16 @@ stages:
       - src/validate_v2_release_data.py
       - src/validate_data.py
       - src/common/config.py
-      - configs/msmt17_v2_eval.yaml
+      - configs/duke_v2_eval.yaml
       - configs/market1501_v2_eval.yaml
-      - ${v2_pipeline.msmt17_root}
+      - ${v2_pipeline.duke_root}
       - ${v2_pipeline.market1501_root}
     params:
       - v2_pipeline.release_slug
       - v2_pipeline.conda_env
-      - v2_pipeline.msmt17_root
+      - v2_pipeline.duke_root
       - v2_pipeline.market1501_root
-      - v2_pipeline.msmt17_pointer
+      - v2_pipeline.duke_pointer
       - v2_pipeline.market1501_pointer
     outs:
       - artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
@@ -353,30 +353,30 @@ stages:
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/transfer_report.json
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/effective_config.json
 
-  v2_evaluate_msmt17:
+  v2_evaluate_duke:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python -m src.evaluate --config configs/msmt17_v2_eval.yaml
+      python -m src.evaluate --config configs/duke_v2_eval.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
-      --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_msmt17
+      --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_duke
     deps:
       - src/evaluate.py
       - src/data
       - src/models
       - src/reid/evaluation.py
-      - configs/msmt17_v2_eval.yaml
+      - configs/duke_v2_eval.yaml
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
-      - ${v2_pipeline.msmt17_root}
+      - ${v2_pipeline.duke_root}
     params:
       - v2_pipeline.release_slug
       - v2_pipeline.conda_env
-      - v2_pipeline.msmt17_root
-      - configs/msmt17_v2_eval.yaml:
+      - v2_pipeline.duke_root
+      - configs/duke_v2_eval.yaml:
           - data
           - model
           - evaluation
     metrics:
-      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_msmt17/metrics/evaluation_msmt17.json:
+      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_duke/metrics/evaluation_duke.json:
           cache: true
 
   v2_evaluate_market1501:
@@ -408,20 +408,20 @@ stages:
   v2_export_onnx:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python -m src.export_onnx --config configs/msmt17_v2_train.yaml
+      python -m src.export_onnx --config configs/duke_v2_train.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --opset ${v2_pipeline.opset}
       --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/onnx
     deps:
       - src/export_onnx.py
       - src/models
-      - configs/msmt17_v2_train.yaml
+      - configs/duke_v2_train.yaml
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
     params:
       - v2_pipeline.release_slug
       - v2_pipeline.conda_env
       - v2_pipeline.opset
-      - configs/msmt17_v2_train.yaml:
+      - configs/duke_v2_train.yaml:
           - device
           - data.image_height
           - data.image_width
@@ -435,7 +435,7 @@ stages:
   v2_verify_onnx:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python -m src.verify_onnx --config configs/msmt17_v2_train.yaml
+      python -m src.verify_onnx --config configs/duke_v2_train.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --onnx-path artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
       --split query --num-samples ${v2_pipeline.parity_samples}
@@ -445,16 +445,16 @@ stages:
       - src/verify_onnx.py
       - src/data
       - src/models
-      - configs/msmt17_v2_train.yaml
+      - configs/duke_v2_train.yaml
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
       - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
-      - ${v2_pipeline.msmt17_root}
+      - ${v2_pipeline.duke_root}
     params:
       - v2_pipeline.release_slug
       - v2_pipeline.conda_env
       - v2_pipeline.parity_samples
-      - configs/msmt17_v2_train.yaml:
+      - configs/duke_v2_train.yaml:
           - device
           - data
           - model
@@ -465,7 +465,7 @@ stages:
   v2_extract_reference:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
-      python -m src.extract_reference --config configs/msmt17_v2_train.yaml
+      python -m src.extract_reference --config configs/duke_v2_train.yaml
       --checkpoint artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       --set artifacts.run_root=artifacts/pipeline/${v2_pipeline.release_slug}/reference
     deps:
@@ -473,13 +473,13 @@ stages:
       - src/data
       - src/models
       - src/reid/evaluation.py
-      - configs/msmt17_v2_train.yaml
+      - configs/duke_v2_train.yaml
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
-      - ${v2_pipeline.msmt17_root}
+      - ${v2_pipeline.duke_root}
     params:
       - v2_pipeline.release_slug
       - v2_pipeline.conda_env
-      - configs/msmt17_v2_train.yaml:
+      - configs/duke_v2_train.yaml:
           - device
           - num_workers
           - data
@@ -502,13 +502,13 @@ stages:
       - configs/catastrophic_forgetting.yaml
       - configs/model_validation_v2.yaml
       - model_releases/market1501-vit-bnneck/v1/model_manifest.json
-      - model_releases/market1501-vit-bnneck/v1/msmt17_cross_domain_metrics.json
+      - artifacts/cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json
       - ${v2_pipeline.preprocessing_contract}
       - artifacts/pipeline/${v2_pipeline.release_slug}/validate/data_manifest.json
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/best_model.pth
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/checkpoint_manifest.json
       - artifacts/pipeline/${v2_pipeline.release_slug}/checkpoint/mlflow_run.json
-      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_msmt17/metrics/evaluation_msmt17.json
+      - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_duke/metrics/evaluation_duke.json
       - artifacts/pipeline/${v2_pipeline.release_slug}/evaluate_market1501/metrics/evaluation_market1501.json
       - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx
       - artifacts/pipeline/${v2_pipeline.release_slug}/onnx/exports/model_embedding.onnx.data
@@ -526,7 +526,7 @@ stages:
       - v2_pipeline.preprocessing_contract
       - v2_pipeline.validation_policy
       - configs/catastrophic_forgetting.yaml:
-          - msmt17_improvement
+          - duke_improvement
           - market1501_retention
     outs:
       - artifacts/pipeline/${v2_pipeline.release_slug}/release/model_manifest.json

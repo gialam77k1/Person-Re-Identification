@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from src.validate_msmt17_v2_training import (
+from src.validate_duke_v2_training import (
     EXPECTED_BASE_RELEASE_ID,
     EXPECTED_DATASET,
     EXPECTED_DATASET_VERSION,

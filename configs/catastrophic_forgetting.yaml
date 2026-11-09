@@ -1,9 +1,9 @@
 schema_version: 1
-release_id: market1501-msmt17-vit-bnneck:v2
+release_id: market1501-duke-vit-bnneck:v2
 
 # These thresholds are release policy. Change them only in a reviewed commit
 # before running the v2 evaluation; never tune them after seeing candidate results.
-msmt17_improvement:
+duke_improvement:
   rank1_min_absolute_gain: 0.05
   map_min_absolute_gain: 0.03
 

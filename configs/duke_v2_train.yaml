@@ -1,30 +1,26 @@
 project_name: person-reid-mlops
-experiment_name: market1501-msmt17-vit-bnneck-v2
+experiment_name: market1501-duke-vit-bnneck-v2
 seed: 42
 device: auto
 num_workers: 2
 
 release:
-  id: market1501-msmt17-vit-bnneck:v2
+  id: market1501-duke-vit-bnneck:v2
   base_release_id: market1501-vit-bnneck:v1-dvc
 
 data:
   source_type: image_folder
   dataset:
-    name: msmt17
-    version: MSMT17_V1
+    name: dukemtmc-reid
+    version: dukemtmc-reid
   location:
-    root: datasets/MSMT17_V1
+    root: datasets/dukemtmc-reid
     splits:
-      train: train
-      query: test
-      gallery: test
-    list_files:
-      train: datasets/MSMT17_V1/list_train.txt
-      query: datasets/MSMT17_V1/list_query.txt
-      gallery: datasets/MSMT17_V1/list_gallery.txt
-  expected_train_images: 30248
-  expected_train_identities: 1041
+      train: bounding_box_train
+      query: query
+      gallery: bounding_box_test
+  expected_train_images: 16522
+  expected_train_identities: 702
   image_height: 224
   image_width: 224
   preserve_aspect_ratio: true
@@ -93,10 +89,10 @@ augmentation:
 evaluation:
   use_rerank: false
   flip_test: false
-  # Distance rows are evaluated in bounded chunks to prevent host OOM on the
-  # 82,161-image MSMT17 gallery.
-  query_batch_size: 32
-  dataset_pointer: datasets/MSMT17_V1.dvc
+  # Duke is much smaller than MSMT17, but keep bounded distance rows so the
+  # same workflow remains safe on the self-hosted runner.
+  query_batch_size: 64
+  dataset_pointer: datasets/dukemtmc-reid.dvc
 
 logging:
   enable_mlflow: true
@@ -104,5 +100,5 @@ logging:
 
 artifacts:
   root: artifacts
-  run_root: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2
+  run_root: artifacts/duke/market1501-duke-vit-bnneck-v2
   metrics_filename: metrics_v2.json

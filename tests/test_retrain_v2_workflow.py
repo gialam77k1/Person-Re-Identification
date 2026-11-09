@@ -26,8 +26,8 @@ class RetrainV2WorkflowTest(unittest.TestCase):
 
     def test_workflow_preflights_trains_evaluates_and_gates(self) -> None:
         for command in (
-            "train_msmt17_v2_local.sh --check",
-            "train_msmt17_v2_local.sh",
+            "train_duke_v2_local.sh --check",
+            "train_duke_v2_local.sh",
             "evaluate_v2_dual_domain.sh",
             "src.catastrophic_forgetting_gate",
             "src.log_v2_evaluations_mlflow",
@@ -57,7 +57,7 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("${V2_PIPELINE_ROOT}/release/validation_report.json", self.text)
 
     def test_large_models_are_not_uploaded_as_actions_artifacts(self) -> None:
-        artifact_section = self.text.split("name: msmt17-v2-retraining-reports", 1)[1]
+        artifact_section = self.text.split("name: duke-v2-retraining-reports", 1)[1]
         self.assertNotIn("*.pth\n", artifact_section)
         self.assertIn("publish_v2_artifacts.sh", self.text)
 
@@ -72,13 +72,13 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("configs/catastrophic_forgetting.yaml", self.text)
         self.assertNotIn("rank1_min_absolute_gain:", self.text)
         self.assertIn("model_releases/market1501-vit-bnneck/v1/model_manifest.json", self.text)
-        self.assertIn("evaluation_msmt17.json", self.text)
+        self.assertIn("evaluation_duke.json", self.text)
         self.assertIn("evaluation_market1501.json", self.text)
 
     def test_changed_shell_scripts_have_valid_syntax(self) -> None:
         for script in (
-            "train_msmt17_v2_local.sh",
-            "evaluate_msmt17_v2.sh",
+            "train_duke_v2_local.sh",
+            "evaluate_duke_v2.sh",
             "evaluate_market1501_v2.sh",
             "evaluate_v2_dual_domain.sh",
             "publish_v2_artifacts.sh",

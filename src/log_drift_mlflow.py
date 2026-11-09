@@ -36,7 +36,7 @@ def main() -> int:
     provenance = report.get("provenance", {})
     release_id = str(report["release_id"])
     mlflow.set_experiment(args.experiment)
-    with mlflow.start_run(run_name=f"msmt17-drift-{release_id.replace(':', '-')}") as run:
+    with mlflow.start_run(run_name=f"duke-drift-{release_id.replace(':', '-')}") as run:
         mlflow.set_tags(
             {
                 "run.kind": "embedding-drift",
