@@ -76,7 +76,7 @@ class DukeV2TrainingTest(unittest.TestCase):
         self.assertFalse(config["model"]["pretrained"])
         self.assertEqual(config["data"]["batch_size"], 16)
         self.assertEqual(config["data"]["eval_batch_size"], 16)
-        self.assertEqual(config["train"]["epochs"], 30)
+        self.assertEqual(config["train"]["epochs"], 50)
         self.assertEqual(config["train"]["progressive_unfreeze"]["freeze_lower_blocks"], 8)
         self.assertEqual(config["train"]["progressive_unfreeze"]["full_unfreeze_epoch"], 6)
         self.assertEqual(config["train"]["backbone_lr_factor"], 0.05)
@@ -120,7 +120,7 @@ class DukeV2TrainingTest(unittest.TestCase):
                         "base_release_id": "market1501-vit-bnneck:v1-dvc",
                         "target_dataset": "dukemtmc-reid",
                         "target_dataset_version": "dukemtmc-reid",
-                        "target_epochs": 30,
+                        "target_epochs": 50,
                     }
                 ),
                 encoding="utf-8",
@@ -145,7 +145,7 @@ class DukeV2TrainingTest(unittest.TestCase):
                 )
 
             self.assertEqual(result["decision"], "RETRAIN_APPROVED")
-            self.assertEqual(result["target_epochs"], 30)
+            self.assertEqual(result["target_epochs"], 50)
             self.assertEqual(result["train_images"], 16522)
             self.assertEqual(result["train_identities"], 702)
             self.assertEqual(result["train_cameras"], 8)
@@ -206,7 +206,7 @@ class DukeV2TrainingTest(unittest.TestCase):
             "base_release_id": "market1501-vit-bnneck:v1-dvc",
             "target_dataset": "dukemtmc-reid",
             "target_dataset_version": "dukemtmc-reid",
-            "target_epochs": 30,
+            "target_epochs": 50,
         }
         from src.validate_duke_v2_training import validate_training_contract
 

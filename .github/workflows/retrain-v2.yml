@@ -107,7 +107,7 @@ jobs:
             --cycle-id "${{ inputs.cycle_id }}" \
             --source-release "${{ inputs.source_release }}" \
             --dataset "${{ inputs.dataset }}" \
-            --target-epochs 30
+            --target-epochs 50
 
       - name: Preflight model v2 training
         env:

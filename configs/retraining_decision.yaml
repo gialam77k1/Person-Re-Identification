@@ -5,7 +5,7 @@ candidate:
   base_release_id: market1501-vit-bnneck:v1-dvc
   target_dataset: dukemtmc-reid
   target_dataset_version: dukemtmc-reid
-  target_epochs: 30
+  target_epochs: 50
 
 evidence:
   require_drift_detected: true
