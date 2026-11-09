@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.control_api.config import ControlSettings
+from src.control_api.evaluations import EvaluationService
 from src.control_api.github_actions import GitHubActionsClient, WorkflowDispatchError
 from src.control_api.lifecycle import InvalidTransitionError, LifecycleController
+from src.control_api.metrics import render_control_metrics
 from src.control_api.overview import OverviewService
 from src.control_api.progress import ProgressService
 from src.control_api.schemas import (
@@ -34,6 +36,7 @@ def create_app(
         configured, cycle_store, GitHubActionsClient(configured)
     )
     progress_service = ProgressService(cycle_store)
+    evaluation_service = EvaluationService(configured, cycle_store)
     api = FastAPI(
         title="Person ReID MLOps Control API",
         version="0.1.0",
@@ -51,6 +54,13 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @api.get("/metrics", include_in_schema=False)
+    async def metrics() -> Response:
+        return Response(
+            content=render_control_metrics(cycle_store),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
+
     @api.get("/control/overview")
     async def get_overview() -> dict:
         payload = overview_service.overview()
@@ -62,6 +72,23 @@ def create_app(
     @api.get("/control/services")
     async def get_services() -> dict:
         return {"services": overview_service.services()}
+
+    @api.get("/control/evaluations")
+    async def get_evaluations() -> dict:
+        return evaluation_service.overview()
+
+    @api.get("/control/evaluation-images/{dataset}/{image_path:path}")
+    async def get_evaluation_image(dataset: str, image_path: str) -> Response:
+        try:
+            path = evaluation_service.resolve_image(dataset, image_path)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Evaluation image not found") from exc
+        media_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+        return Response(
+            content=path.read_bytes(),
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     @api.get("/control/cycles")
     async def list_cycles(limit: int = Query(default=25, ge=1, le=100)) -> dict:

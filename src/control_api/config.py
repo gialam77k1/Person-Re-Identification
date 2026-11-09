@@ -40,6 +40,8 @@ class ControlSettings:
     cors_origins: tuple[str, ...]
     callback_token: str
     allowed_datasets: tuple[str, ...]
+    dataset_root: Path
+    evaluation_artifacts_root: Path
 
     @classmethod
     def from_env(cls) -> "ControlSettings":
@@ -53,6 +55,10 @@ class ControlSettings:
         )
         if not datasets:
             raise ValueError("CONTROL_ALLOWED_DATASETS must contain at least one dataset.")
+        dataset_root = Path(os.getenv("CONTROL_DATASET_ROOT", str(ROOT / "datasets")))
+        artifacts_root = Path(
+            os.getenv("CONTROL_EVALUATION_ARTIFACTS_ROOT", str(ROOT / "artifacts"))
+        )
         return cls(
             database_path=database,
             github_repository=os.getenv(
@@ -103,4 +109,6 @@ class ControlSettings:
                 "CONTROL_CALLBACK_TOKEN", "change-me-control-callback-token"
             ),
             allowed_datasets=datasets,
+            dataset_root=dataset_root,
+            evaluation_artifacts_root=artifacts_root,
         )
