@@ -20,6 +20,7 @@ from src.data.dataset import build_dataset_splits, build_transforms
 from src.models.reid_model import build_model_from_config
 from src.reid.cross_domain import evaluate_cross_domain_retrieval
 from src.reid.evaluation import (
+    build_retrieval_preview,
     evaluate_market1501,
     extract_features,
     re_rank_distance_matrix,
@@ -144,8 +145,8 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
     resolved_checkpoint = Path(checkpoint_path).resolve()
 
     flip_test = config["evaluation"].get("flip_test", False)
-    query_features, query_pid, query_cam, _ = extract_features(model, query_loader, device, flip_test=flip_test)
-    gallery_features, gallery_pid, gallery_cam, _ = extract_features(
+    query_features, query_pid, query_cam, query_paths = extract_features(model, query_loader, device, flip_test=flip_test)
+    gallery_features, gallery_pid, gallery_cam, gallery_paths = extract_features(
         model,
         gallery_loader,
         device,
@@ -187,6 +188,17 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
         "rank20_base": base_results["rank20"],
         "mAP_base": base_results["mAP"],
         "mINP_base": base_results["mINP"],
+        "retrieval_preview": build_retrieval_preview(
+            query_features=query_features,
+            gallery_features=gallery_features,
+            query_paths=query_paths,
+            query_pids=query_pid,
+            query_camids=query_cam,
+            gallery_paths=gallery_paths,
+            gallery_pids=gallery_pid,
+            gallery_camids=gallery_cam,
+            dataset_root=config["data"]["location"]["root"],
+        ),
     }
 
     if config["evaluation"].get("use_rerank", False):

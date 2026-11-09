@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 
@@ -36,6 +38,87 @@ def compute_distance_matrix(query_features: np.ndarray, gallery_features: np.nda
     query_features = query_features / np.linalg.norm(query_features, axis=1, keepdims=True)
     gallery_features = gallery_features / np.linalg.norm(gallery_features, axis=1, keepdims=True)
     return 1 - np.matmul(query_features, gallery_features.T)
+
+
+def _portable_dataset_path(value: str, dataset_root: str | Path | None = None) -> str:
+    path = Path(value)
+    if dataset_root is not None:
+        try:
+            return path.resolve().relative_to(Path(dataset_root).resolve()).as_posix()
+        except ValueError:
+            pass
+    for split in ("query", "bounding_box_test", "bounding_box_train"):
+        if split in path.parts:
+            return Path(*path.parts[path.parts.index(split) :]).as_posix()
+    return path.name
+
+
+def build_retrieval_preview(
+    query_features: np.ndarray,
+    gallery_features: np.ndarray,
+    query_paths: list[str],
+    query_pids: np.ndarray,
+    query_camids: np.ndarray,
+    gallery_paths: list[str],
+    gallery_pids: np.ndarray,
+    gallery_camids: np.ndarray,
+    *,
+    dataset_root: str | Path | None = None,
+    topk: int = 5,
+    limit_queries: int = 6,
+) -> list[dict]:
+    """Build deterministic, auditable query-to-gallery examples for the UI.
+
+    The ranking follows the same Market-1501 protocol as aggregate evaluation:
+    gallery images with the same identity and camera as the query are excluded.
+    Paths are stored relative to the dataset root so reports remain portable from
+    a self-hosted runner to the Control API.
+    """
+    if limit_queries <= 0 or topk <= 0:
+        return []
+    selected = min(limit_queries, int(query_features.shape[0]))
+    distances = compute_distance_matrix(query_features[:selected], gallery_features)
+    previews: list[dict] = []
+    for query_index in range(selected):
+        query_pid = int(query_pids[query_index])
+        query_camid = int(query_camids[query_index])
+        ranked = np.argsort(distances[query_index])
+        predictions: list[dict] = []
+        for gallery_index in ranked:
+            gallery_pid = int(gallery_pids[gallery_index])
+            gallery_camid = int(gallery_camids[gallery_index])
+            if gallery_pid == query_pid and gallery_camid == query_camid:
+                continue
+            distance = float(distances[query_index, gallery_index])
+            predictions.append(
+                {
+                    "rank": len(predictions) + 1,
+                    "image_path": _portable_dataset_path(
+                        gallery_paths[gallery_index], dataset_root
+                    ),
+                    "person_id": gallery_pid,
+                    "camera_id": gallery_camid,
+                    "distance": distance,
+                    "similarity": float(1.0 - distance),
+                    "correct": gallery_pid == query_pid,
+                }
+            )
+            if len(predictions) >= topk:
+                break
+        previews.append(
+            {
+                "query": {
+                    "image_path": _portable_dataset_path(
+                        query_paths[query_index], dataset_root
+                    ),
+                    "person_id": query_pid,
+                    "camera_id": query_camid,
+                },
+                "predictions": predictions,
+                "top1_correct": bool(predictions and predictions[0]["correct"]),
+            }
+        )
+    return previews
 
 
 def re_rank_distance_matrix(

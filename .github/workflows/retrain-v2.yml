@@ -164,12 +164,16 @@ jobs:
           if [[ "${gate_status}" -ne 0 ]]; then
             python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL \
               --detail "Catastrophic-forgetting gate failed; reports are preserved in MLflow" \
-              --metrics-file "${FORGETTING_REPORT}"
+              --metrics-file "${FORGETTING_REPORT}" \
+              --metrics-file "duke=${DUKE_V2_REPORT}" \
+              --metrics-file "market1501=${MARKET1501_V2_REPORT}"
             exit "${gate_status}"
           fi
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 PASS \
             --progress 1 --detail "Cross-domain improvement and retention gates passed" \
-            --metrics-file "${FORGETTING_REPORT}"
+            --metrics-file "${FORGETTING_REPORT}" \
+            --metrics-file "duke=${DUKE_V2_REPORT}" \
+            --metrics-file "market1501=${MARKET1501_V2_REPORT}"
 
       - name: Run retraining lineage gate
         run: |

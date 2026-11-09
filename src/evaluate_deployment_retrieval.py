@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 from src.common.config import load_runtime_config
 from src.common.utils import ensure_dir, save_json, tee_output
 from src.reid.cross_domain import evaluate_cross_domain_retrieval
-from src.reid.evaluation import compute_distance_matrix
+from src.reid.evaluation import build_retrieval_preview
 from src.triton_infer import preprocess_image
 from src.triton_infer import infer_embedding
 
@@ -156,40 +156,6 @@ def dvc_revision(pointer_path: Path) -> str:
     return str(outputs[0]["md5"])
 
 
-def build_topk_preview(
-    distance_matrix: np.ndarray,
-    query_paths: list[str],
-    query_pids: np.ndarray,
-    gallery_pids: np.ndarray,
-    gallery_camids: np.ndarray,
-    gallery_paths: list[str],
-    topk: int = 5,
-    limit_queries: int = 5,
-) -> list[dict]:
-    ranked_indices = np.argsort(distance_matrix, axis=1)
-    previews = []
-    for query_index in range(min(limit_queries, distance_matrix.shape[0])):
-        matches = []
-        for gallery_index in ranked_indices[query_index, :topk]:
-            matches.append(
-                {
-                    "gallery_path": str(Path(gallery_paths[gallery_index]).resolve()),
-                    "gallery_pid": int(gallery_pids[gallery_index]),
-                    "gallery_camid": int(gallery_camids[gallery_index]),
-                    "distance": float(distance_matrix[query_index, gallery_index]),
-                }
-            )
-
-        previews.append(
-            {
-                "query_path": str(Path(query_paths[query_index]).resolve()),
-                "query_pid": int(query_pids[query_index]),
-                "top_matches": matches,
-            }
-        )
-    return previews
-
-
 def main() -> None:
     from src.data.dataset import build_dataset
 
@@ -248,8 +214,6 @@ def main() -> None:
             query_batch_size=args.query_batch_size,
         )
 
-        preview_query_count = min(5, query_vectors.shape[0])
-        preview_distances = compute_distance_matrix(query_vectors[:preview_query_count], gallery_vectors)
         pointer_path = (ROOT / args.dataset_pointer).resolve()
 
         results = {
@@ -275,13 +239,16 @@ def main() -> None:
                 and np.allclose(np.linalg.norm(gallery_vectors, axis=1), 1.0, atol=1e-5)
             ),
             **retrieval_metrics,
-            "topk_preview": build_topk_preview(
-                distance_matrix=preview_distances,
-                query_paths=query_paths[:preview_query_count],
-                query_pids=query_pids[:preview_query_count],
+            "retrieval_preview": build_retrieval_preview(
+                query_features=query_vectors,
+                gallery_features=gallery_vectors,
+                query_paths=query_paths,
+                query_pids=query_pids,
+                query_camids=query_camids,
                 gallery_pids=gallery_pids,
                 gallery_camids=gallery_camids,
                 gallery_paths=gallery_paths,
+                dataset_root=config["data"]["location"]["root"],
             ),
         }
 
