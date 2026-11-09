@@ -33,14 +33,14 @@ class OverviewService:
             ),
             (
                 "Triton",
-                f"{self.settings.triton_url}/v2/health/ready",
+                self.settings.public_triton_url,
                 lambda: self.client.get_text(
                     f"{self.settings.triton_url}/v2/models/{self.settings.triton_model}/ready"
                 ),
             ),
             (
                 "Inference API",
-                self.settings.inference_api_url,
+                self.settings.public_inference_api_url,
                 lambda: self.client.get_json(f"{self.settings.inference_api_url}/ready"),
             ),
         ]

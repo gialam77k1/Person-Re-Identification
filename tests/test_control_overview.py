@@ -44,6 +44,22 @@ class OverviewServiceTest(unittest.TestCase):
         self.assertEqual(overview["collection"]["points_count"], 3368)
         self.assertEqual(overview["drift"]["status"], "DRIFT")
 
+    def test_browser_links_never_expose_docker_only_hostnames(self) -> None:
+        settings = ControlSettings.from_env()
+        services = OverviewService(settings, FakeHttpClient()).services()
+        by_name = {service["name"]: service for service in services}
+
+        self.assertEqual(
+            by_name["Triton"]["url"],
+            "http://localhost:8000/v2",
+        )
+        self.assertEqual(
+            by_name["Inference API"]["url"],
+            "http://localhost:8080/docs",
+        )
+        self.assertNotIn("triton-server", by_name["Triton"]["url"])
+        self.assertNotIn("inference-api", by_name["Inference API"]["url"])
+
 
 if __name__ == "__main__":
     unittest.main()

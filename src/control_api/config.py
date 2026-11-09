@@ -34,6 +34,8 @@ class ControlSettings:
     public_grafana_url: str
     public_minio_url: str
     public_qdrant_url: str
+    public_triton_url: str
+    public_inference_api_url: str
     public_github_actions_url: str
     cors_origins: tuple[str, ...]
     callback_token: str
@@ -78,6 +80,14 @@ class ControlSettings:
             public_grafana_url=_url("CONTROL_PUBLIC_GRAFANA_URL", "http://localhost:3000"),
             public_minio_url=_url("CONTROL_PUBLIC_MINIO_URL", "http://localhost:9001"),
             public_qdrant_url=_url("CONTROL_PUBLIC_QDRANT_URL", "http://localhost:6333/dashboard"),
+            public_triton_url=_url(
+                "CONTROL_PUBLIC_TRITON_URL",
+                "http://localhost:8000/v2",
+            ),
+            public_inference_api_url=_url(
+                "CONTROL_PUBLIC_INFERENCE_API_URL",
+                "http://localhost:8080/docs",
+            ),
             public_github_actions_url=_url(
                 "CONTROL_PUBLIC_GITHUB_ACTIONS_URL",
                 "https://github.com/gialam77k1/Person-Re-Identification/actions",
