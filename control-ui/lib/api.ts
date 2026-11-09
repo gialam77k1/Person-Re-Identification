@@ -20,7 +20,7 @@ export async function getOverview(): Promise<Overview> {
       services: { ready: 0, checked: 0, items: [] },
       drift: { status: "UNAVAILABLE", detected: null },
       latest_cycle: null,
-      allowed_datasets: ["MSMT17"],
+      allowed_datasets: ["dukemtmc-reid"],
     };
   }
 }
