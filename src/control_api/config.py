@@ -41,6 +41,7 @@ class ControlSettings:
     callback_token: str
     allowed_datasets: tuple[str, ...]
     dataset_root: Path
+    host_dataset_root: Path
     evaluation_artifacts_root: Path
     inbox_min_valid_images: int
     inbox_min_identities: int
@@ -115,6 +116,9 @@ class ControlSettings:
             ),
             allowed_datasets=datasets,
             dataset_root=dataset_root,
+            host_dataset_root=Path(
+                os.getenv("CONTROL_HOST_DATASET_ROOT", str(dataset_root))
+            ),
             evaluation_artifacts_root=artifacts_root,
             inbox_min_valid_images=int(os.getenv("CONTROL_INBOX_MIN_VALID_IMAGES", "1000")),
             inbox_min_identities=int(os.getenv("CONTROL_INBOX_MIN_IDENTITIES", "50")),

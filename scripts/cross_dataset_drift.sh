@@ -43,14 +43,14 @@ if [[ ! -f "${MODEL_MANIFEST}" ]]; then
   ./scripts/dvc_local.sh pull validate_release
 fi
 if [[ -n "${INBOX_DATASET_PATH:-}" ]]; then
-  : "${CONTROL_HOST_DATASET_ROOT:?CONTROL_HOST_DATASET_ROOT is required for Data Inbox workflows}"
+  : "${INBOX_DATASET_HOST_PATH:?INBOX_DATASET_HOST_PATH is required for Data Inbox workflows}"
   : "${INBOX_DATASET_REVISION:?INBOX_DATASET_REVISION is required for Data Inbox workflows}"
   INBOX_RUNTIME="${RUNNER_TEMP:-/tmp}/reid-inbox-${CONTROL_CYCLE_ID:-manual}"
   CAPTURE_CONFIG="configs/runtime/duke_v1_inbox_${CONTROL_CYCLE_ID:-manual}.yaml"
   DATASET_POINTER="${INBOX_RUNTIME}/inbox_dataset.dvc"
   CAPTURE_SPLIT="train"
   conda run --no-capture-output -n reid python -m src.prepare_inbox_dataset \
-    --source "${CONTROL_HOST_DATASET_ROOT%/}/${INBOX_DATASET_PATH}" \
+    --source "${INBOX_DATASET_HOST_PATH}" \
     --base-dataset datasets/dukemtmc-reid \
     --base-config configs/duke_v1_evaluation.yaml \
     --output-root "${INBOX_RUNTIME}/dataset" \

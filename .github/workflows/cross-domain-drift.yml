@@ -31,6 +31,10 @@ on:
         description: Batch path relative to CONTROL_HOST_DATASET_ROOT
         required: false
         default: ""
+      dataset_host_path:
+        description: Absolute batch path on the self-hosted runner
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -49,6 +53,7 @@ jobs:
       INBOX_BATCH_ID: ${{ inputs.inbox_batch_id }}
       INBOX_DATASET_REVISION: ${{ inputs.dataset_revision }}
       INBOX_DATASET_PATH: ${{ inputs.dataset_path }}
+      INBOX_DATASET_HOST_PATH: ${{ inputs.dataset_host_path }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

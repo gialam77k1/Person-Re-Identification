@@ -45,6 +45,10 @@ on:
         description: Batch path relative to CONTROL_HOST_DATASET_ROOT
         required: false
         default: ""
+      dataset_host_path:
+        description: Absolute batch path on the self-hosted runner
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -101,12 +105,9 @@ jobs:
       - name: Build immutable Data Inbox training view
         if: ${{ inputs.dataset_path != '' }}
         run: |
-          set -a
-          source .env.mlops
-          set +a
-          test -n "${CONTROL_HOST_DATASET_ROOT:-}"
+          test -n "${{ inputs.dataset_host_path }}"
           conda run --no-capture-output -n reid python -m src.prepare_inbox_dataset \
-            --source "${CONTROL_HOST_DATASET_ROOT%/}/${{ inputs.dataset_path }}" \
+            --source "${{ inputs.dataset_host_path }}" \
             --base-dataset datasets/dukemtmc-reid \
             --base-config configs/duke_v2_train.yaml \
             --output-root "${INBOX_DATASET_ROOT}" \

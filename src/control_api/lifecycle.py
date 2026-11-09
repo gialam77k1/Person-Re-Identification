@@ -64,6 +64,11 @@ class LifecycleController:
                     "inbox_batch_id": inbox_batch_id or "",
                     "dataset_revision": dataset_revision or "",
                     "dataset_path": dataset_path or "",
+                    "dataset_host_path": (
+                        str(self.settings.host_dataset_root / dataset_path)
+                        if dataset_path
+                        else ""
+                    ),
                 },
             )
         except Exception as exc:
@@ -135,6 +140,11 @@ class LifecycleController:
                 "inbox_batch_id": str(cycle.get("inbox_batch_id") or ""),
                 "dataset_revision": str(cycle.get("dataset_revision") or ""),
                 "dataset_path": str(cycle.get("dataset_path") or ""),
+                "dataset_host_path": (
+                    str(self.settings.host_dataset_root / str(cycle["dataset_path"]))
+                    if cycle.get("dataset_path")
+                    else ""
+                ),
             },
         )
         self.store.audit(
