@@ -49,6 +49,7 @@ Thumbs.db
 
 # Generated render and scratch output
 tmp/
+configs/runtime/
 
 # Local implementation notes
 THAY_DOI_STAGED_FINETUNING.md

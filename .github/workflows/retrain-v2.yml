@@ -33,6 +33,18 @@ on:
       decision_sha256:
         description: Canonical SHA256 of the approved decision
         required: true
+      inbox_batch_id:
+        description: Data Inbox batch record
+        required: false
+        default: ""
+      dataset_revision:
+        description: Immutable batch fingerprint
+        required: false
+        default: ""
+      dataset_path:
+        description: Batch path relative to CONTROL_HOST_DATASET_ROOT
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -58,6 +70,9 @@ jobs:
       V2_PIPELINE_ROOT: artifacts/pipeline/market1501-duke-vit-bnneck-v2
       # Reduce CUDA allocator fragmentation on the long-lived self-hosted runner.
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True,max_split_size_mb:128
+      INBOX_CONFIG: configs/runtime/duke_v2_inbox_${{ inputs.cycle_id }}.yaml
+      INBOX_DATASET_ROOT: ${{ runner.temp }}/reid-inbox-${{ inputs.cycle_id }}/dataset
+      INBOX_DATASET_POINTER: ${{ runner.temp }}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -83,6 +98,22 @@ jobs:
           ./scripts/dvc_local.sh pull datasets/dukemtmc-reid.dvc
           ./scripts/dvc_local.sh pull artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth.dvc
 
+      - name: Build immutable Data Inbox training view
+        if: ${{ inputs.dataset_path != '' }}
+        run: |
+          set -a
+          source .env.mlops
+          set +a
+          test -n "${CONTROL_HOST_DATASET_ROOT:-}"
+          conda run --no-capture-output -n reid python -m src.prepare_inbox_dataset \
+            --source "${CONTROL_HOST_DATASET_ROOT%/}/${{ inputs.dataset_path }}" \
+            --base-dataset datasets/dukemtmc-reid \
+            --base-config configs/duke_v2_train.yaml \
+            --output-root "${INBOX_DATASET_ROOT}" \
+            --output-config "${INBOX_CONFIG}" \
+            --output-pointer "${INBOX_DATASET_POINTER}" \
+            --revision "${{ inputs.dataset_revision }}"
+
       - name: Verify Git, DVC, dataset and checkpoint lineage
         run: >-
           python -m src.retraining_evidence verify
@@ -91,7 +122,7 @@ jobs:
           --release-id "${{ inputs.source_release }}"
           --dataset "${{ inputs.dataset }}"
           --current-commit "${{ github.sha }}"
-          --dataset-pointer datasets/dukemtmc-reid.dvc
+          --dataset-pointer "${{ inputs.dataset_path != '' && env.INBOX_DATASET_POINTER || 'datasets/dukemtmc-reid.dvc' }}"
           --base-checkpoint "${BASE_CHECKPOINT}"
 
       - name: Fetch and verify approved decision from Control API
@@ -112,11 +143,17 @@ jobs:
       - name: Preflight model v2 training
         env:
           DECISION_PATH: evidence/approved_decision.json
+          CONFIG_PATH: ${{ inputs.dataset_path != '' && env.INBOX_CONFIG || 'configs/duke_v2_train.yaml' }}
+          DATASET_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_ROOT || 'datasets/dukemtmc-reid' }}
+          DATASET_DVC_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_POINTER || 'datasets/dukemtmc-reid.dvc' }}
         run: ./scripts/train_duke_v2_local.sh --check
 
       - name: Train model v2
         env:
           DECISION_PATH: evidence/approved_decision.json
+          CONFIG_PATH: ${{ inputs.dataset_path != '' && env.INBOX_CONFIG || 'configs/duke_v2_train.yaml' }}
+          DATASET_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_ROOT || 'datasets/dukemtmc-reid' }}
+          DATASET_DVC_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_POINTER || 'datasets/dukemtmc-reid.dvc' }}
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 RUNNING --detail "Approved retraining started"
           ./scripts/train_duke_v2_local.sh
@@ -184,7 +221,7 @@ jobs:
             --evaluation-metrics "${DUKE_V2_REPORT}" \
             --baseline-evaluation "${{ inputs.evaluation_report }}" \
             --mlflow-run "${V2_ROOT}/logs/mlflow_run.json" \
-            --config configs/duke_v2_train.yaml \
+            --config "${{ inputs.dataset_path != '' && env.INBOX_CONFIG || 'configs/duke_v2_train.yaml' }}" \
             --policy configs/retraining_validation.yaml \
             --base-checkpoint "${BASE_CHECKPOINT}" \
             --candidate-checkpoint "${V2_ROOT}/checkpoints/best_model.pth" \

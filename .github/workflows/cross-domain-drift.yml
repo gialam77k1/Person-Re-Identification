@@ -19,6 +19,18 @@ on:
         description: Model release ID
         required: true
         default: market1501-vit-bnneck:v1-dvc
+      inbox_batch_id:
+        description: Data Inbox batch record
+        required: false
+        default: ""
+      dataset_revision:
+        description: Immutable batch fingerprint
+        required: false
+        default: ""
+      dataset_path:
+        description: Batch path relative to CONTROL_HOST_DATASET_ROOT
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -34,6 +46,9 @@ jobs:
     env:
       CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8090' }}
       CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
+      INBOX_BATCH_ID: ${{ inputs.inbox_batch_id }}
+      INBOX_DATASET_REVISION: ${{ inputs.dataset_revision }}
+      INBOX_DATASET_PATH: ${{ inputs.dataset_path }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -71,7 +86,11 @@ jobs:
           SAMPLE_SIZE: ${{ inputs.sample_size }}
           RELEASE_ID: ${{ inputs.release_id }}
           LOG_DRIFT_MLFLOW: "1"
-        run: ./scripts/cross_dataset_drift.sh
+        run: |
+          set -a
+          source .env.mlops
+          set +a
+          ./scripts/cross_dataset_drift.sh
 
       - name: Mark drift stages complete
         run: |
@@ -81,7 +100,11 @@ jobs:
       - name: Evaluate model v1 on DukeMTMC-reID
         env:
           RELEASE_ID: ${{ inputs.release_id }}
+          DATASET_POINTER: ${{ runner.temp }}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc
         run: |
+          if [[ -z "${{ inputs.dataset_path }}" ]]; then
+            export DATASET_POINTER=datasets/dukemtmc-reid.dvc
+          fi
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Running full DukeMTMC-reID deployment evaluation"
           ./scripts/evaluate_duke_v1.sh
           ./scripts/retraining_decision.sh

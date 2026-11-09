@@ -41,14 +41,6 @@ def validate_training_contract(config: dict, decision: dict) -> None:
         ),
         "data.dataset.name": (str(dataset.get("name", "")).lower(), EXPECTED_DATASET),
         "data.dataset.version": (dataset.get("version"), EXPECTED_DATASET_VERSION),
-        "data.expected_train_images": (
-            data.get("expected_train_images"),
-            EXPECTED_TRAIN_IMAGES,
-        ),
-        "data.expected_train_identities": (
-            data.get("expected_train_identities"),
-            EXPECTED_TRAIN_IDENTITIES,
-        ),
         "data.batch_size": (data.get("batch_size"), EXPECTED_TRAIN_BATCH_SIZE),
         "data.eval_batch_size": (
             data.get("eval_batch_size"),
@@ -173,19 +165,27 @@ def validate_inputs(
         raise ValueError("DukeMTMC-reID train contains an invalid filename")
     train_ids = {int(match.group("pid")) for match in parsed if match and int(match.group("pid")) >= 0}
     train_cameras = {int(match.group("camera")) for match in parsed if match}
-    if len(train_images) != EXPECTED_TRAIN_IMAGES:
+    expected_train_images = int(config.get("data", {}).get("expected_train_images", 0))
+    expected_train_identities = int(
+        config.get("data", {}).get("expected_train_identities", 0)
+    )
+    if expected_train_images < 1000:
+        raise ValueError("Training config requires at least 1000 labeled images")
+    if expected_train_identities < 50:
+        raise ValueError("Training config requires at least 50 identities")
+    if len(train_images) != expected_train_images:
         raise ValueError(
-            f"DukeMTMC-reID train must contain {EXPECTED_TRAIN_IMAGES} images, "
+            f"DukeMTMC-reID train must contain {expected_train_images} images, "
             f"received {len(train_images)}"
         )
-    if len(train_ids) != EXPECTED_TRAIN_IDENTITIES:
+    if len(train_ids) != expected_train_identities:
         raise ValueError(
-            f"DukeMTMC-reID train must contain {EXPECTED_TRAIN_IDENTITIES} identities, "
+            f"DukeMTMC-reID train must contain {expected_train_identities} identities, "
             f"received {len(train_ids)}"
         )
-    if train_cameras != set(range(1, 9)):
+    if len(train_cameras) < 2:
         raise ValueError(
-            "DukeMTMC-reID train must contain cameras 1..8, "
+            "DukeMTMC-reID train must contain at least 2 cameras, "
             f"received {sorted(train_cameras)}"
         )
 
