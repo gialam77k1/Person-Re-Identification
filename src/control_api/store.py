@@ -229,6 +229,44 @@ class CycleStore:
             ).fetchall()
         return [self._decode_payload(row) for row in rows]
 
+    def latest_stage_metrics(self, stage: str) -> dict[str, Any] | None:
+        """Return the newest metrics callback for a pipeline stage.
+
+        Metrics are stored as lifecycle events so that runner callbacks remain the
+        single source of truth.  Reading them here also avoids depending on a
+        runner-local textfile path for Prometheus batch-job telemetry.
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT events.*, cycles.dataset, cycles.source_release,
+                    cycles.target_release
+                FROM events
+                JOIN cycles ON cycles.id = events.cycle_id
+                WHERE events.kind = 'stage.metrics'
+                ORDER BY events.id DESC
+                """
+            ).fetchall()
+        for row in rows:
+            decoded = self._decode_payload(row)
+            payload = decoded.get("payload", {})
+            if payload.get("stage") == stage and isinstance(payload.get("metrics"), dict):
+                return decoded
+        return None
+
+    def latest_cycle_stage_metrics(
+        self, cycle_id: str, stage: str
+    ) -> dict[str, Any] | None:
+        for event in reversed(self.events(cycle_id)):
+            payload = event.get("payload", {})
+            if (
+                event.get("kind") == "stage.metrics"
+                and payload.get("stage") == stage
+                and isinstance(payload.get("metrics"), dict)
+            ):
+                return event
+        return None
+
     def audit(self, cycle_id: str, action: str, actor: str, payload: dict[str, Any]) -> None:
         with self._connect() as connection:
             self._insert_audit(connection, cycle_id, action, actor, payload)

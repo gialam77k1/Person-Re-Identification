@@ -17,16 +17,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--progress", type=float)
     parser.add_argument("--detail", default="")
     parser.add_argument("--metrics", default="{}")
-    parser.add_argument("--metrics-file")
+    parser.add_argument(
+        "--metrics-file",
+        action="append",
+        default=[],
+        metavar="[NAME=]PATH",
+        help="Merge a JSON report, or attach it below NAME. May be repeated.",
+    )
     return parser.parse_args()
 
 
-def load_metrics(inline: str, metrics_file: str | None) -> dict:
+def load_metrics(inline: str, metrics_files: str | list[str] | None) -> dict:
     metrics = json.loads(inline)
-    if metrics_file:
-        file_metrics = json.loads(Path(metrics_file).read_text(encoding="utf-8"))
-        file_metrics.update(metrics)
-        return file_metrics
+    if isinstance(metrics_files, str):
+        metrics_files = [metrics_files]
+    for spec in metrics_files or []:
+        name = None
+        path = spec
+        if "=" in spec:
+            name, path = spec.split("=", 1)
+            if not name or not path:
+                raise ValueError(f"Invalid named metrics file: {spec}")
+        file_metrics = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(file_metrics, dict):
+            raise ValueError(f"Metrics file must contain a JSON object: {path}")
+        if name:
+            metrics[name] = file_metrics
+        else:
+            file_metrics.update(metrics)
+            metrics = file_metrics
     return metrics
 
 

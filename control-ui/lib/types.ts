@@ -48,3 +48,48 @@ export type CycleEvent = {
   payload: Record<string, unknown>;
   created_at: string;
 };
+
+export type EvaluationImage = {
+  image_path: string;
+  person_id?: number | null;
+  camera_id?: number | null;
+};
+
+export type RetrievalPrediction = EvaluationImage & {
+  rank: number;
+  similarity: number;
+  distance: number;
+  correct: boolean;
+};
+
+export type RetrievalPreview = {
+  query: EvaluationImage;
+  predictions: RetrievalPrediction[];
+  top1_correct: boolean;
+};
+
+export type EvaluationVersion = {
+  release_id: string;
+  model_version: string;
+  domain: string;
+  dataset: string;
+  cycle_id?: string | null;
+  metrics: {
+    rank1?: number | null;
+    rank5?: number | null;
+    mAP?: number | null;
+    mINP?: number | null;
+    query_count?: number | null;
+    gallery_count?: number | null;
+  };
+  git_commit?: string | null;
+  dataset_dvc_revision?: string | null;
+  generated_at?: string | null;
+  retrieval_preview: RetrievalPreview[];
+};
+
+export type EvaluationOverview = {
+  dataset: string;
+  dataset_samples: EvaluationImage[];
+  versions: EvaluationVersion[];
+};

@@ -115,6 +115,7 @@ jobs:
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 PASS
           --progress 1 --detail "Evidence uploaded and ready for retraining approval"
           --metrics-file artifacts/cross-domain/market1501-v1-on-duke/retraining/decision.json
+          --metrics-file evaluation=artifacts/cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json
           --metrics '{"workflow_run_id":"${{ github.run_id }}","artifact_name":"mlops-evidence-${{ inputs.cycle_id }}"}'
 
       - name: Remove temporary credential file

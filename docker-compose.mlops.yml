@@ -203,6 +203,8 @@ services:
       - .env.mlops
     environment:
       CONTROL_DATABASE_PATH: /data/control.db
+      CONTROL_DATASET_ROOT: /datasets
+      CONTROL_EVALUATION_ARTIFACTS_ROOT: /artifacts
       CONTROL_MLFLOW_URL: http://mlflow:5000
       CONTROL_PROMETHEUS_URL: http://prometheus:9090
       CONTROL_QDRANT_URL: http://qdrant:6333
@@ -217,6 +219,8 @@ services:
       - "${CONTROL_API_PORT:-8090}:8090"
     volumes:
       - control_data:/data
+      - ./datasets:/datasets:ro
+      - ./artifacts:/artifacts:ro
     depends_on:
       mlflow:
         condition: service_healthy

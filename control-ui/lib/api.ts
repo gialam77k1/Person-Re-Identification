@@ -1,4 +1,4 @@
-import type { Cycle, Overview, ServiceStatus } from "@/lib/types";
+import type { Cycle, EvaluationOverview, Overview, ServiceStatus } from "@/lib/types";
 
 export const CONTROL_API_URL = (
   process.env.CONTROL_API_URL ?? "http://localhost:8090"
@@ -38,5 +38,13 @@ export async function getCycles(): Promise<Cycle[]> {
     return (await request<{ cycles: Cycle[] }>("/control/cycles")).cycles;
   } catch {
     return [];
+  }
+}
+
+export async function getEvaluations(): Promise<EvaluationOverview> {
+  try {
+    return await request<EvaluationOverview>("/control/evaluations");
+  } catch {
+    return { dataset: "dukemtmc-reid", dataset_samples: [], versions: [] };
   }
 }
