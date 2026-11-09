@@ -93,3 +93,40 @@ export type EvaluationOverview = {
   dataset_samples: EvaluationImage[];
   versions: EvaluationVersion[];
 };
+
+export type InboxBatch = {
+  id: string;
+  fingerprint: string;
+  dataset: string;
+  source_split: string;
+  status: string;
+  valid_images: number;
+  rejected_images: number;
+  duplicate_images: number;
+  identities: number;
+  cameras: number;
+  total_bytes: number;
+  cycle_id?: string | null;
+  actor: string;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+  summary: {
+    source_path?: string;
+    thresholds?: Record<string, number>;
+    validation_failures?: string[];
+  };
+};
+
+export type InboxPolicy = {
+  allowed_datasets: string[];
+  min_valid_images: number;
+  min_identities: number;
+  min_cameras: number;
+};
+
+export type InboxSource = {
+  source_path: string;
+  batch_id: string;
+  dataset: string;
+};

@@ -54,7 +54,6 @@ export function PipelineControl() {
   const [activeId, setActiveId] = useState("");
   const [cycle, setCycle] = useState<Cycle | null>(null);
   const [events, setEvents] = useState<CycleEvent[]>([]);
-  const [dataset, setDataset] = useState("dukemtmc-reid");
   const [actor, setActor] = useState("gialam77k1");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -108,17 +107,6 @@ export function PipelineControl() {
     finally { setBusy(false); }
   }
 
-  async function start() {
-    await perform(async () => {
-      // A deliberate Start creates a new lifecycle cycle. The busy state still
-      // protects the same click from being submitted twice, while the UUID
-      // prevents a failed cycle from being returned for every retry that day.
-      const idempotency = `${dataset.toLowerCase()}-${new Date().toISOString()}-${crypto.randomUUID()}`;
-      const response = await jsonRequest<{ cycle: Cycle }>("/control/cycles", { method: "POST", body: JSON.stringify({ dataset, actor, idempotency_key: idempotency }) });
-      setActiveId(response.cycle.id); setCycle(response.cycle);
-    });
-  }
-
   async function action(name: "approve-retraining" | "promote" | "rollback", prompt: string) {
     if (!cycle || !window.confirm(prompt)) return;
     await perform(async () => {
@@ -129,28 +117,21 @@ export function PipelineControl() {
 
   return (
     <div>
-      <section className="panel mt-7 rounded-2xl p-5">
-        <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-          <label className="text-xs font-bold text-slate-400">Dataset<select value={dataset} onChange={(event) => setDataset(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-3 text-sm text-white"><option value="dukemtmc-reid">DukeMTMC-reID</option></select></label>
-          <label className="text-xs font-bold text-slate-400">Operator<input value={actor} onChange={(event) => setActor(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-3 text-sm text-white" /></label>
-          <button onClick={start} disabled={busy || !actor.trim()} className="rounded-lg bg-teal-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:opacity-40">{busy ? "PROCESSING…" : "START MLOPS LIFECYCLE"}</button>
-        </div>
-        {error && <p role="alert" className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-      </section>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_0.65fr]">
+      {error && <p role="alert" className="mt-7 rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+      <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_0.65fr]">
         <section className="panel rounded-2xl p-6">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-center">
             <div><p className="eyebrow">Lifecycle timeline</p><h2 className="mt-2 text-xl font-bold">Model v1 → model v2</h2></div>
             <select value={activeId} onChange={(event) => setActiveId(event.target.value)} className="max-w-xs rounded-lg border border-slate-700 bg-[#09111b] px-3 py-2 text-xs text-slate-300"><option value="">Select cycle</option>{cycles.map((item) => <option key={item.id} value={item.id}>{item.dataset} · {item.status} · {item.id.slice(0, 8)}</option>)}</select>
           </div>
-          {cycle ? <ol className="mt-6">{cycle.stages.map((item) => <StageRow key={item.name} stage={item} />)}</ol> : <p className="mt-8 text-sm text-slate-500">Bấm Start để tạo cycle đầu tiên.</p>}
+          {cycle ? <ol className="mt-6">{cycle.stages.map((item) => <StageRow key={item.name} stage={item} />)}</ol> : <p className="mt-8 text-sm text-slate-500">Import batch hợp lệ trong Data Inbox để tạo cycle đầu tiên.</p>}
         </section>
 
         <aside className="space-y-6">
           <section className="panel rounded-2xl p-5">
             <div className="flex items-center justify-between"><p className="eyebrow">Cycle control</p>{cycle && <StatusPill status={cycle.status} />}</div>
             {cycle && <p className="mt-3 break-all font-mono text-[11px] text-slate-500">{cycle.id}</p>}
+            <label className="mt-4 block text-xs font-bold text-slate-400">Operator<input value={actor} onChange={(event) => setActor(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-2 text-sm text-white" /></label>
             <div className="mt-5 grid gap-2">
               <button disabled={!canApprove || busy} onClick={() => action("approve-retraining", `Phê duyệt retraining model v2 từ evidence ${String(reviewEvidence?.artifact_name ?? "chưa xác định")}?`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
               <button disabled={!canPromote || busy} onClick={() => action("promote", "Promote model candidate lên production?")} className="rounded-lg border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-bold text-teal-100 disabled:cursor-not-allowed disabled:opacity-30">Promote to Production</button>

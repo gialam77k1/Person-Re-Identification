@@ -44,7 +44,7 @@ export default async function OverviewPage() {
               </div>
               <Link href={`/pipeline?cycle=${cycle.id}`} className="mt-6 inline-flex rounded-lg bg-teal-300 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-teal-200">Mở pipeline →</Link>
             </div>
-          ) : <p className="mt-8 text-sm text-slate-500">Chưa có cycle. Mở Pipeline để bắt đầu vòng đời đầu tiên.</p>}
+          ) : <p className="mt-8 text-sm text-slate-500">Chưa có cycle. Import một batch hợp lệ trong Data Inbox để bắt đầu.</p>}
         </article>
         <article className="panel rounded-2xl p-6">
           <p className="eyebrow">Quick assessment</p><h2 className="mt-2 text-xl font-bold">Release posture</h2>
