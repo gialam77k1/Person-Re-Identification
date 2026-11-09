@@ -210,7 +210,7 @@ services:
       CONTROL_TRITON_URL: http://triton-server:8000
       CONTROL_TRITON_MODEL: ${TRITON_MODEL_NAME:-reid_embedding}
       CONTROL_INFERENCE_API_URL: http://inference-api:8080
-      CONTROL_PUBLIC_TRITON_URL: http://localhost:${TRITON_HTTP_PORT:-8000}/v2/health/ready
+      CONTROL_PUBLIC_TRITON_URL: http://localhost:${TRITON_HTTP_PORT:-8000}/v2
       CONTROL_PUBLIC_INFERENCE_API_URL: http://localhost:${API_PORT:-8080}/docs
       CONTROL_CORS_ORIGINS: http://localhost:${CONTROL_UI_PORT:-3001}
     ports:

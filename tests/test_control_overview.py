@@ -51,7 +51,7 @@ class OverviewServiceTest(unittest.TestCase):
 
         self.assertEqual(
             by_name["Triton"]["url"],
-            "http://localhost:8000/v2/health/ready",
+            "http://localhost:8000/v2",
         )
         self.assertEqual(
             by_name["Inference API"]["url"],

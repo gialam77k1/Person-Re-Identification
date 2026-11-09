@@ -82,7 +82,7 @@ class ControlSettings:
             public_qdrant_url=_url("CONTROL_PUBLIC_QDRANT_URL", "http://localhost:6333/dashboard"),
             public_triton_url=_url(
                 "CONTROL_PUBLIC_TRITON_URL",
-                "http://localhost:8000/v2/health/ready",
+                "http://localhost:8000/v2",
             ),
             public_inference_api_url=_url(
                 "CONTROL_PUBLIC_INFERENCE_API_URL",
