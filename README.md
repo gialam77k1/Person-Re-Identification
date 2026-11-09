@@ -31,7 +31,7 @@ Re-ranking chỉ dùng khi đánh giá hoặc truy hồi offline, không nằm t
 Model v2 được transfer learning từ checkpoint v1 sang DukeMTMC-reID:
 
 - 16.522 ảnh train, 702 identity.
-- Tối đa 30 epoch; AMP, cosine scheduler và warmup 3 epoch.
+- Tối đa 50 epoch; AMP, cosine scheduler và warmup 3 epoch.
 - Freeze 8 ViT block thấp đến hết epoch 5; full unfreeze từ epoch 6.
 - Learning rate backbone bằng `0,05 ×` learning rate head.
 - Early stopping theo mAP, patience 5.
@@ -122,7 +122,7 @@ Validate dataset
   → Evaluate model v1 on DukeMTMC-reID
   → WAITING_APPROVAL
   → Approve Retraining
-  → Train model v2 (tối đa 30 epoch)
+  → Train model v2 (tối đa 50 epoch)
   → Evaluate DukeMTMC-reID + Market-1501
   → Validation/forgetting gate
   → Export ONNX + parity

@@ -25,7 +25,7 @@ và report lớn chỉ được lưu bằng DVC/MinIO hoặc MLflow, không comm
 - [x] Có drift detector, cross-domain evaluation và retraining decision gate.
 - [ ] Chưa chạy cycle Duke thật để xác nhận drift và tạo decision `REVIEW_REQUIRED`.
 - [x] Self-hosted runner có thể chạy smoke test và workload GPU.
-- [x] Script retraining v2 đã có contract tối đa 30 epoch; preflight code và dataset đã được kiểm tra.
+- [x] Script retraining v2 đã có contract tối đa 50 epoch; preflight code và dataset đã được kiểm tra.
 - [x] MLOps Control Center đã có UI, Control API, cycle/event/audit store và workflow dispatch.
 - [x] Workflow đã nối tự động approval → retraining → validation → DVC/MLflow candidate.
 - [ ] Chưa hoàn tất toàn bộ release model v2 và deployment staging/production.
@@ -217,7 +217,7 @@ thế drift detector.
 
 **Trạng thái implementation: hoàn thành.** Control API tải đúng GitHub evidence artifact theo run ID,
 xác minh checksum rồi chạy decision policy ở backend. Decision `RETRAIN_APPROVED` được lưu bền vững
-với approver, thời gian, model nguồn, dataset đích, giới hạn 30 epoch và checksum evidence. Runner
+với approver, thời gian, model nguồn, dataset đích, giới hạn 50 epoch và checksum evidence. Runner
 chỉ được tải decision qua endpoint có callback token và phải xác minh SHA256 trước preflight; workflow
 không còn gọi `retraining_decision.sh` để tự phê duyệt.
 
@@ -251,7 +251,7 @@ Cấu hình retraining:
 - Classifier Market-1501 cũ bị loại bỏ và khởi tạo lại cho 702 ID.
 - Epoch 1–5: freeze 8 block ViT thấp.
 - Từ epoch 6: unfreeze toàn model; learning rate backbone bằng `0,05 ×` learning rate head.
-- Tối đa 30 epoch, warmup 3 epoch, cosine scheduler.
+- Tối đa 50 epoch, warmup 3 epoch, cosine scheduler.
 - Early stopping theo mAP với patience 5.
 - Release: `market1501-duke-vit-bnneck:v2`.
 
@@ -422,7 +422,7 @@ monitor → detect drift → approve → retrain → validate → deploy → mon
 2. Hoàn thiện workflow retraining khép kín trên self-hosted runner
 3. Xây Next.js Control Center và nối Control API
 4. Đưa drift report và UI approval `RETRAIN_APPROVED` vào workflow
-5. Bấm Start trên UI; theo dõi toàn bộ v1 → v2, training tối đa 30 epoch và MLflow
+5. Bấm Start trên UI; theo dõi toàn bộ v1 → v2, training tối đa 50 epoch và MLflow
 6. Evaluate DukeMTMC-reID + Market-1501 và chạy validation gate
 7. DVC push + đăng ký MLflow candidate
 8. Export ONNX + parity + reference embeddings

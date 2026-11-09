@@ -163,7 +163,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             "POST",
             f"/control/cycles/{cycle_id}/stages/train_v2",
             headers=headers,
-            json={"status": "RUNNING", "progress": 0.4, "detail": "Epoch 12/30"},
+            json={"status": "RUNNING", "progress": 0.4, "detail": "Epoch 12/50"},
         )
         failed = await self.request(
             "POST",

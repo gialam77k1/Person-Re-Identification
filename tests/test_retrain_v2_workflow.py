@@ -37,10 +37,10 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         ):
             self.assertIn(command, self.text)
 
-    def test_training_contract_is_memory_safe_and_capped_at_thirty_epochs(self) -> None:
+    def test_training_contract_is_memory_safe_and_capped_at_fifty_epochs(self) -> None:
         self.assertIn("PYTORCH_CUDA_ALLOC_CONF", self.text)
         self.assertIn("expandable_segments:True,max_split_size_mb:128", self.text)
-        self.assertIn("--target-epochs 30", self.text)
+        self.assertIn("--target-epochs 50", self.text)
 
     def test_only_candidate_alias_is_assigned(self) -> None:
         self.assertIn("--alias candidate", self.text)
