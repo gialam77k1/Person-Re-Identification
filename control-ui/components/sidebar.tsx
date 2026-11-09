@@ -7,8 +7,9 @@ const links = [
   ["/", "Overview", "01"],
   ["/pipeline", "Pipeline", "02"],
   ["/models", "Models", "03"],
-  ["/monitoring", "Monitoring", "04"],
-  ["/services", "Services", "05"],
+  ["/evaluation", "Evaluation", "04"],
+  ["/monitoring", "Monitoring", "05"],
+  ["/services", "Services", "06"],
 ];
 
 export function Sidebar() {
@@ -22,7 +23,7 @@ export function Sidebar() {
           <p className="text-xs text-slate-500">MLOps command center</p>
         </div>
       </div>
-      <nav className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-5 lg:mt-12 lg:grid-cols-1" aria-label="Main navigation">
+      <nav className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:mt-12 lg:grid-cols-1" aria-label="Main navigation">
         {links.map(([href, label, number]) => {
           const active = pathname === href;
           return (

@@ -7,11 +7,16 @@ export const dynamic = "force-dynamic";
 export default async function MonitoringPage() {
   const [overview, services] = await Promise.all([getOverview(), getServices()]);
   const grafana = services.find((service) => service.name === "Grafana");
+  const driftStatus = overview.drift?.status ?? "NO_DATA";
+  const driftValue = driftStatus === "NO_DATA" ? "CHƯA ĐO" : driftStatus;
+  const driftDetail = driftStatus === "NO_DATA"
+    ? "Chưa nhận evidence drift; chạy lifecycle để tạo phép đo đầu tiên"
+    : "Prometheus reid_embedding_drift_detected";
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader eyebrow="Observability" title="Monitoring" description="Tóm tắt tín hiệu drift và trạng thái phục vụ; Grafana giữ dashboard chuyên sâu." />
       <section className="mt-7 grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Drift state" value={overview.drift?.status ?? "NO_DATA"} detail="Prometheus reid_embedding_drift_detected" />
+        <MetricCard label="Drift state" value={driftValue} detail={driftDetail} />
         <MetricCard label="Ready services" value={`${overview.services?.ready ?? 0}/${overview.services?.checked ?? 0}`} detail="MLflow, Prometheus, Qdrant, Triton, API" />
         <MetricCard label="Collection points" value={String(overview.collection?.points_count ?? 0)} detail="Qdrant active reference collection" />
       </section>
