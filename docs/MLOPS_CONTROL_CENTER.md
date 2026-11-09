@@ -30,7 +30,7 @@ Start
 Workflow post-approval dừng sau alias `candidate`. Nó không được gán `champion` và không deploy
 production; export ONNX, parity, staging và production tiếp tục ở các gate sau của cycle.
 
-Pre-approval tạo drift report từ Market-1501 reference embeddings và mẫu query MSMT17. Report chứa
+Pre-approval tạo drift report từ Market-1501 reference embeddings và mẫu query DukeMTMC-reID. Report chứa
 release/checksum model, checksum hai tập embedding, Git commit, DVC revision, seed, sample count và
 toàn bộ threshold. File Prometheus được ghi vào `${MONITORING_STORAGE_PATH}/textfile` để
 node-exporter expose cho Prometheus; dashboard **Person ReID - Model Behavior** hiển thị trạng thái,
@@ -64,7 +64,7 @@ docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
 curl --fail http://localhost:8090/health
 ```
 
-Mở `http://localhost:3001`, chọn MSMT17 và bấm `Start MLOps lifecycle`.
+Mở `http://localhost:3001`, chọn **DukeMTMC-reID** và bấm `Start MLOps lifecycle`.
 
 ## API
 
