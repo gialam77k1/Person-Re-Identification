@@ -26,7 +26,7 @@ class V2ArtifactPublicationTest(unittest.TestCase):
                         "training_git_commit": "def",
                         "mlflow_run_id": "run-1",
                         "config_sha256": "a" * 64,
-                        "dataset_revisions": {"msmt17": "msmt.dir", "market1501": "market.dir"},
+                        "dataset_revisions": {"duke": "msmt.dir", "market1501": "market.dir"},
                     },
                     "files": [{"role": "onnx_graph", "repository_path": str(artifact), "sha256": sha256(artifact)}],
                 }

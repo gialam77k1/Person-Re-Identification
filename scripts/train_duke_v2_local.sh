@@ -3,13 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CONFIG_PATH="${CONFIG_PATH:-configs/msmt17_v2_train.yaml}"
-DECISION_PATH="${DECISION_PATH:-artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json}"
+CONFIG_PATH="${CONFIG_PATH:-configs/duke_v2_train.yaml}"
+DECISION_PATH="${DECISION_PATH:-artifacts/cross-domain/market1501-v1-on-duke/retraining/decision.json}"
 CHECKPOINT_PATH="${CHECKPOINT_PATH:-artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth}"
-DATASET_PATH="${DATASET_PATH:-datasets/MSMT17_V1}"
-DATASET_DVC_PATH="datasets/MSMT17_V1.dvc"
+DATASET_PATH="${DATASET_PATH:-datasets/dukemtmc-reid}"
+DATASET_DVC_PATH="datasets/dukemtmc-reid.dvc"
 CHECKPOINT_DVC_PATH="artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth.dvc"
-RUN_ROOT="artifacts/msmt17/market1501-msmt17-vit-bnneck-v2"
+RUN_ROOT="artifacts/duke/market1501-duke-vit-bnneck-v2"
 CONDA_ENV="${REID_CONDA_ENV:-reid}"
 CHECK_ONLY=false
 
@@ -31,7 +31,7 @@ if ! command -v conda >/dev/null 2>&1; then
   exit 1
 fi
 
-conda run -n "${CONDA_ENV}" python src/validate_msmt17_v2_training.py \
+conda run -n "${CONDA_ENV}" python src/validate_duke_v2_training.py \
   --decision "${DECISION_PATH}" \
   --checkpoint "${CHECKPOINT_PATH}" \
   --dataset "${DATASET_PATH}" \
@@ -58,7 +58,7 @@ echo "MLflow tracking server: OK (${MLFLOW_HEALTH_URL})"
 echo "DVC dataset/checkpoint remote: OK"
 
 if [[ "${CHECK_ONLY}" == true ]]; then
-  echo "MSMT17 v2 training preflight: OK"
+  echo "DukeMTMC-reID v2 training preflight: OK"
   exit 0
 fi
 

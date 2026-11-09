@@ -72,7 +72,7 @@ def build_publication_report(
     for key in ("git_commit", "training_git_commit", "mlflow_run_id", "config_sha256"):
         check(f"lineage_{key}", bool(source.get(key)), source.get(key), "non-empty")
     revisions = source.get("dataset_revisions", {})
-    check("lineage_dataset_revisions", bool(revisions.get("msmt17")) and bool(revisions.get("market1501")), revisions, "msmt17 and market1501")
+    check("lineage_dataset_revisions", bool(revisions.get("duke")) and bool(revisions.get("market1501")), revisions, "duke and market1501")
 
     passed = all(item["passed"] for item in checks)
     return {

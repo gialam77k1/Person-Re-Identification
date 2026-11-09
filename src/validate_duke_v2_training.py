@@ -2,24 +2,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 from pathlib import Path
 
 import yaml
 
 
-EXPECTED_TRAIN_IMAGES = 30248
-EXPECTED_TRAIN_IDENTITIES = 1041
+EXPECTED_TRAIN_IMAGES = 16522
+EXPECTED_TRAIN_IDENTITIES = 702
 MINIMUM_FREE_BYTES = 12 * 1024**3
-EXPECTED_RELEASE_ID = "market1501-msmt17-vit-bnneck:v2"
+EXPECTED_RELEASE_ID = "market1501-duke-vit-bnneck:v2"
 EXPECTED_BASE_RELEASE_ID = "market1501-vit-bnneck:v1-dvc"
-EXPECTED_DATASET = "msmt17"
-EXPECTED_DATASET_VERSION = "MSMT17_V1"
+EXPECTED_DATASET = "dukemtmc-reid"
+EXPECTED_DATASET_VERSION = "dukemtmc-reid"
 EXPECTED_CHECKPOINT_EPOCH = 48
 EXPECTED_EPOCHS = 30
 EXPECTED_TRAIN_BATCH_SIZE = 16
 EXPECTED_EVAL_BATCH_SIZE = 16
-EXPECTED_QUERY_BATCH_SIZE = 32
+EXPECTED_QUERY_BATCH_SIZE = 64
+DUKE_FILENAME = re.compile(r"^(?P<pid>-?\d+)_c(?P<camera>\d+)_")
 
 
 def validate_training_contract(config: dict, decision: dict) -> None:
@@ -156,26 +158,35 @@ def validate_inputs(
     if not checkpoint_path.is_file():
         raise FileNotFoundError(f"Missing v1 checkpoint: {checkpoint_path}")
     if not dataset_path.is_dir():
-        raise FileNotFoundError(f"Missing MSMT17 dataset: {dataset_path}")
+        raise FileNotFoundError(f"Missing DukeMTMC-reID dataset: {dataset_path}")
 
-    train_list = dataset_path / "list_train.txt"
-    if not train_list.is_file():
-        raise FileNotFoundError(f"Missing MSMT17 train list: {train_list}")
-    train_lines = [
-        line
-        for line in train_list.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    train_ids = {int(line.split()[1]) for line in train_lines}
-    if len(train_lines) != EXPECTED_TRAIN_IMAGES:
+    train_dir = dataset_path / "bounding_box_train"
+    query_dir = dataset_path / "query"
+    gallery_dir = dataset_path / "bounding_box_test"
+    for split_dir in (train_dir, query_dir, gallery_dir):
+        if not split_dir.is_dir():
+            raise FileNotFoundError(f"Missing DukeMTMC-reID split: {split_dir}")
+
+    train_images = sorted(train_dir.glob("*.jpg"))
+    parsed = [DUKE_FILENAME.match(path.name) for path in train_images]
+    if any(match is None for match in parsed):
+        raise ValueError("DukeMTMC-reID train contains an invalid filename")
+    train_ids = {int(match.group("pid")) for match in parsed if match and int(match.group("pid")) >= 0}
+    train_cameras = {int(match.group("camera")) for match in parsed if match}
+    if len(train_images) != EXPECTED_TRAIN_IMAGES:
         raise ValueError(
-            f"MSMT17 train must contain {EXPECTED_TRAIN_IMAGES} images, "
-            f"received {len(train_lines)}"
+            f"DukeMTMC-reID train must contain {EXPECTED_TRAIN_IMAGES} images, "
+            f"received {len(train_images)}"
         )
     if len(train_ids) != EXPECTED_TRAIN_IDENTITIES:
         raise ValueError(
-            f"MSMT17 train must contain {EXPECTED_TRAIN_IDENTITIES} identities, "
+            f"DukeMTMC-reID train must contain {EXPECTED_TRAIN_IDENTITIES} identities, "
             f"received {len(train_ids)}"
+        )
+    if train_cameras != set(range(1, 9)):
+        raise ValueError(
+            "DukeMTMC-reID train must contain cameras 1..8, "
+            f"received {sorted(train_cameras)}"
         )
 
     free_bytes = shutil.disk_usage(workspace).free
@@ -195,8 +206,9 @@ def validate_inputs(
     return {
         "decision": decision_status,
         "target_epochs": configured_epochs,
-        "train_images": len(train_lines),
+        "train_images": len(train_images),
         "train_identities": len(train_ids),
+        "train_cameras": len(train_cameras),
         "free_disk_gib": round(free_bytes / 1024**3, 1),
         "gpu": gpu_name,
     }
@@ -213,7 +225,7 @@ def main() -> None:
     )
     print("GPU:", result["gpu"])
     print(
-        "MSMT17 train:",
+        "DukeMTMC-reID train:",
         result["train_images"],
         "images /",
         result["train_identities"],

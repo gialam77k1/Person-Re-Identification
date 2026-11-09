@@ -3,9 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-EVALUATION_REPORT="${EVALUATION_REPORT:-artifacts/cross-domain/market1501-v1-on-msmt17/metrics/v1_on_msmt17.json}"
-DRIFT_REPORT="${DRIFT_REPORT:-artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json}"
-OUTPUT="${OUTPUT:-artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json}"
+EVALUATION_REPORT="${EVALUATION_REPORT:-artifacts/cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json}"
+DRIFT_REPORT="${DRIFT_REPORT:-artifacts/cross-domain/market1501-v1-on-duke/drift/drift_report.json}"
+OUTPUT="${OUTPUT:-artifacts/cross-domain/market1501-v1-on-duke/retraining/decision.json}"
 APPROVED_BY="${1:-${APPROVED_BY:-}}"
 
 arguments=(

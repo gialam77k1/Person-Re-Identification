@@ -66,7 +66,7 @@ class DriftReportTest(unittest.TestCase):
         metadata = {
             "release_id": "model:v1",
             "git_commit": "abc123",
-            "dataset": "msmt17",
+            "dataset": "dukemtmc-reid",
             "dataset_dvc_revision": "dataset.dir",
             "split": "query",
             "sample_seed": 42,

@@ -21,13 +21,13 @@ và report lớn chỉ được lưu bằng DVC/MinIO hoặc MLflow, không comm
 
 - [x] Model v1 đã được đóng băng, có manifest và checksum.
 - [x] Stack local gồm PostgreSQL, MinIO, MLflow, Qdrant, Triton, API, Prometheus và Grafana.
-- [x] Dataset Market-1501 và MSMT17 được quản lý bằng DVC/MinIO.
+- [x] Dataset Market-1501 và DukeMTMC-reID được quản lý bằng DVC/MinIO.
 - [x] Có drift detector, cross-domain evaluation và retraining decision gate.
-- [x] Drift MSMT17 đã được xác nhận và decision gate đã trả về `RETRAIN_APPROVED`.
+- [ ] Chưa chạy cycle Duke thật để xác nhận drift và tạo decision `REVIEW_REQUIRED`.
 - [x] Self-hosted runner có thể chạy smoke test và workload GPU.
-- [x] Script retraining v2 đã có cấu hình tối đa 20 epoch và preflight đã PASS.
+- [x] Script retraining v2 đã có contract tối đa 30 epoch; preflight code và dataset đã được kiểm tra.
 - [x] MLOps Control Center đã có UI, Control API, cycle/event/audit store và workflow dispatch.
-- [ ] Chưa có workflow nối tự động approval → retraining → validation → registry.
+- [x] Workflow đã nối tự động approval → retraining → validation → DVC/MLflow candidate.
 - [ ] Chưa hoàn tất toàn bộ release model v2 và deployment staging/production.
 
 ## Luồng MLOps cần đạt
@@ -93,7 +93,7 @@ Trải nghiệm pipeline trên UI:
 ✓ Validate dataset
 ✓ Extract current embeddings
 ✓ Detect drift
-✓ Evaluate model v1 on MSMT17
+✓ Evaluate model v1 on DukeMTMC-reID
 ! Waiting for retraining approval       [Approve Retraining]
 ● Train model v2 — Epoch 7/20           [View live logs]
 ○ Evaluate model v2
@@ -164,8 +164,8 @@ không phải chạy trực tiếp. Workflow retraining phải:
 1. Nhận release ID, đường dẫn drift report, evaluation report và retraining decision.
 2. Kiểm tra đúng Git commit, DVC revision, dataset và base checkpoint.
 3. Từ chối chạy nếu decision không phải `RETRAIN_APPROVED`.
-4. Backend chạy `./scripts/train_msmt17_v2_local.sh --check` trước khi train.
-5. Backend chạy `./scripts/train_msmt17_v2_local.sh` và truyền cấu hình release v2.
+4. Backend chạy `./scripts/train_duke_v2_local.sh --check` trước khi train.
+5. Backend chạy `./scripts/train_duke_v2_local.sh` và truyền cấu hình release v2.
 6. Chạy evaluation và validation gate sau training.
 7. Upload report nhỏ làm GitHub Actions artifact; model lớn lưu bằng MLflow/DVC/MinIO.
 8. Chỉ đăng ký alias `candidate` khi validation `PASS`.
@@ -179,30 +179,24 @@ Gate hoàn thành:
 - Workflow bị chặn rõ ràng khi thiếu approval hoặc checksum/DVC revision không khớp.
 - Workflow có thể chạy lại an toàn và không ghi đè release v1.
 
-## 3. Xác nhận drift bằng dữ liệu MSMT17
+## 3. Xác nhận drift bằng dữ liệu DukeMTMC-reID
 
-**Trạng thái implementation: hoàn thành.** Drift detector nhận metadata của mẫu MSMT17 và manifest
+**Trạng thái implementation: hoàn thành về code, chưa nghiệm thu bằng cycle Duke thật.** Drift detector nhận metadata của mẫu DukeMTMC-reID và manifest
 model v1, ghi trực tiếp Git commit, DVC revision, seed, số mẫu, threshold, checksum model/reference/
 current embeddings vào report. Metrics được xuất vào textfile directory của node-exporter để
 Prometheus scrape và dashboard Grafana hiển thị cả observed value lẫn threshold. Workflow đồng thời
 lưu report vào experiment MLflow `person-reid-drift`; MLflow chỉ lưu dấu vết, không tham gia quyết
 định `drift_detected`.
 
-Kết quả kiểm tra lại bằng 1.000 ảnh query MSMT17 và 12.936 reference embeddings Market-1501:
-
-- `drift_detected=true`.
-- Centroid cosine distance `0,5532`, vượt ngưỡng `0,05`.
-- Standardized mean shift `0,3698`, vượt ngưỡng `0,20`.
-- KS statistic `0,2034`, vượt ngưỡng `0,15`.
-- ONNX v1 có SHA256
-  `e8425d8f645dc419225d02f2e586ceb3a244955ee5e292141951a5c7aaf1f4be`.
-- Dataset revision `c8a4c6f18b86490a45f940ab9fb0eb70.dir`, seed `42`.
+Cycle mới sẽ lấy mẫu 1.000 ảnh query DukeMTMC-reID với seed `42`. Không sử dụng lại metric
+drift MSMT17 cũ; report Duke phải được tạo mới và gắn DVC revision
+`6f2c045609466b6d941b34c1af197628.dir`.
 
 Luồng detection phải chạy trước retraining:
 
 ```text
 Market-1501 reference embeddings
-  + MSMT17 current embeddings
+  + DukeMTMC-reID current embeddings
   → generate_drift_report.py
   → drift_report.json
   → reid_cross_dataset_drift.prom
@@ -223,7 +217,7 @@ thế drift detector.
 
 **Trạng thái implementation: hoàn thành.** Control API tải đúng GitHub evidence artifact theo run ID,
 xác minh checksum rồi chạy decision policy ở backend. Decision `RETRAIN_APPROVED` được lưu bền vững
-với approver, thời gian, model nguồn, dataset đích, giới hạn 20 epoch và checksum evidence. Runner
+với approver, thời gian, model nguồn, dataset đích, giới hạn 30 epoch và checksum evidence. Runner
 chỉ được tải decision qua endpoint có callback token và phải xác minh SHA256 trước preflight; workflow
 không còn gọi `retraining_decision.sh` để tự phê duyệt.
 
@@ -253,19 +247,19 @@ nhật epoch, loss, learning rate, mAP, GPU và log gần nhất.
 Cấu hình retraining:
 
 - Base checkpoint: model v1 tại epoch 48.
-- Dataset: MSMT17 train, 30.248 ảnh và 1.041 ID.
-- Classifier Market-1501 cũ bị loại bỏ và khởi tạo lại cho 1.041 ID.
-- Epoch 1–2: freeze 8 block ViT thấp.
-- Từ epoch 3: unfreeze toàn model; learning rate backbone bằng `0,1 ×` learning rate head.
-- Tối đa 20 epoch, warmup 2 epoch, cosine scheduler.
-- Early stopping theo mAP với patience 3.
-- Release: `market1501-msmt17-vit-bnneck:v2`.
+- Dataset: DukeMTMC-reID train, 16.522 ảnh và 702 ID.
+- Classifier Market-1501 cũ bị loại bỏ và khởi tạo lại cho 702 ID.
+- Epoch 1–5: freeze 8 block ViT thấp.
+- Từ epoch 6: unfreeze toàn model; learning rate backbone bằng `0,05 ×` learning rate head.
+- Tối đa 30 epoch, warmup 3 epoch, cosine scheduler.
+- Early stopping theo mAP với patience 5.
+- Release: `market1501-duke-vit-bnneck:v2`.
 
 Training hoàn thành khi MLflow run ở trạng thái `FINISHED`, không có lỗi CUDA/OOM, metrics hữu hạn
 và có đủ:
 
 ```text
-artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/
+artifacts/duke/market1501-duke-vit-bnneck-v2/
 ├── checkpoints/best_model.pth
 ├── checkpoints/last_model.pth
 ├── logs/effective_config.json
@@ -279,16 +273,16 @@ và `metrics_v2.json`.
 
 ## 6. Đánh giá v2 và kiểm tra catastrophic forgetting
 
-**Trạng thái implementation: hoàn thành.** Workflow đánh giá cùng SHA256 checkpoint v2 trên MSMT17
+**Trạng thái implementation: hoàn thành.** Workflow đánh giá cùng SHA256 checkpoint v2 trên DukeMTMC-reID
 và Market-1501, ghi Rank-1/Rank-5/mAP/mINP, query/gallery count, Git commit và DVC revision. Policy
 `configs/catastrophic_forgetting.yaml` được version hóa trước khi chạy: v2 phải tăng tối thiểu Rank-1
-`0,05` và mAP `0,03` trên MSMT17; mức giảm tuyệt đối tối đa trên Market-1501 lần lượt là Rank-1
+`0,05` và mAP `0,03` trên DukeMTMC-reID; mức giảm tuyệt đối tối đa trên Market-1501 lần lượt là Rank-1
 `0,05`, Rank-5 `0,03`, mAP `0,08`, mINP `0,10`. Cả hai report, policy và gate report được log
 vào đúng MLflow training run kể cả khi gate FAIL; chỉ PASS mới được đi tiếp tới validation/registry.
 
 Đánh giá cùng checkpoint tốt nhất trên:
 
-- MSMT17 để đo mức cải thiện so với model v1 cross-domain.
+- DukeMTMC-reID để đo mức cải thiện so với model v1 cross-domain.
 - Market-1501 để đo suy giảm sau domain adaptation.
 
 Mỗi report cần Rank-1, Rank-5, mAP, mINP, query/gallery count, checkpoint checksum, Git commit và
@@ -297,16 +291,16 @@ ngưỡng sau để làm model PASS.
 
 Gate:
 
-- v2 cải thiện rõ trên MSMT17 so với v1 cross-domain.
+- v2 cải thiện rõ trên DukeMTMC-reID so với v1 cross-domain.
 - Mức suy giảm trên Market-1501 không vượt ngưỡng catastrophic-forgetting đã cấu hình.
 - Tất cả metrics hữu hạn và report được log vào cùng MLflow run/release.
 
 ## 7. Tạo release pipeline v2 bằng DVC
 
 **Trạng thái implementation: hoàn thành.** `dvc.yaml` có graph v2 độc lập từ validate hai dataset,
-import checkpoint đã train, đánh giá MSMT17/Market-1501, export/parity ONNX, extract reference,
+import checkpoint đã train, đánh giá DukeMTMC-reID/Market-1501, export/parity ONNX, extract reference,
 release gate đến package Triton version 2. Mọi output nằm dưới
-`artifacts/pipeline/market1501-msmt17-vit-bnneck-v2`; pipeline v1 không bị sửa hoặc ghi đè. Các nhánh
+`artifacts/pipeline/market1501-duke-vit-bnneck-v2`; pipeline v1 không bị sửa hoặc ghi đè. Các nhánh
 evaluation/export/reference chỉ hội tụ ở validation nên thay đổi serving không kích hoạt retraining.
 Manifest v2 chứa Git commit, DVC revision của cả hai dataset, MLflow run ID và SHA256 effective config.
 Chi tiết chạy và graph nằm tại `docs/DVC_V2_PIPELINE.md`.
@@ -316,7 +310,7 @@ Pipeline phải tách output v2 khỏi v1:
 ```text
 validate_data
   → import hoặc train checkpoint_v2
-  → evaluate_msmt17
+  → evaluate_duke
   → evaluate_market1501
   → export_onnx
   → verify_onnx
@@ -361,7 +355,7 @@ release report lên MinIO. `dvc status --cloud --with-deps --json` phải sạch
 `dvc_publication.json`.
 
 Sau đó workflow đăng ký đúng training run `FINISHED` vào MLflow Model Registry với alias ban đầu
-`candidate`. Registry version mang Git commit, training Git commit, DVC revision của MSMT17 và
+`candidate`. Registry version mang Git commit, training Git commit, DVC revision của DukeMTMC-reID và
 Market-1501, config/checkpoint/manifest/validation SHA256 và metrics của hai dataset. Thao tác
 idempotent theo release ID và từ chối nếu release cũ trỏ tới run khác. Step này tuyệt đối không đổi
 alias `champion` hoặc `production`.
@@ -407,7 +401,7 @@ monitor → detect drift → approve → retrain → validate → deploy → mon
 
 ## 13. Tiêu chí hoàn thành đồ án
 
-- [ ] Có một lần chạy end-to-end từ drift MSMT17 đến model v2 candidate.
+- [ ] Có một lần chạy end-to-end từ drift DukeMTMC-reID đến model v2 candidate.
 - [ ] Control Center hiển thị toàn bộ cycle và khởi động được workflow bằng một nút.
 - [ ] Toàn bộ v1 → drift → approval → retrain → v2 → staging thao tác được trên web, không cần
   terminal.
@@ -428,8 +422,8 @@ monitor → detect drift → approve → retrain → validate → deploy → mon
 2. Hoàn thiện workflow retraining khép kín trên self-hosted runner
 3. Xây Next.js Control Center và nối Control API
 4. Đưa drift report và UI approval `RETRAIN_APPROVED` vào workflow
-5. Bấm Start trên UI; theo dõi toàn bộ v1 → v2, training tối đa 20 epoch và MLflow
-6. Evaluate MSMT17 + Market-1501 và chạy validation gate
+5. Bấm Start trên UI; theo dõi toàn bộ v1 → v2, training tối đa 30 epoch và MLflow
+6. Evaluate DukeMTMC-reID + Market-1501 và chạy validation gate
 7. DVC push + đăng ký MLflow candidate
 8. Export ONNX + parity + reference embeddings
 9. Deploy staging và chạy integration test từ cycle

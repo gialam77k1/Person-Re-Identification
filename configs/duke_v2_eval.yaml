@@ -1,28 +1,24 @@
 project_name: person-reid-mlops
-experiment_name: market1501-msmt17-vit-bnneck-v2
+experiment_name: market1501-duke-vit-bnneck-v2
 seed: 42
 device: auto
 num_workers: 2
 
 release:
-  id: market1501-msmt17-vit-bnneck:v2
+  id: market1501-duke-vit-bnneck:v2
   base_release_id: market1501-vit-bnneck:v1-dvc
 
 data:
   source_type: image_folder
   dataset:
-    name: msmt17
-    version: MSMT17_V1
+    name: dukemtmc-reid
+    version: dukemtmc-reid
   location:
-    root: datasets/MSMT17_V1
+    root: datasets/dukemtmc-reid
     splits:
-      train: train
-      query: test
-      gallery: test
-    list_files:
-      train: datasets/MSMT17_V1/list_train.txt
-      query: datasets/MSMT17_V1/list_query.txt
-      gallery: datasets/MSMT17_V1/list_gallery.txt
+      train: bounding_box_train
+      query: query
+      gallery: bounding_box_test
   image_height: 224
   image_width: 224
   preserve_aspect_ratio: true
@@ -45,10 +41,10 @@ model:
 evaluation:
   use_rerank: false
   flip_test: false
-  query_batch_size: 32
-  dataset_pointer: datasets/MSMT17_V1.dvc
-  report_filename: evaluation_msmt17.json
+  query_batch_size: 64
+  dataset_pointer: datasets/dukemtmc-reid.dvc
+  report_filename: evaluation_duke.json
 
 artifacts:
   root: artifacts
-  run_root: artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/evaluations/msmt17
+  run_root: artifacts/duke/market1501-duke-vit-bnneck-v2/evaluations/duke

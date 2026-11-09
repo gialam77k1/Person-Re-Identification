@@ -1,4 +1,4 @@
-name: MSMT17 cross-domain drift
+name: DukeMTMC-reID cross-domain drift
 
 on:
   workflow_dispatch:
@@ -10,9 +10,9 @@ on:
       dataset:
         description: Target dataset
         required: true
-        default: MSMT17
+        default: dukemtmc-reid
       sample_size:
-        description: Deterministic MSMT17 query sample size
+        description: Deterministic DukeMTMC-reID query sample size
         required: true
         default: "1000"
       release_id:
@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: msmt17-cross-domain-drift
+  group: duke-cross-domain-drift
   cancel-in-progress: false
 
 jobs:
@@ -40,8 +40,9 @@ jobs:
 
       - name: Mark data validation running
         run: >-
+          test "${{ inputs.dataset }}" = "dukemtmc-reid" &&
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_data RUNNING
-          --detail "Checking MSMT17, model v1 and serving stack"
+          --detail "Checking DukeMTMC-reID, model v1 and serving stack"
 
       - name: Configure local MLOps credentials
         env:
@@ -61,10 +62,10 @@ jobs:
 
       - name: Mark drift stages running
         run: |
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings RUNNING --detail "Capturing MSMT17 query embeddings"
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift RUNNING --detail "Comparing MSMT17 against Market-1501 reference"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings RUNNING --detail "Capturing DukeMTMC-reID query embeddings"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift RUNNING --detail "Comparing DukeMTMC-reID against Market-1501 reference"
 
-      - name: Capture MSMT17 embeddings and detect drift
+      - name: Capture DukeMTMC-reID embeddings and detect drift
         env:
           CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
           SAMPLE_SIZE: ${{ inputs.sample_size }}
@@ -74,15 +75,15 @@ jobs:
 
       - name: Mark drift stages complete
         run: |
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings PASS --progress 1 --detail "MSMT17 embeddings captured"
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift PASS --progress 1 --detail "Drift detected and recorded in Prometheus/MLflow" --metrics-file artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings PASS --progress 1 --detail "DukeMTMC-reID embeddings captured"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift PASS --progress 1 --detail "Drift detected and recorded in Prometheus/MLflow" --metrics-file artifacts/cross-domain/market1501-v1-on-duke/drift/drift_report.json
 
-      - name: Evaluate model v1 on MSMT17
+      - name: Evaluate model v1 on DukeMTMC-reID
         env:
           RELEASE_ID: ${{ inputs.release_id }}
         run: |
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Running full MSMT17 deployment evaluation"
-          ./scripts/evaluate_msmt17_v1.sh
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Running full DukeMTMC-reID deployment evaluation"
+          ./scripts/evaluate_duke_v1.sh
           ./scripts/retraining_decision.sh
 
       - name: Build immutable retraining evidence
@@ -92,20 +93,20 @@ jobs:
             --cycle-id "${{ inputs.cycle_id }}" \
             --release-id "${{ inputs.release_id }}" \
             --dataset "${{ inputs.dataset }}" \
-            --drift-report artifacts/cross-domain/market1501-v1-on-msmt17/drift/drift_report.json \
-            --evaluation-report artifacts/cross-domain/market1501-v1-on-msmt17/metrics/v1_on_msmt17.json \
-            --decision artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json \
+            --drift-report artifacts/cross-domain/market1501-v1-on-duke/drift/drift_report.json \
+            --evaluation-report artifacts/cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json \
+            --decision artifacts/cross-domain/market1501-v1-on-duke/retraining/decision.json \
             --base-manifest artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json \
             --source-commit "${{ github.sha }}" \
             --workflow-run-id "${{ github.run_id }}" \
-            --output artifacts/cross-domain/market1501-v1-on-msmt17/retraining/bundle/evidence_manifest.json
+            --output artifacts/cross-domain/market1501-v1-on-duke/retraining/bundle/evidence_manifest.json
 
       - name: Upload drift evidence
         uses: actions/upload-artifact@v4
         with:
           name: mlops-evidence-${{ inputs.cycle_id }}
           path: |
-            artifacts/cross-domain/market1501-v1-on-msmt17/retraining/bundle/
+            artifacts/cross-domain/market1501-v1-on-duke/retraining/bundle/
           if-no-files-found: error
           retention-days: 30
 
@@ -113,7 +114,7 @@ jobs:
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 PASS
           --progress 1 --detail "Evidence uploaded and ready for retraining approval"
-          --metrics-file artifacts/cross-domain/market1501-v1-on-msmt17/retraining/decision.json
+          --metrics-file artifacts/cross-domain/market1501-v1-on-duke/retraining/decision.json
           --metrics '{"workflow_run_id":"${{ github.run_id }}","artifact_name":"mlops-evidence-${{ inputs.cycle_id }}"}'
 
       - name: Remove temporary credential file

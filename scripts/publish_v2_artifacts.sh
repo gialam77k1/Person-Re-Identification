@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_ROOT="${ROOT_DIR}/artifacts/msmt17/market1501-msmt17-vit-bnneck-v2"
-PIPELINE_ROOT="${ROOT_DIR}/artifacts/pipeline/market1501-msmt17-vit-bnneck-v2"
+SOURCE_ROOT="${ROOT_DIR}/artifacts/duke/market1501-duke-vit-bnneck-v2"
+PIPELINE_ROOT="${ROOT_DIR}/artifacts/pipeline/market1501-duke-vit-bnneck-v2"
 BEST_CHECKPOINT="${SOURCE_ROOT}/checkpoints/best_model.pth"
 LAST_CHECKPOINT="${SOURCE_ROOT}/checkpoints/last_model.pth"
 PUBLICATION_REPORT="${PIPELINE_ROOT}/release/dvc_publication.json"

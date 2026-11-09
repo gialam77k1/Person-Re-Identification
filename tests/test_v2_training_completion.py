@@ -21,7 +21,7 @@ class V2TrainingCompletionTest(unittest.TestCase):
         (run_root / "checkpoints/best_model.pth").write_bytes(b"best")
         (run_root / "checkpoints/last_model.pth").write_bytes(b"last")
         config = yaml.safe_load(
-            (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8")
+            (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8")
         )
         (run_root / "logs/effective_config.json").write_text(
             json.dumps(config), encoding="utf-8"
@@ -47,7 +47,7 @@ class V2TrainingCompletionTest(unittest.TestCase):
             encoding="utf-8",
         )
         metrics = {
-            "release_id": "market1501-msmt17-vit-bnneck:v2",
+            "release_id": "market1501-duke-vit-bnneck:v2",
             "base_release_id": "market1501-vit-bnneck:v1-dvc",
             "configured_epochs": 30,
             "completed_epochs": completed,

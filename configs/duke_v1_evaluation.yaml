@@ -1,5 +1,5 @@
 project_name: person-reid-mlops
-experiment_name: market1501-v1-cross-domain-msmt17
+experiment_name: market1501-v1-cross-domain-duke
 seed: 42
 device: auto
 num_workers: 2
@@ -7,18 +7,14 @@ num_workers: 2
 data:
   source_type: image_folder
   dataset:
-    name: msmt17
-    version: MSMT17_V1
+    name: dukemtmc-reid
+    version: dukemtmc-reid
   location:
-    root: datasets/MSMT17_V1
+    root: datasets/dukemtmc-reid
     splits:
-      train: train
-      query: test
-      gallery: test
-    list_files:
-      train: datasets/MSMT17_V1/list_train.txt
-      query: datasets/MSMT17_V1/list_query.txt
-      gallery: datasets/MSMT17_V1/list_gallery.txt
+      train: bounding_box_train
+      query: query
+      gallery: bounding_box_test
   image_height: 224
   image_width: 224
   preserve_aspect_ratio: true
@@ -49,4 +45,4 @@ logging:
 
 artifacts:
   root: artifacts
-  run_root: artifacts/cross-domain/market1501-v1-on-msmt17
+  run_root: artifacts/cross-domain/market1501-v1-on-duke

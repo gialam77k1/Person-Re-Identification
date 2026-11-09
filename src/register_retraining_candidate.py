@@ -50,7 +50,7 @@ def build_lineage_tags(
     required = {
         "git.commit": source.get("git_commit"),
         "training.git.commit": source.get("training_git_commit"),
-        "dvc.msmt17.revision": revisions.get("msmt17"),
+        "dvc.duke.revision": revisions.get("duke"),
         "dvc.market1501.revision": revisions.get("market1501"),
         "config.sha256": source.get("config_sha256"),
     }
@@ -67,7 +67,7 @@ def build_lineage_tags(
         raise ValueError("Published validation report checksum does not match.")
 
     metric_tags: dict[str, str] = {}
-    for dataset in ("msmt17", "market1501"):
+    for dataset in ("duke", "market1501"):
         values = manifest.get("quality_metrics", {}).get(dataset, {})
         for metric in ("rank1", "rank5", "mAP", "mINP"):
             value = values.get(metric)

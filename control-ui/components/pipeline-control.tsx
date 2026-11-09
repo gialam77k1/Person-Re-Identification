@@ -54,7 +54,7 @@ export function PipelineControl() {
   const [activeId, setActiveId] = useState("");
   const [cycle, setCycle] = useState<Cycle | null>(null);
   const [events, setEvents] = useState<CycleEvent[]>([]);
-  const [dataset, setDataset] = useState("MSMT17");
+  const [dataset, setDataset] = useState("dukemtmc-reid");
   const [actor, setActor] = useState("gialam77k1");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -131,7 +131,7 @@ export function PipelineControl() {
     <div>
       <section className="panel mt-7 rounded-2xl p-5">
         <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-          <label className="text-xs font-bold text-slate-400">Dataset<select value={dataset} onChange={(event) => setDataset(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-3 text-sm text-white"><option>MSMT17</option></select></label>
+          <label className="text-xs font-bold text-slate-400">Dataset<select value={dataset} onChange={(event) => setDataset(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-3 text-sm text-white"><option value="dukemtmc-reid">DukeMTMC-reID</option></select></label>
           <label className="text-xs font-bold text-slate-400">Operator<input value={actor} onChange={(event) => setActor(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-3 text-sm text-white" /></label>
           <button onClick={start} disabled={busy || !actor.trim()} className="rounded-lg bg-teal-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:opacity-40">{busy ? "PROCESSING…" : "START MLOPS LIFECYCLE"}</button>
         </div>

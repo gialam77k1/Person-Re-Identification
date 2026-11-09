@@ -4,8 +4,8 @@ Hệ thống Person Re-Identification chạy local, sử dụng **ViT-B/16 + BNN
 vòng đời MLOps khép kín qua một Control Center: phát hiện drift, phê duyệt retraining,
 train model v2 trên self-hosted GPU runner, đánh giá, validation, quản lý artifact và triển khai.
 
-Model production hiện tại là `market1501-vit-bnneck:v1`. Pipeline MSMT17 tạo model
-`market1501-msmt17-vit-bnneck:v2` dưới alias `candidate`; hệ thống không tự động thay
+Model production hiện tại là `market1501-vit-bnneck:v1`. Pipeline DukeMTMC-reID tạo model
+`market1501-duke-vit-bnneck:v2` dưới alias `candidate`; hệ thống không tự động thay
 `champion` hoặc deploy production nếu chưa có phê duyệt.
 
 ## Trạng thái model hiện tại
@@ -28,17 +28,17 @@ Re-ranking chỉ dùng khi đánh giá hoặc truy hồi offline, không nằm t
 
 ### Model v2 — candidate pipeline
 
-Model v2 được transfer learning từ checkpoint v1 sang MSMT17:
+Model v2 được transfer learning từ checkpoint v1 sang DukeMTMC-reID:
 
-- 30.248 ảnh train, 1.041 identity.
+- 16.522 ảnh train, 702 identity.
 - Tối đa 30 epoch; AMP, cosine scheduler và warmup 3 epoch.
 - Freeze 8 ViT block thấp đến hết epoch 5; full unfreeze từ epoch 6.
 - Learning rate backbone bằng `0,05 ×` learning rate head.
 - Early stopping theo mAP, patience 5.
-- Batch train/eval 16 và distance query chunk 32 để giới hạn bộ nhớ.
-- Đánh giá trên cả MSMT17 và Market-1501 để kiểm tra catastrophic forgetting.
+- Batch train/eval 16 và distance query chunk 64 để giới hạn bộ nhớ.
+- Đánh giá trên cả DukeMTMC-reID và Market-1501 để kiểm tra catastrophic forgetting.
 
-Cấu hình chuẩn nằm tại [`configs/msmt17_v2_train.yaml`](configs/msmt17_v2_train.yaml).
+Cấu hình chuẩn nằm tại [`configs/duke_v2_train.yaml`](configs/duke_v2_train.yaml).
 
 ## Kiến trúc
 
@@ -63,7 +63,7 @@ DVC + MinIO                   version hóa dataset và model artifact
 - NVIDIA GPU, driver và NVIDIA Container Toolkit cho Triton/training.
 - Conda với môi trường Python 3.10.
 - Self-hosted GitHub Actions runner online trên cùng máy.
-- Dataset Market-1501, MSMT17 và model artifact được quản lý bằng DVC/MinIO.
+- Dataset Market-1501, DukeMTMC-reID và model artifact được quản lý bằng DVC/MinIO.
 
 Tạo môi trường local:
 
@@ -112,18 +112,18 @@ docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
 
 ### 3. Mở Control Center
 
-Mở **http://localhost:3001**, chọn `MSMT17` và bấm **Start MLOps lifecycle**.
+Mở **http://localhost:3001**, chọn `DukeMTMC-reID` và bấm **Start MLOps lifecycle**.
 Luồng vận hành bình thường không yêu cầu chạy từng script bằng terminal.
 
 ```text
 Validate dataset
   → Extract current embeddings
   → Detect drift
-  → Evaluate model v1 on MSMT17
+  → Evaluate model v1 on DukeMTMC-reID
   → WAITING_APPROVAL
   → Approve Retraining
   → Train model v2 (tối đa 30 epoch)
-  → Evaluate MSMT17 + Market-1501
+  → Evaluate DukeMTMC-reID + Market-1501
   → Validation/forgetting gate
   → Export ONNX + parity
   → DVC push + MLflow candidate
@@ -184,17 +184,17 @@ Train Market-1501:
 ./scripts/train_local.sh market1501-vit-bnneck-local
 ```
 
-Preflight và train MSMT17 v2:
+Preflight và train DukeMTMC-reID v2:
 
 ```bash
-./scripts/train_msmt17_v2_local.sh --check
-./scripts/train_msmt17_v2_local.sh
+./scripts/train_duke_v2_local.sh --check
+./scripts/train_duke_v2_local.sh
 ```
 
 Output v2 được tách khỏi v1 tại:
 
 ```text
-artifacts/msmt17/market1501-msmt17-vit-bnneck-v2/
+artifacts/duke/market1501-duke-vit-bnneck-v2/
 ├── checkpoints/best_model.pth
 ├── checkpoints/last_model.pth
 ├── logs/effective_config.json
@@ -268,8 +268,8 @@ không được commit vào Git. Git chỉ lưu code, config, DVC pointer, manif
 
 - [MLOps Control Center](docs/MLOPS_CONTROL_CENTER.md)
 - [Hạ tầng MLOps local](docs/MLOPS_LOCAL.md)
-- [MSMT17 v2 training](docs/MSMT17_V2_TRAINING.md)
-- [Cross-domain drift](docs/MSMT17_CROSS_DOMAIN.md)
+- [DukeMTMC-reID v2 training](docs/DUKE_V2_TRAINING.md)
+- [Cross-domain drift](docs/DUKE_CROSS_DOMAIN.md)
 - [DVC v2 release pipeline](docs/DVC_V2_PIPELINE.md)
 - [MLflow tracking và registry](docs/MLFLOW_TRACKING.md)
 - [Model validation gate](docs/MODEL_VALIDATION_GATE.md)

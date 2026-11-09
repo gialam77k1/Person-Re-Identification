@@ -12,7 +12,7 @@ import numpy as np
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE_ID = "market1501-msmt17-vit-bnneck:v2"
+RELEASE_ID = "market1501-duke-vit-bnneck:v2"
 METRICS = ("rank1", "rank5", "mAP", "mINP")
 
 
@@ -64,7 +64,7 @@ def build_release(
     *,
     checkpoint_manifest_path: Path,
     data_manifest_path: Path,
-    msmt17_evaluation_path: Path,
+    duke_evaluation_path: Path,
     market1501_evaluation_path: Path,
     forgetting_report_path: Path,
     onnx_manifest_path: Path,
@@ -81,7 +81,7 @@ def build_release(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     checkpoint = read_json(checkpoint_manifest_path)
     data = read_json(data_manifest_path)
-    msmt17 = read_json(msmt17_evaluation_path)
+    duke = read_json(duke_evaluation_path)
     market1501 = read_json(market1501_evaluation_path)
     forgetting = read_json(forgetting_report_path)
     onnx = read_json(onnx_manifest_path)
@@ -103,16 +103,16 @@ def build_release(
     check("git_commit", bool(checkpoint.get("git_commit")) and bool(checkpoint.get("training_git_commit")), {"release": checkpoint.get("git_commit"), "training": checkpoint.get("training_git_commit")}, "both non-empty")
     check("training_config_hash", len(str(checkpoint.get("training_config_sha256", ""))) == 64, checkpoint.get("training_config_sha256"), "SHA256")
     revisions = checkpoint.get("dataset_revisions", {})
-    check("dataset_revisions", bool(revisions.get("msmt17")) and bool(revisions.get("market1501")), revisions, "both non-empty")
-    check("evaluation_release", msmt17.get("release_id") == market1501.get("release_id") == RELEASE_ID, {"msmt17": msmt17.get("release_id"), "market1501": market1501.get("release_id")}, RELEASE_ID)
-    check("evaluation_metrics_finite", finite_metrics(msmt17) and finite_metrics(market1501), {"msmt17": {key: msmt17.get(key) for key in METRICS}, "market1501": {key: market1501.get(key) for key in METRICS}}, "all finite")
+    check("dataset_revisions", bool(revisions.get("duke")) and bool(revisions.get("market1501")), revisions, "both non-empty")
+    check("evaluation_release", duke.get("release_id") == market1501.get("release_id") == RELEASE_ID, {"duke": duke.get("release_id"), "market1501": market1501.get("release_id")}, RELEASE_ID)
+    check("evaluation_metrics_finite", finite_metrics(duke) and finite_metrics(market1501), {"duke": {key: duke.get(key) for key in METRICS}, "market1501": {key: market1501.get(key) for key in METRICS}}, "all finite")
     threshold_keys = {"rank1": "rank1_min", "rank5": "rank5_min", "mAP": "map_min", "mINP": "minp_min"}
-    for dataset_name, evaluation in (("msmt17", msmt17), ("market1501", market1501)):
+    for dataset_name, evaluation in (("duke", duke), ("market1501", market1501)):
         thresholds = policy.get("quality", {}).get(dataset_name, {})
         for metric, threshold_key in threshold_keys.items():
             value, minimum = evaluation.get(metric), thresholds.get(threshold_key)
             check(f"quality_{dataset_name}_{metric.lower()}", finite_number(value) and finite_number(minimum) and float(value) >= float(minimum), value, {"min": minimum})
-    check("same_evaluated_checkpoint", msmt17.get("checkpoint_sha256") == market1501.get("checkpoint_sha256") == checkpoint_sha, {"msmt17": msmt17.get("checkpoint_sha256"), "market1501": market1501.get("checkpoint_sha256"), "release": checkpoint_sha}, "identical")
+    check("same_evaluated_checkpoint", duke.get("checkpoint_sha256") == market1501.get("checkpoint_sha256") == checkpoint_sha, {"duke": duke.get("checkpoint_sha256"), "market1501": market1501.get("checkpoint_sha256"), "release": checkpoint_sha}, "identical")
     check("catastrophic_forgetting", forgetting.get("status") == "PASS" and forgetting.get("passed") is True, forgetting.get("status"), "PASS")
 
     contract = policy.get("contract", {})
@@ -193,10 +193,10 @@ def build_release(
     now = datetime.now(timezone.utc).isoformat()
     manifest = {
         "schema_version": 2,
-        "release": {"name": "market1501-msmt17-vit-bnneck", "version": "v2", "release_id": RELEASE_ID, "status": "validated" if passed else "rejected", "created_at": now},
+        "release": {"name": "market1501-duke-vit-bnneck", "version": "v2", "release_id": RELEASE_ID, "status": "validated" if passed else "rejected", "created_at": now},
         "source": {"git_commit": checkpoint.get("git_commit"), "training_git_commit": checkpoint.get("training_git_commit"), "dataset_revisions": revisions, "mlflow_run_id": checkpoint.get("mlflow_run_id"), "config_sha256": checkpoint.get("training_config_sha256"), "checkpoint_epoch": checkpoint.get("best_epoch")},
-        "model": {"task": "person-re-identification", "architecture": "vit_b_16", "embedding_dim": expected_dim, "training_dataset": "msmt17"},
-        "quality_metrics": {"msmt17": {key: msmt17.get(key) for key in METRICS}, "market1501": {key: market1501.get(key) for key in METRICS}},
+        "model": {"task": "person-re-identification", "architecture": "vit_b_16", "embedding_dim": expected_dim, "training_dataset": "duke"},
+        "quality_metrics": {"duke": {key: duke.get(key) for key in METRICS}, "market1501": {key: market1501.get(key) for key in METRICS}},
         "contract": {"input_name": contract.get("input_name"), "input_shape": expected_input_shape, "output_name": contract.get("output_name"), "output_shape": ["batch_size", expected_dim], "preprocessing_path": repository_path(preprocessing_output_path), "reference_embeddings_l2_normalized": True},
         "reference": {"num_samples": len(embeddings), "embedding_dim": expected_dim, "norm_max_abs_error": norm_error},
         "policy": {"path": repository_path(policy_path), "sha256": sha256_file(policy_path)},
@@ -228,7 +228,7 @@ def log_validation_to_mlflow(report_path: Path, manifest_path: Path, policy_path
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    for name in ("checkpoint-manifest", "data-manifest", "msmt17-evaluation", "market1501-evaluation", "forgetting-report", "onnx-manifest", "parity-report", "reference-manifest", "checkpoint", "onnx", "preprocessing-source", "preprocessing-output", "policy", "mlflow-run", "output", "manifest-output"):
+    for name in ("checkpoint-manifest", "data-manifest", "duke-evaluation", "market1501-evaluation", "forgetting-report", "onnx-manifest", "parity-report", "reference-manifest", "checkpoint", "onnx", "preprocessing-source", "preprocessing-output", "policy", "mlflow-run", "output", "manifest-output"):
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--reference-root", required=True)
     args = parser.parse_args()
@@ -238,7 +238,7 @@ def main() -> int:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         report, manifest = build_release(
-            checkpoint_manifest_path=Path(args.checkpoint_manifest), data_manifest_path=Path(args.data_manifest), msmt17_evaluation_path=Path(args.msmt17_evaluation), market1501_evaluation_path=Path(args.market1501_evaluation), forgetting_report_path=Path(args.forgetting_report), onnx_manifest_path=Path(args.onnx_manifest), parity_report_path=Path(args.parity_report), reference_manifest_path=Path(args.reference_manifest), checkpoint_path=Path(args.checkpoint), onnx_path=Path(args.onnx),
+            checkpoint_manifest_path=Path(args.checkpoint_manifest), data_manifest_path=Path(args.data_manifest), duke_evaluation_path=Path(args.duke_evaluation), market1501_evaluation_path=Path(args.market1501_evaluation), forgetting_report_path=Path(args.forgetting_report), onnx_manifest_path=Path(args.onnx_manifest), parity_report_path=Path(args.parity_report), reference_manifest_path=Path(args.reference_manifest), checkpoint_path=Path(args.checkpoint), onnx_path=Path(args.onnx),
             reference_files=[("reference_embeddings", reference_root / "reference_embeddings.npy"), ("reference_pids", reference_root / "reference_pids.npy"), ("reference_camids", reference_root / "reference_camids.npy"), ("reference_paths", reference_root / "reference_paths.npy")],
             preprocessing_source_path=Path(args.preprocessing_source), preprocessing_output_path=Path(args.preprocessing_output), policy_path=policy_path, report_path=report_path, manifest_path=manifest_path,
         )

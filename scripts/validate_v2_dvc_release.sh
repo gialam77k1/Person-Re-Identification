@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PIPELINE_ROOT="${V2_PIPELINE_ROOT:-artifacts/pipeline/market1501-msmt17-vit-bnneck-v2}"
+PIPELINE_ROOT="${V2_PIPELINE_ROOT:-artifacts/pipeline/market1501-duke-vit-bnneck-v2}"
 CHECKPOINT_ROOT="${PIPELINE_ROOT}/checkpoint"
-MSMT17_REPORT="${PIPELINE_ROOT}/evaluate_msmt17/metrics/evaluation_msmt17.json"
+DukeMTMC-reID_REPORT="${PIPELINE_ROOT}/evaluate_duke/metrics/evaluation_duke.json"
 MARKET1501_REPORT="${PIPELINE_ROOT}/evaluate_market1501/metrics/evaluation_market1501.json"
 FORGETTING_REPORT="${PIPELINE_ROOT}/release/catastrophic_forgetting_report.json"
 REFERENCE_ROOT="${PIPELINE_ROOT}/reference/embeddings"
 
 python -m src.catastrophic_forgetting_gate \
-  --msmt17-v1 model_releases/market1501-vit-bnneck/v1/msmt17_cross_domain_metrics.json \
-  --msmt17-v2 "${MSMT17_REPORT}" \
+  --duke-v1 artifacts/cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json \
+  --duke-v2 "${DukeMTMC-reID_REPORT}" \
   --market1501-v1-manifest model_releases/market1501-vit-bnneck/v1/model_manifest.json \
   --market1501-v2 "${MARKET1501_REPORT}" \
   --policy configs/catastrophic_forgetting.yaml \
@@ -20,7 +20,7 @@ python -m src.catastrophic_forgetting_gate \
 python -m src.validate_v2_dvc_release \
   --checkpoint-manifest "${CHECKPOINT_ROOT}/checkpoint_manifest.json" \
   --data-manifest "${PIPELINE_ROOT}/validate/data_manifest.json" \
-  --msmt17-evaluation "${MSMT17_REPORT}" \
+  --duke-evaluation "${DukeMTMC-reID_REPORT}" \
   --market1501-evaluation "${MARKET1501_REPORT}" \
   --forgetting-report "${FORGETTING_REPORT}" \
   --onnx-manifest "${PIPELINE_ROOT}/onnx/exports/onnx_export_manifest.json" \

@@ -28,10 +28,10 @@ def validate_report(path: Path, release_id: str, dataset: str) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate the MSMT17 v2 evaluation output.")
+    parser = argparse.ArgumentParser(description="Validate the DukeMTMC-reID v2 evaluation output.")
     parser.add_argument("--report", required=True)
     parser.add_argument("--release-id", required=True)
-    parser.add_argument("--dataset", default="msmt17")
+    parser.add_argument("--dataset", default="duke")
     args = parser.parse_args()
     try:
         report = validate_report(Path(args.report), args.release_id, args.dataset)

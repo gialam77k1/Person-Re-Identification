@@ -48,7 +48,7 @@ class ControlSettings:
             database = ROOT / database
         datasets = tuple(
             value.strip()
-            for value in os.getenv("CONTROL_ALLOWED_DATASETS", "MSMT17").split(",")
+            for value in os.getenv("CONTROL_ALLOWED_DATASETS", "dukemtmc-reid").split(",")
             if value.strip()
         )
         if not datasets:

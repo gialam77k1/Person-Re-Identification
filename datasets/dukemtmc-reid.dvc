@@ -1,0 +1,6 @@
+outs:
+- md5: 6f2c045609466b6d941b34c1af197628.dir
+  size: 146128230
+  nfiles: 36415
+  hash: md5
+  path: dukemtmc-reid

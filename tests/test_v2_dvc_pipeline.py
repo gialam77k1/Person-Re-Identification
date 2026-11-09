@@ -19,7 +19,7 @@ class V2DVCPipelineTest(unittest.TestCase):
 
     def test_contains_complete_v2_release_graph(self) -> None:
         expected = {
-            "v2_validate_data", "v2_checkpoint", "v2_evaluate_msmt17",
+            "v2_validate_data", "v2_checkpoint", "v2_evaluate_duke",
             "v2_evaluate_market1501", "v2_export_onnx", "v2_verify_onnx",
             "v2_extract_reference", "v2_validate_release", "v2_package_triton",
         }
@@ -27,7 +27,7 @@ class V2DVCPipelineTest(unittest.TestCase):
 
     def test_export_and_evaluation_do_not_trigger_each_other(self) -> None:
         export_deps = "\n".join(self.pipeline["v2_export_onnx"]["deps"])
-        msmt_deps = "\n".join(self.pipeline["v2_evaluate_msmt17"]["deps"])
+        msmt_deps = "\n".join(self.pipeline["v2_evaluate_duke"]["deps"])
         market_deps = "\n".join(self.pipeline["v2_evaluate_market1501"]["deps"])
         self.assertNotIn("evaluate_", export_deps)
         self.assertNotIn("/onnx/", msmt_deps)

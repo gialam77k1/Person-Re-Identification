@@ -1,10 +1,10 @@
 schema_version: 1
-release_id: market1501-msmt17-vit-bnneck:v2
+release_id: market1501-duke-vit-bnneck:v2
 
 # These thresholds are versioned before v2 evaluation. Do not relax them after
 # inspecting a candidate's results merely to turn a FAIL into a PASS.
 quality:
-  msmt17:
+  duke:
     rank1_min: 0.30
     rank5_min: 0.50
     map_min: 0.15

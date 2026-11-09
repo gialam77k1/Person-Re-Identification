@@ -1,23 +1,23 @@
 schema_version: 1
-policy_name: msmt17-cross-domain-retraining-v1
+policy_name: duke-cross-domain-retraining-v1
 
 candidate:
   base_release_id: market1501-vit-bnneck:v1-dvc
-  target_dataset: msmt17
-  target_dataset_version: MSMT17_V1
+  target_dataset: dukemtmc-reid
+  target_dataset_version: dukemtmc-reid
   target_epochs: 30
 
 evidence:
   require_drift_detected: true
-  minimum_query_samples: 11659
-  minimum_gallery_samples: 82161
+  minimum_query_samples: 2228
+  minimum_gallery_samples: 17661
   minimum_query_coverage: 0.99
   required_embedding_dim: 512
 
 quality:
   retrain_when_any_below:
-    rank1: 0.50
-    mAP: 0.30
+    rank1: 0.80
+    mAP: 0.65
 
 approval:
   manual_approval_required: true

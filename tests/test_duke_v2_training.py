@@ -12,7 +12,7 @@ import torch
 
 from src.models.transfer import is_task_head_parameter, set_vit_lower_blocks_trainable
 from src.train import collect_gpu_telemetry
-from src.validate_msmt17_v2_training import MINIMUM_FREE_BYTES, validate_inputs
+from src.validate_duke_v2_training import MINIMUM_FREE_BYTES, validate_inputs
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,18 +58,19 @@ class FakeModel:
         self.backbone = FakeBackbone()
 
 
-class MSMT17V2TrainingTest(unittest.TestCase):
+class DukeV2TrainingTest(unittest.TestCase):
     def test_cpu_training_telemetry_does_not_require_nvidia_smi(self) -> None:
         self.assertEqual(collect_gpu_telemetry(torch.device("cpu")), {})
 
     def test_config_matches_approved_training_contract(self) -> None:
         config = yaml.safe_load(
-            (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8")
+            (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8")
         )
-        self.assertEqual(config["release"]["id"], "market1501-msmt17-vit-bnneck:v2")
+        self.assertEqual(config["release"]["id"], "market1501-duke-vit-bnneck:v2")
         self.assertEqual(config["release"]["base_release_id"], "market1501-vit-bnneck:v1-dvc")
-        self.assertEqual(config["data"]["expected_train_images"], 30248)
-        self.assertEqual(config["data"]["expected_train_identities"], 1041)
+        self.assertEqual(config["data"]["dataset"]["name"], "dukemtmc-reid")
+        self.assertEqual(config["data"]["expected_train_images"], 16522)
+        self.assertEqual(config["data"]["expected_train_identities"], 702)
         self.assertEqual(config["transfer"]["expected_checkpoint_epoch"], 48)
         self.assertTrue(config["transfer"]["reset_classifier_heads"])
         self.assertFalse(config["model"]["pretrained"])
@@ -83,7 +84,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
         self.assertEqual(config["train"]["scheduler_type"], "cosine")
         self.assertTrue(config["train"]["early_stopping"]["enabled"])
         self.assertEqual(config["train"]["early_stopping"]["patience"], 5)
-        self.assertEqual(config["evaluation"]["query_batch_size"], 32)
+        self.assertEqual(config["evaluation"]["query_batch_size"], 64)
 
     def test_progressive_phase_freezes_only_lower_vit_blocks(self) -> None:
         model = FakeModel()
@@ -108,47 +109,54 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             root = Path(directory)
             decision = root / "decision.json"
             checkpoint = root / "best_model.pth"
-            dataset = root / "MSMT17_V1"
-            dataset.mkdir()
+            dataset = root / "dukemtmc-reid"
+            (dataset / "bounding_box_train").mkdir(parents=True)
+            (dataset / "query").mkdir()
+            (dataset / "bounding_box_test").mkdir()
             decision.write_text(
                 json.dumps(
                     {
                         "status": "RETRAIN_APPROVED",
                         "base_release_id": "market1501-vit-bnneck:v1-dvc",
-                        "target_dataset": "msmt17",
-                        "target_dataset_version": "MSMT17_V1",
+                        "target_dataset": "dukemtmc-reid",
+                        "target_dataset_version": "dukemtmc-reid",
                         "target_epochs": 30,
                     }
                 ),
                 encoding="utf-8",
             )
             checkpoint.write_bytes(b"checkpoint")
-            lines = [f"0000_00_00_{index:04d}.jpg {index % 1041}" for index in range(30248)]
-            (dataset / "list_train.txt").write_text("\n".join(lines), encoding="utf-8")
+            train_images = [
+                Path(f"{index % 702:04d}_c{index % 8 + 1}_f{index:07d}.jpg")
+                for index in range(16522)
+            ]
 
-            with patch("src.validate_msmt17_v2_training.shutil.disk_usage") as disk_usage:
+            with patch("src.validate_duke_v2_training.shutil.disk_usage") as disk_usage, patch(
+                "src.validate_duke_v2_training.Path.glob", return_value=train_images
+            ):
                 disk_usage.return_value.free = MINIMUM_FREE_BYTES
                 result = validate_inputs(
                     decision,
                     checkpoint,
                     dataset,
                     root,
-                    ROOT / "configs/msmt17_v2_train.yaml",
+                    ROOT / "configs/duke_v2_train.yaml",
                     require_cuda=False,
                 )
 
             self.assertEqual(result["decision"], "RETRAIN_APPROVED")
             self.assertEqual(result["target_epochs"], 30)
-            self.assertEqual(result["train_images"], 30248)
-            self.assertEqual(result["train_identities"], 1041)
+            self.assertEqual(result["train_images"], 16522)
+            self.assertEqual(result["train_identities"], 702)
+            self.assertEqual(result["train_cameras"], 8)
 
     def test_local_training_script_has_valid_shell_syntax(self) -> None:
         subprocess.run(
-            ["bash", "-n", str(ROOT / "scripts/train_msmt17_v2_local.sh")],
+            ["bash", "-n", str(ROOT / "scripts/train_duke_v2_local.sh")],
             check=True,
         )
         subprocess.run(
-            ["bash", "-n", str(ROOT / "scripts/evaluate_msmt17_v2.sh")],
+            ["bash", "-n", str(ROOT / "scripts/evaluate_duke_v2.sh")],
             check=True,
         )
 
@@ -157,7 +165,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             root = Path(directory)
             decision = root / "decision.json"
             checkpoint = root / "best_model.pth"
-            dataset = root / "MSMT17_V1"
+            dataset = root / "dukemtmc-reid"
             config = root / "config.yaml"
             dataset.mkdir()
             decision.write_text(
@@ -165,8 +173,8 @@ class MSMT17V2TrainingTest(unittest.TestCase):
                     {
                         "status": "RETRAIN_APPROVED",
                         "base_release_id": "market1501-vit-bnneck:v1-dvc",
-                        "target_dataset": "msmt17",
-                        "target_dataset_version": "MSMT17_V1",
+                        "target_dataset": "dukemtmc-reid",
+                        "target_dataset_version": "dukemtmc-reid",
                         "target_epochs": 10,
                     }
                 ),
@@ -174,7 +182,7 @@ class MSMT17V2TrainingTest(unittest.TestCase):
             )
             checkpoint.write_bytes(b"checkpoint")
             config.write_text(
-                (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8"),
+                (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
 
@@ -190,17 +198,17 @@ class MSMT17V2TrainingTest(unittest.TestCase):
 
     def test_preflight_rejects_changed_progressive_unfreeze_contract(self) -> None:
         config = yaml.safe_load(
-            (ROOT / "configs/msmt17_v2_train.yaml").read_text(encoding="utf-8")
+            (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8")
         )
         config["train"]["progressive_unfreeze"]["freeze_lower_blocks"] = 6
         decision = {
             "status": "RETRAIN_APPROVED",
             "base_release_id": "market1501-vit-bnneck:v1-dvc",
-            "target_dataset": "msmt17",
-            "target_dataset_version": "MSMT17_V1",
+            "target_dataset": "dukemtmc-reid",
+            "target_dataset_version": "dukemtmc-reid",
             "target_epochs": 30,
         }
-        from src.validate_msmt17_v2_training import validate_training_contract
+        from src.validate_duke_v2_training import validate_training_contract
 
         with self.assertRaisesRegex(ValueError, "freeze_lower_blocks"):
             validate_training_contract(config, decision)

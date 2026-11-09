@@ -18,10 +18,10 @@ class CycleStoreTest(unittest.TestCase):
 
     def test_cycle_creation_is_idempotent_and_initializes_stages(self) -> None:
         arguments = {
-            "dataset": "MSMT17",
+            "dataset": "dukemtmc-reid",
             "source_release": "market1501-vit-bnneck:v1",
-            "target_release": "market1501-msmt17-vit-bnneck:v2",
-            "idempotency_key": "msmt17-v2-epoch30",
+            "target_release": "market1501-duke-vit-bnneck:v2",
+            "idempotency_key": "duke-v2-epoch30",
             "actor": "gialam77k1",
         }
         first, created = self.store.create_cycle(**arguments)
@@ -36,7 +36,7 @@ class CycleStoreTest(unittest.TestCase):
 
     def test_stage_and_cycle_updates_emit_events(self) -> None:
         cycle, _ = self.store.create_cycle(
-            dataset="MSMT17",
+            dataset="dukemtmc-reid",
             source_release="v1",
             target_release="v2",
             idempotency_key="cycle-2",
@@ -53,7 +53,7 @@ class CycleStoreTest(unittest.TestCase):
 
     def test_retraining_decision_is_persisted_with_checksum(self) -> None:
         cycle, _ = self.store.create_cycle(
-            dataset="MSMT17",
+            dataset="dukemtmc-reid",
             source_release="v1",
             target_release="v2",
             idempotency_key="decision-store",

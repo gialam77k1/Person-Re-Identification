@@ -14,9 +14,9 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def validate_bundle(
-    msmt17: dict[str, Any], market1501: dict[str, Any], gate: dict[str, Any], run: dict[str, Any]
+    duke: dict[str, Any], market1501: dict[str, Any], gate: dict[str, Any], run: dict[str, Any]
 ) -> tuple[str, str]:
-    release_ids = {msmt17.get("release_id"), market1501.get("release_id"), gate.get("release_id")}
+    release_ids = {duke.get("release_id"), market1501.get("release_id"), gate.get("release_id")}
     if len(release_ids) != 1 or None in release_ids:
         raise ValueError("Evaluation bundle contains mismatched release IDs")
     if not run.get("run_id") or not run.get("tracking_uri"):
@@ -30,7 +30,7 @@ def validate_bundle(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--msmt17", required=True)
+    parser.add_argument("--duke", required=True)
     parser.add_argument("--market1501", required=True)
     parser.add_argument("--gate", required=True)
     parser.add_argument("--policy", required=True)
@@ -38,16 +38,16 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     paths = {
-        "msmt17": Path(args.msmt17),
+        "duke": Path(args.duke),
         "market1501": Path(args.market1501),
         "gate": Path(args.gate),
         "policy": Path(args.policy),
     }
-    msmt17 = read_json(paths["msmt17"])
+    duke = read_json(paths["duke"])
     market1501 = read_json(paths["market1501"])
     gate = read_json(paths["gate"])
     run = read_json(Path(args.mlflow_run))
-    run_id, release_id = validate_bundle(msmt17, market1501, gate, run)
+    run_id, release_id = validate_bundle(duke, market1501, gate, run)
 
     import mlflow
     from mlflow import MlflowClient
@@ -55,7 +55,7 @@ def main() -> None:
     mlflow.set_tracking_uri(run["tracking_uri"])
     client = MlflowClient()
     client.get_run(run_id)
-    for dataset, report in (("msmt17", msmt17), ("market1501", market1501)):
+    for dataset, report in (("duke", duke), ("market1501", market1501)):
         for metric in METRICS:
             client.log_metric(run_id, f"evaluation.{dataset}.{metric}", float(report[metric]))
         client.log_metric(run_id, f"evaluation.{dataset}.query_count", float(report["query_count"]))
