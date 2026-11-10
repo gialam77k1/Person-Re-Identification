@@ -298,6 +298,26 @@ class CycleStore:
             )
         return self.get_cycle(cycle_id), True
 
+    def next_inbox_attempt_key(self, fingerprint: str) -> str:
+        """Return a stable, collision-safe key for the next immutable-batch attempt.
+
+        Older deployments used ``inbox:<fingerprint>`` without an attempt suffix.
+        Count that legacy key as attempt 1 so a retry after FAIL/CANCELLED never
+        resolves back to the terminal cycle, while concurrent retries still
+        converge on the same unique key.
+        """
+        base = f"inbox:{fingerprint}"
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS attempts
+                FROM cycles
+                WHERE idempotency_key = ? OR idempotency_key LIKE ?
+                """,
+                (base, f"{base}:attempt:%"),
+            ).fetchone()
+        return f"{base}:attempt:{int(row['attempts']) + 1}"
+
     def list_cycles(self, limit: int = 50) -> list[dict[str, Any]]:
         with self._connect() as connection:
             rows = connection.execute(

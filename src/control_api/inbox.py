@@ -107,7 +107,7 @@ class DataInboxService:
                 dataset=dataset,
                 source_release=release_pair.source,
                 target_release=release_pair.target,
-                idempotency_key=f"inbox:{scan['fingerprint']}",
+                idempotency_key=self.store.next_inbox_attempt_key(scan["fingerprint"]),
                 actor=actor,
                 inbox_batch_id=batch["id"],
                 dataset_revision=scan["fingerprint"],
