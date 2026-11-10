@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.control_api.config import ControlSettings
 from src.control_api.releases import ReleaseResolver, next_release
-from src.control_api.state import StageStatus
+from src.control_api.state import CycleStatus, StageStatus
 from src.control_api.store import CycleStore
 
 
@@ -92,6 +92,20 @@ class ReleaseResolverTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "already belongs to cycle"):
             ReleaseResolver(self.settings, self.store, FakeHttpClient()).resolve()
+
+    def test_cancelled_target_attempt_allows_safe_reuse(self) -> None:
+        cycle, _ = self.store.create_cycle(
+            dataset="dukemtmc-reid",
+            source_release="market1501-vit-bnneck:v1-dvc",
+            target_release="market1501-duke-vit-bnneck:v2",
+            idempotency_key="abandoned-v2",
+            actor="operator",
+        )
+        self.store.update_cycle(cycle["id"], status=CycleStatus.CANCELLED)
+
+        pair = ReleaseResolver(self.settings, self.store, FakeHttpClient()).resolve()
+
+        self.assertEqual(pair.target, "market1501-duke-vit-bnneck:v2")
 
 
 if __name__ == "__main__":

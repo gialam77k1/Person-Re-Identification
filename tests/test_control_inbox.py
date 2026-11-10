@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.control_api.config import ControlSettings
-from src.control_api.inbox import ActiveCycleError, DataInboxService
+from src.control_api.inbox import ActiveCycleError, DataInboxService, InvalidBatchError
 from src.control_api.lifecycle import LifecycleController
 from src.control_api.state import CycleStatus
 from src.control_api.store import CycleStore
@@ -46,8 +46,8 @@ class DataInboxServiceTest(unittest.TestCase):
         )
         self.store = CycleStore(self.settings.database_path)
         self.dispatcher = FakeDispatcher()
-        lifecycle = LifecycleController(self.settings, self.store, self.dispatcher)
-        self.inbox = DataInboxService(self.settings, self.store, lifecycle)
+        self.lifecycle = LifecycleController(self.settings, self.store, self.dispatcher)
+        self.inbox = DataInboxService(self.settings, self.store, self.lifecycle)
         train = self.settings.dataset_root / "dukemtmc-reid" / "bounding_box_train"
         image(train / "0001_c1_f000001.jpg", b"person-1-camera-1")
         image(train / "0001_c2_f000002.jpg", b"person-1-camera-2")
@@ -144,6 +144,36 @@ class DataInboxServiceTest(unittest.TestCase):
             "inbox/november-batch",
             [source["source_path"] for source in self.inbox.discover_sources()],
         )
+
+    def test_blocked_batch_can_retry_after_failed_target_is_abandoned(self) -> None:
+        failed, _ = self.store.create_cycle(
+            dataset="dukemtmc-reid",
+            source_release="market1501-vit-bnneck:v1-dvc",
+            target_release="market1501-duke-vit-bnneck:v2",
+            idempotency_key="failed-target-v2",
+            actor="operator",
+        )
+        self.store.update_cycle(failed["id"], status=CycleStatus.FAIL)
+        with self.assertRaises(InvalidBatchError):
+            self.inbox.import_batch(
+                source_path="dukemtmc-reid/bounding_box_train",
+                dataset="dukemtmc-reid",
+                actor="operator",
+            )
+        blocked = self.store.list_inbox_batches()[0]
+        self.assertEqual(blocked["status"], "BLOCKED")
+
+        self.lifecycle.abandon_failed(failed["id"], "operator")
+        retried, created = self.inbox.import_batch(
+            source_path="dukemtmc-reid/bounding_box_train",
+            dataset="dukemtmc-reid",
+            actor="operator",
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(retried["id"], blocked["id"])
+        self.assertEqual(retried["status"], "DISPATCHED")
+        self.assertIsNotNone(retried["cycle_id"])
 
 
 if __name__ == "__main__":

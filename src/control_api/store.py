@@ -147,8 +147,12 @@ class CycleStore:
     def cycle_for_target_release(self, target_release: str) -> dict[str, Any] | None:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT id FROM cycles WHERE target_release = ? ORDER BY created_at DESC LIMIT 1",
-                (target_release,),
+                """
+                SELECT id FROM cycles
+                WHERE target_release = ? AND status != ?
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (target_release, CycleStatus.CANCELLED.value),
             ).fetchone()
         return self.get_cycle(str(row["id"])) if row else None
 

@@ -204,6 +204,12 @@ def create_app(
     async def rollback(cycle_id: str, request: ActorRequest) -> dict:
         return _lifecycle_action(lifecycle_service.rollback, cycle_id, request.actor)
 
+    @api.post("/control/cycles/{cycle_id}/abandon")
+    async def abandon_failed_cycle(cycle_id: str, request: ActorRequest) -> dict:
+        return _lifecycle_action(
+            lifecycle_service.abandon_failed, cycle_id, request.actor
+        )
+
     @api.post("/control/cycles/{cycle_id}/stages/{stage}")
     async def update_stage(
         cycle_id: str,

@@ -223,6 +223,39 @@ class LifecycleController:
         self.store.record_event(cycle_id, "workflow.dispatched", "Rollback workflow dispatched", dispatch)
         return cycle
 
+    def abandon_failed(self, cycle_id: str, actor: str) -> dict[str, Any]:
+        cycle = self.store.get_cycle(cycle_id)
+        if cycle["status"] != CycleStatus.FAIL.value:
+            raise InvalidTransitionError("Only a failed cycle can be abandoned.")
+        skipped = []
+        for stage in cycle["stages"]:
+            if stage["status"] in {
+                StageStatus.PENDING.value,
+                StageStatus.RUNNING.value,
+                StageStatus.WAITING_APPROVAL.value,
+            }:
+                self.store.update_stage(
+                    cycle_id,
+                    stage["name"],
+                    StageStatus.SKIPPED,
+                    detail=f"Cycle abandoned by {actor}; previous evidence remains available",
+                )
+                skipped.append(stage["name"])
+        self.store.update_cycle(cycle_id, status=CycleStatus.CANCELLED)
+        payload = {
+            "target_release": cycle["target_release"],
+            "previous_error": cycle.get("error"),
+            "skipped_stages": skipped,
+        }
+        self.store.audit(cycle_id, "cycle.abandon_failed", actor, payload)
+        self.store.record_event(
+            cycle_id,
+            "cycle.abandoned",
+            f"Failed cycle abandoned by {actor}; target release unlocked",
+            payload,
+        )
+        return self.store.get_cycle(cycle_id)
+
     @staticmethod
     def _stage(cycle: dict[str, Any], name: str) -> dict[str, Any]:
         return next(stage for stage in cycle["stages"] if stage["name"] == name)

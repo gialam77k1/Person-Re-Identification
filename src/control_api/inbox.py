@@ -82,6 +82,18 @@ class DataInboxService:
                 },
             }
         )
+        if (
+            not created
+            and batch["status"] in {"BLOCKED", "FAILED"}
+            and not batch.get("cycle_id")
+        ):
+            # A release collision or transient dispatch error may be resolved by
+            # the operator. Reuse the immutable batch record and fingerprint,
+            # but allow the lifecycle dispatch to be attempted again.
+            batch = self.store.update_inbox_batch(
+                batch["id"], status="VALIDATED", error=None
+            )
+            created = True
         if not created or failures:
             return batch, created
 

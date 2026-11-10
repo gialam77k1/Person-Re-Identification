@@ -156,6 +156,27 @@ class LifecycleControllerTest(unittest.TestCase):
             self.lifecycle.approve_retraining(cycle["id"], "reviewer")
         self.assertEqual(len(self.dispatcher.calls), 1)
 
+    def test_only_failed_cycle_can_be_abandoned_and_audit_is_preserved(self) -> None:
+        cycle, _ = self.lifecycle.start(
+            dataset="dukemtmc-reid", source_release="v1", target_release="v2",
+            idempotency_key="lifecycle-failed", actor="tester",
+        )
+        with self.assertRaisesRegex(InvalidTransitionError, "Only a failed"):
+            self.lifecycle.abandon_failed(cycle["id"], "operator")
+        self.store.update_stage(
+            cycle["id"], "validate_data", StageStatus.FAIL, detail="broken"
+        )
+        self.store.update_cycle(cycle["id"], status=CycleStatus.FAIL, error="broken")
+
+        abandoned = self.lifecycle.abandon_failed(cycle["id"], "operator")
+
+        self.assertEqual(abandoned["status"], CycleStatus.CANCELLED.value)
+        validate = next(stage for stage in abandoned["stages"] if stage["name"] == "validate_data")
+        pending = next(stage for stage in abandoned["stages"] if stage["name"] == "extract_embeddings")
+        self.assertEqual(validate["status"], StageStatus.FAIL.value)
+        self.assertEqual(pending["status"], StageStatus.SKIPPED.value)
+        self.assertTrue(any(event["kind"] == "cycle.abandoned" for event in self.store.events(cycle["id"])))
+
 
 if __name__ == "__main__":
     unittest.main()

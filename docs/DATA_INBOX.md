@@ -77,3 +77,8 @@ Candidate chưa promote không được dùng làm base. Hệ thống cũng ch�
 tránh ghi đè checkpoint/artifact. Runner lấy checkpoint champion theo release ID từ MLflow, tạo
 runtime config và đường dẫn DVC/MinIO riêng cho target version. Tên stage nội bộ `train_v2` và
 `evaluate_v2` được giữ để tương thích database cũ; UI luôn hiển thị source/target thực tế của cycle.
+
+Nếu một cycle đã `FAIL`, target release vẫn bị khóa để người vận hành không vô tình che mất lỗi bằng
+một run mới. Trên Pipeline, bấm **Abandon failed attempt** để chuyển cycle sang `CANCELLED`; log,
+evidence và audit cũ vẫn được giữ. Sau đó import lại batch đang `BLOCKED`. Data Inbox tái sử dụng đúng
+batch fingerprint và tạo cycle mới, thay vì nhân đôi dữ liệu hoặc sửa database thủ công.

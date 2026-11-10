@@ -129,7 +129,7 @@ export function PipelineControl() {
     finally { setBusy(false); }
   }
 
-  async function action(name: "approve-retraining" | "promote" | "rollback", prompt: string) {
+  async function action(name: "approve-retraining" | "promote" | "rollback" | "abandon", prompt: string) {
     if (!cycle || !window.confirm(prompt)) return;
     await perform(async () => {
       const updated = await jsonRequest<Cycle>(`/control/cycles/${cycle.id}/${name}`, { method: "POST", body: JSON.stringify({ actor }) });
@@ -158,6 +158,7 @@ export function PipelineControl() {
               <button disabled={!canApprove || busy || !evaluationEvidence} onClick={() => action("approve-retraining", `Phê duyệt retraining ${cycle?.target_release ?? "model kế tiếp"}?\n\nSource mAP: ${percent(evaluationEvidence?.mAP)}\nSource Rank-1: ${percent(evaluationEvidence?.rank1)}\nDrift: ${String(driftEvidence?.drift_detected ?? "unknown")}\n\n${approvalReason}`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
               <button disabled={!canPromote || busy} onClick={() => action("promote", "Promote model candidate lên production?")} className="rounded-lg border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-bold text-teal-100 disabled:cursor-not-allowed disabled:opacity-30">Promote to Production</button>
               <button disabled={!cycle || busy} onClick={() => action("rollback", `Rollback production về ${cycle?.source_release ?? "model trước"}?`)} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback previous</button>
+              {cycle?.status === "FAIL" && <button disabled={busy} onClick={() => action("abandon", `Đóng cycle lỗi ${cycle.id.slice(0, 8)} và mở khóa ${cycle.target_release}?\n\nLog, evidence và audit cũ vẫn được giữ. Sau đó bạn có thể quay lại Data Inbox và import lại batch.`)} className="rounded-lg border border-slate-500/40 bg-slate-500/10 px-4 py-3 text-sm font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-30">Abandon failed attempt</button>}
             </div>
           </section>
           <section className="panel overflow-hidden rounded-2xl p-5">
