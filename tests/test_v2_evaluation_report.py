@@ -18,6 +18,8 @@ class V2EvaluationReportTest(unittest.TestCase):
             "dataset": "dukemtmc-reid",
             "rank1": 0.5,
             "rank5": 0.7,
+            "rank10": 0.8,
+            "rank20": 0.9,
             "mAP": 0.4,
             "mINP": 0.2,
             "valid_queries": 100,

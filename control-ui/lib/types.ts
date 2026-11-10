@@ -77,15 +77,31 @@ export type EvaluationVersion = {
   metrics: {
     rank1?: number | null;
     rank5?: number | null;
+    rank10?: number | null;
+    rank20?: number | null;
     mAP?: number | null;
     mINP?: number | null;
     query_count?: number | null;
     gallery_count?: number | null;
   };
+  primary_protocol: "base" | "reranked";
+  protocols: {
+    base: EvaluationMetricSet;
+    reranked?: EvaluationMetricSet | null;
+  };
   git_commit?: string | null;
   dataset_dvc_revision?: string | null;
   generated_at?: string | null;
   retrieval_preview: RetrievalPreview[];
+};
+
+export type EvaluationMetricSet = {
+  rank1?: number | null;
+  rank5?: number | null;
+  rank10?: number | null;
+  rank20?: number | null;
+  mAP?: number | null;
+  mINP?: number | null;
 };
 
 export type IdentityCameraGroup = {

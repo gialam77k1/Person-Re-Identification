@@ -23,7 +23,8 @@ class V2EvaluationTest(unittest.TestCase):
             path = Path(directory) / "evaluation.json"
             path.write_text(json.dumps({
                 "release_id": "model:v2", "dataset": "dukemtmc-reid", "valid_queries": 10,
-                "rank1": 0.5, "rank5": 0.7, "mAP": 0.4, "mINP": 0.2,
+                "rank1": 0.5, "rank5": 0.7, "rank10": 0.8, "rank20": 0.9,
+                "mAP": 0.4, "mINP": 0.2,
                 **self.lineage(),
             }), encoding="utf-8")
             self.assertEqual(validate_report(path, "model:v2", "dukemtmc-reid")["rank1"], 0.5)
@@ -33,7 +34,8 @@ class V2EvaluationTest(unittest.TestCase):
             path = Path(directory) / "evaluation.json"
             path.write_text(json.dumps({
                 "release_id": "model:v2", "dataset": "dukemtmc-reid", "valid_queries": 10,
-                "rank1": float("nan"), "rank5": 0.7, "mAP": 0.4, "mINP": 0.2,
+                "rank1": float("nan"), "rank5": 0.7, "rank10": 0.8, "rank20": 0.9,
+                "mAP": 0.4, "mINP": 0.2,
                 **self.lineage(),
             }), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "non-finite"):

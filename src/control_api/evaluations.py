@@ -11,6 +11,7 @@ from src.control_api.store import CycleStore
 
 SPLITS = ("query", "bounding_box_test", "bounding_box_train")
 DATASET_DIR_ALIASES = {"market1501": "Market-1501-v15.09.15"}
+RANKING_METRICS = ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")
 
 
 class EvaluationService:
@@ -173,6 +174,10 @@ class EvaluationService:
         seen.add(key)
         dataset = str(report.get("dataset") or self.settings.allowed_datasets[0])
         preview = report.get("retrieval_preview") or self._legacy_preview(report)
+        base_metrics = self._protocol_metrics(report, "base")
+        reranked_metrics = self._protocol_metrics(report, "rerank")
+        primary_protocol = "reranked" if report.get("use_rerank") and reranked_metrics else "base"
+        primary_metrics = reranked_metrics if primary_protocol == "reranked" else base_metrics
         target.append(
             {
                 "release_id": release_id,
@@ -181,12 +186,14 @@ class EvaluationService:
                 "dataset": dataset,
                 "cycle_id": cycle_id,
                 "metrics": {
-                    "rank1": report.get("rank1"),
-                    "rank5": report.get("rank5"),
-                    "mAP": report.get("mAP"),
-                    "mINP": report.get("mINP"),
+                    **primary_metrics,
                     "query_count": report.get("query_count", report.get("num_query_samples")),
                     "gallery_count": report.get("gallery_count", report.get("num_gallery_samples")),
+                },
+                "primary_protocol": primary_protocol,
+                "protocols": {
+                    "base": base_metrics,
+                    "reranked": reranked_metrics or None,
                 },
                 "git_commit": report.get("git_commit"),
                 "dataset_dvc_revision": report.get("dataset_dvc_revision"),
@@ -194,6 +201,20 @@ class EvaluationService:
                 "retrieval_preview": self._normalize_preview(preview),
             }
         )
+
+    @staticmethod
+    def _protocol_metrics(report: dict[str, Any], suffix: str) -> dict[str, Any]:
+        """Return one explicit metric protocol while supporting legacy reports."""
+        result: dict[str, Any] = {}
+        for metric in RANKING_METRICS:
+            suffixed = report.get(f"{metric}_{suffix}")
+            if suffixed is not None:
+                result[metric] = suffixed
+            elif suffix == "base":
+                # Reports without re-ranking predate explicit protocol fields;
+                # their canonical values are base retrieval metrics.
+                result[metric] = report.get(metric)
+        return result
 
     def _report_paths(self) -> list[Path]:
         root = self.settings.evaluation_artifacts_root

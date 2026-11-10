@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-METRICS = ("rank1", "rank5", "mAP", "mINP")
+METRICS = ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -58,9 +58,20 @@ def main() -> None:
     for dataset, report in (("duke", duke), ("market1501", market1501)):
         for metric in METRICS:
             client.log_metric(run_id, f"evaluation.{dataset}.{metric}", float(report[metric]))
+            base_value = report.get(f"{metric}_base")
+            if base_value is not None:
+                client.log_metric(run_id, f"evaluation.{dataset}.base.{metric}", float(base_value))
+            reranked_value = report.get(f"{metric}_rerank")
+            if reranked_value is not None:
+                client.log_metric(run_id, f"evaluation.{dataset}.reranked.{metric}", float(reranked_value))
         client.log_metric(run_id, f"evaluation.{dataset}.query_count", float(report["query_count"]))
         client.log_metric(run_id, f"evaluation.{dataset}.gallery_count", float(report["gallery_count"]))
         client.log_artifact(run_id, str(paths[dataset]), artifact_path=f"evaluation/{dataset}")
+        client.set_tag(
+            run_id,
+            f"evaluation.{dataset}.primary_protocol",
+            "reranked" if report.get("use_rerank") else "base",
+        )
     client.set_tag(run_id, "evaluation.release_id", release_id)
     client.set_tag(run_id, "evaluation.catastrophic_forgetting", gate["status"])
     client.log_metric(run_id, "evaluation.catastrophic_forgetting_passed", 1.0 if gate.get("passed") else 0.0)

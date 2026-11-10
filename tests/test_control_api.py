@@ -231,6 +231,8 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             "dataset": "dukemtmc-reid",
             "rank1": 0.62,
             "rank5": 0.81,
+            "rank10": 0.88,
+            "rank20": 0.93,
             "mAP": 0.37,
             "mINP": 0.21,
             "retrieval_preview": [
@@ -250,6 +252,10 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
 
         payload = (await self.request("GET", "/control/evaluations")).json()
         self.assertEqual(payload["versions"][0]["metrics"]["mAP"], 0.37)
+        self.assertEqual(payload["versions"][0]["metrics"]["rank10"], 0.88)
+        self.assertEqual(payload["versions"][0]["metrics"]["rank20"], 0.93)
+        self.assertEqual(payload["versions"][0]["primary_protocol"], "base")
+        self.assertEqual(payload["versions"][0]["protocols"]["base"]["rank1"], 0.62)
         self.assertEqual(payload["identity_camera_groups"][0]["person_id"], 1)
         self.assertEqual(payload["identity_camera_groups"][0]["camera_count"], 2)
         self.assertEqual(
