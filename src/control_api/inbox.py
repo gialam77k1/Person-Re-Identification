@@ -8,6 +8,7 @@ from typing import Any
 
 from src.control_api.config import ControlSettings
 from src.control_api.lifecycle import LifecycleController
+from src.control_api.releases import ReleaseResolver
 from src.control_api.store import CycleStore
 
 
@@ -38,10 +39,12 @@ class DataInboxService:
         settings: ControlSettings,
         store: CycleStore,
         lifecycle: LifecycleController,
+        releases: ReleaseResolver | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.lifecycle = lifecycle
+        self.releases = releases or ReleaseResolver(settings, store)
 
     def import_batch(
         self, *, source_path: str, dataset: str, actor: str
@@ -83,10 +86,15 @@ class DataInboxService:
             return batch, created
 
         try:
+            release_pair = self.releases.resolve()
+        except ValueError as exc:
+            self.store.update_inbox_batch(batch["id"], status="BLOCKED", error=str(exc))
+            raise InvalidBatchError(str(exc)) from exc
+        try:
             cycle, _ = self.lifecycle.start(
                 dataset=dataset,
-                source_release=self.settings.inbox_source_release,
-                target_release=self.settings.inbox_target_release,
+                source_release=release_pair.source,
+                target_release=release_pair.target,
                 idempotency_key=f"inbox:{scan['fingerprint']}",
                 actor=actor,
                 inbox_batch_id=batch["id"],
@@ -96,6 +104,16 @@ class DataInboxService:
         except Exception as exc:
             self.store.update_inbox_batch(batch["id"], status="FAILED", error=str(exc))
             raise
+        self.store.record_event(
+            cycle["id"],
+            "release.resolved",
+            "Source champion and next target release resolved",
+            {
+                "source_release": release_pair.source,
+                "target_release": release_pair.target,
+                "source_kind": release_pair.source_kind,
+            },
+        )
         return (
             self.store.update_inbox_batch(
                 batch["id"], status="DISPATCHED", cycle_id=cycle["id"]

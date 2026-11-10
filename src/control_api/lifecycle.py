@@ -9,6 +9,7 @@ from src.control_api.approval import create_approved_decision, load_policy
 from src.control_api.config import ControlSettings
 from src.control_api.state import CycleStatus, StageStatus
 from src.control_api.store import CycleStore
+from src.control_api.releases import release_slug
 
 
 class Dispatcher(Protocol):
@@ -61,6 +62,7 @@ class LifecycleController:
                     "dataset": dataset,
                     "sample_size": "1000",
                     "release_id": source_release,
+                    "release_slug": release_slug(source_release),
                     "inbox_batch_id": inbox_batch_id or "",
                     "dataset_revision": dataset_revision or "",
                     "dataset_path": dataset_path or "",
@@ -113,6 +115,7 @@ class LifecycleController:
                 cycle_id=cycle_id,
                 actor=actor,
                 source_release=cycle["source_release"],
+                target_release=cycle["target_release"],
                 dataset=cycle["dataset"],
                 evidence_run_id=str(evidence["workflow_run_id"]),
                 evidence_artifact=str(evidence["artifact_name"]),
@@ -191,11 +194,12 @@ class LifecycleController:
 
     def promote(self, cycle_id: str, actor: str) -> dict[str, Any]:
         cycle = self.store.get_cycle(cycle_id)
-        if self._stage(cycle, "staging_test")["status"] != StageStatus.PASS.value:
-            raise InvalidTransitionError("Staging test must PASS before production promotion.")
+        if self._stage(cycle, "register_candidate")["status"] != StageStatus.PASS.value:
+            raise InvalidTransitionError("A validated MLflow candidate is required before release.")
         dispatch = self.dispatcher.dispatch(
             self.settings.release_workflow,
             {
+                "cycle_id": cycle_id,
                 "release_id": cycle["target_release"],
                 "release_slug": cycle["target_release"].replace(":", "-").replace("_", "-"),
             },

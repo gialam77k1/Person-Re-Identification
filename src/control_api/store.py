@@ -128,6 +128,30 @@ class CycleStore:
             ).fetchone()
         return self.get_cycle(str(row["id"])) if row else None
 
+    def latest_promoted_release(self) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT cycles.target_release
+                FROM cycles
+                JOIN stages ON stages.cycle_id = cycles.id
+                WHERE stages.name = 'production_approval'
+                  AND stages.status = ?
+                ORDER BY COALESCE(stages.finished_at, cycles.updated_at) DESC
+                LIMIT 1
+                """,
+                (StageStatus.PASS.value,),
+            ).fetchone()
+        return str(row["target_release"]) if row else None
+
+    def cycle_for_target_release(self, target_release: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT id FROM cycles WHERE target_release = ? ORDER BY created_at DESC LIMIT 1",
+                (target_release,),
+            ).fetchone()
+        return self.get_cycle(str(row["id"])) if row else None
+
     def create_inbox_batch(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         now = utc_now()
         batch_id = str(uuid.uuid4())

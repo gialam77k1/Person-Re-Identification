@@ -42,6 +42,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             inbox_min_valid_images=1,
             inbox_min_identities=1,
             inbox_min_cameras=1,
+            registry_model_name="",
         )
         query_dir = settings.dataset_root / "dukemtmc-reid" / "query"
         query_dir.mkdir(parents=True)

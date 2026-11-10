@@ -46,7 +46,7 @@ class ControlApprovalTest(unittest.TestCase):
     def test_backend_creates_approved_decision_with_auditable_evidence(self) -> None:
         decision = create_approved_decision(
             files=self.files(), policy=self.policy, cycle_id="cycle-1", actor="reviewer",
-            source_release=self.release, dataset="dukemtmc-reid", evidence_run_id="123",
+        source_release=self.release, target_release="market1501-duke-vit-bnneck:v2", dataset="dukemtmc-reid", evidence_run_id="123",
             evidence_artifact="mlops-evidence-cycle-1",
         )
         self.assertEqual(decision["status"], "RETRAIN_APPROVED")
@@ -60,7 +60,7 @@ class ControlApprovalTest(unittest.TestCase):
         with self.assertRaisesRegex(ApprovalEvidenceError, "checksum"):
             create_approved_decision(
                 files=files, policy=self.policy, cycle_id="cycle-1", actor="reviewer",
-                source_release=self.release, dataset="dukemtmc-reid", evidence_run_id="123",
+            source_release=self.release, target_release="market1501-duke-vit-bnneck:v2", dataset="dukemtmc-reid", evidence_run_id="123",
                 evidence_artifact="mlops-evidence-cycle-1",
             )
 

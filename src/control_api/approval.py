@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,7 @@ def create_approved_decision(
     cycle_id: str,
     actor: str,
     source_release: str,
+    target_release: str,
     dataset: str,
     evidence_run_id: str,
     evidence_artifact: str,
@@ -64,7 +66,9 @@ def create_approved_decision(
         content = bundle.get(name)
         if content is None or sha256_bytes(content) != spec.get("sha256"):
             raise ApprovalEvidenceError(f"Evidence checksum mismatch for {role}.")
-    decision = build_retraining_decision(drift, evaluation, policy, actor)
+    effective_policy = copy.deepcopy(policy)
+    effective_policy.setdefault("candidate", {})["base_release_id"] = source_release
+    decision = build_retraining_decision(drift, evaluation, effective_policy, actor)
     if decision.get("status") != "RETRAIN_APPROVED":
         raise ApprovalEvidenceError(
             f"Decision gate returned {decision.get('status')}, retraining remains blocked."
@@ -73,6 +77,7 @@ def create_approved_decision(
     decision.update(
         {
             "cycle_id": cycle_id,
+            "target_release_id": target_release,
             "approved_at": approved_at,
             "evidence": {
                 "workflow_run_id": str(evidence_run_id),

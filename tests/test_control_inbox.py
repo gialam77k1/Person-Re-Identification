@@ -42,6 +42,7 @@ class DataInboxServiceTest(unittest.TestCase):
             inbox_min_valid_images=3,
             inbox_min_identities=2,
             inbox_min_cameras=2,
+            registry_model_name="",
         )
         self.store = CycleStore(self.settings.database_path)
         self.dispatcher = FakeDispatcher()

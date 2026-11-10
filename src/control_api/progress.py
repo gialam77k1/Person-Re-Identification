@@ -61,6 +61,14 @@ class ProgressService:
                 detail="Staging passed; production approval required",
             )
             return self.store.update_cycle(cycle_id, status=CycleStatus.WAITING_APPROVAL)
+        if stage == "register_candidate" and status == StageStatus.PASS:
+            self.store.update_stage(
+                cycle_id,
+                "production_approval",
+                StageStatus.WAITING_APPROVAL,
+                detail="Validated candidate is ready for staging and production approval",
+            )
+            return self.store.update_cycle(cycle_id, status=CycleStatus.WAITING_APPROVAL)
         if stage == "production_approval" and status == StageStatus.PASS:
             return self.store.update_cycle(cycle_id, status=CycleStatus.PASS)
         if status == StageStatus.RUNNING:
