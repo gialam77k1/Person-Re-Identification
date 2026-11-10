@@ -98,6 +98,12 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         ):
             self.assertIn(f"python -m src.{module}", self.text)
 
+    def test_runner_context_is_not_used_in_job_level_environment(self) -> None:
+        job_environment = self.text.split("    steps:", 1)[0]
+        self.assertNotIn("runner.temp", job_environment)
+        self.assertNotIn("${{ runner.temp }}", self.text)
+        self.assertIn('base_checkpoint="${RUNNER_TEMP}/reid-base-', self.text)
+
 
 if __name__ == "__main__":
     unittest.main()
