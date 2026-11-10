@@ -128,6 +128,8 @@ def main() -> int:
     if run.info.status != "FINISHED":
         raise ValueError(f"MLflow run {run_id} is not FINISHED: {run.info.status}")
     for path in (manifest_path, validation_path, publication_path):
+        client.log_artifact(run_id, str(path), artifact_path="registry/release")
+        # Retain the original location for already-deployed v2 consumers.
         client.log_artifact(run_id, str(path), artifact_path="registry/v2")
     client.set_tag(run_id, "registry.candidate.release_id", release_id)
     client.set_tag(run_id, "registry.candidate.validation", "PASS")

@@ -1,7 +1,7 @@
 # MLOps Control Center
 
-Control Center là giao diện vận hành local cho toàn bộ vòng đời model v1 → v2. Người vận hành chọn
-dataset, bấm `Start MLOps lifecycle`, theo dõi timeline/metrics/log và thực hiện approval, promotion
+Control Center là giao diện vận hành local cho toàn bộ vòng đời lặp model vN → vN+1. Người vận hành import
+batch trong Data Inbox, theo dõi timeline/metrics/log và thực hiện approval, promotion
 hoặc rollback trên web; không phải chạy script bằng terminal trong luồng vận hành bình thường.
 
 ## Thành phần
@@ -15,7 +15,7 @@ hoặc rollback trên web; không phải chạy script bằng terminal trong lu�
 Một cycle gồm hai workflow phía sau:
 
 ```text
-Start
+Import immutable batch
   → cross-domain-drift.yml
   → validate / embeddings / drift / evaluate-v1
   → WAITING_APPROVAL
@@ -51,6 +51,7 @@ Sao chép `.env.mlops.example` thành `.env.mlops` và thay mọi giá trị `ch
 
 - `CONTROL_GITHUB_TOKEN`: fine-grained PAT chỉ cấp quyền Actions read/write cho repository này.
 - `CONTROL_CALLBACK_TOKEN`: chuỗi ngẫu nhiên dài, dùng xác thực callback từ runner.
+- `CONTROL_HOST_DATASET_ROOT`: đường dẫn tuyệt đối tới `datasets/` trên máy self-hosted runner.
 - Không dùng token GitHub ở frontend và không commit `.env.mlops`.
 
 Tạo GitHub Actions secret `CONTROL_CALLBACK_TOKEN` có cùng giá trị với `.env.mlops`. Tạo repository
@@ -64,7 +65,7 @@ docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
 curl --fail http://localhost:8090/health
 ```
 
-Mở `http://localhost:3001`, chọn **DukeMTMC-reID** và bấm `Start MLOps lifecycle`.
+Mở `http://localhost:3001/inbox`, chọn batch đã phát hiện và bấm `Import selected batch`.
 
 ## API
 
@@ -72,6 +73,8 @@ Mở `http://localhost:3001`, chọn **DukeMTMC-reID** và bấm `Start MLOps li
 |---|---|---|
 | `GET` | `/control/overview` | Tổng hợp health, model, collection, drift và cycle gần nhất |
 | `GET` | `/control/services` | Trạng thái và public link của các service |
+| `GET` | `/control/inbox` | Batch history, source phát hiện và policy validation |
+| `POST` | `/control/inbox/import` | Validate batch, chống trùng và tự tạo cycle |
 | `GET` | `/control/cycles` | Danh sách cycle |
 | `GET` | `/control/cycles/{id}` | Timeline bền vững của một cycle |
 | `GET` | `/control/cycles/{id}/events` | Event và metrics phục vụ live polling |
@@ -86,7 +89,7 @@ Mở `http://localhost:3001`, chọn **DukeMTMC-reID** và bấm `Start MLOps li
 ## Quy tắc vận hành
 
 - Đóng trình duyệt không dừng cycle; state nằm ở backend và runner.
-- Start dùng idempotency key nên không dispatch trùng cycle cùng dataset/ngày/release.
+- Fingerprint batch là idempotency key nên cùng dữ liệu/manifest không thể dispatch hai lần.
 - Approval chỉ bật ở `WAITING_APPROVAL`.
 - Approval bị từ chối nếu cycle không có workflow run ID và evidence artifact bất biến.
 - UI hiển thị drift/evaluation evidence trước khi bật nút approval và decision SHA256 sau khi duyệt.

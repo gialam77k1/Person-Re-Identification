@@ -9,10 +9,10 @@ const labels: Record<string, string> = {
   validate_data: "Validate dataset",
   extract_embeddings: "Extract current embeddings",
   detect_drift: "Detect drift",
-  evaluate_v1: "Evaluate model v1",
+  evaluate_v1: "Evaluate source champion",
   retraining_approval: "Retraining approval",
-  train_v2: "Train model v2",
-  evaluate_v2: "Evaluate model v2",
+  train_v2: "Train next candidate",
+  evaluate_v2: "Evaluate next candidate",
   validate_release: "Validation gate",
   export_onnx: "Export ONNX & verify parity",
   publish_artifacts: "Publish artifacts to DVC / MinIO",
@@ -32,13 +32,18 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-function StageRow({ stage }: { stage: Stage }) {
+function releaseVersion(release?: string) {
+  const version = release?.match(/:v(\d+)/)?.[1];
+  return version ? `v${version}` : release ?? "model";
+}
+
+function StageRow({ stage, cycle }: { stage: Stage; cycle: Cycle }) {
   const symbol = stage.status === "PASS" ? "✓" : stage.status === "FAIL" ? "×" : stage.status === "RUNNING" ? "●" : stage.status === "WAITING_APPROVAL" ? "!" : "○";
   const color = stage.status === "PASS" ? "text-teal-300" : stage.status === "FAIL" ? "text-rose-300" : stage.status === "RUNNING" ? "text-sky-300" : stage.status === "WAITING_APPROVAL" ? "text-amber-300" : "text-slate-600";
   return (
     <li className="relative grid grid-cols-[2rem_1fr_auto] gap-3 pb-6 last:pb-0">
       <div className={`relative z-10 grid h-8 w-8 place-items-center rounded-full border border-current bg-[#101b28] font-black ${color}`}>{symbol}</div>
-      <div className="pt-1"><p className="text-sm font-bold">{labels[stage.name] ?? stage.name}</p>{stage.detail && <p className="mt-1 text-xs text-slate-500">{stage.detail}</p>}{stage.status === "RUNNING" && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${Math.max(4, stage.progress * 100)}%` }} /></div>}</div>
+      <div className="pt-1"><p className="text-sm font-bold">{stage.name === "evaluate_v1" ? `Evaluate ${releaseVersion(cycle.source_release)}` : stage.name === "train_v2" ? `Train ${releaseVersion(cycle.target_release)}` : stage.name === "evaluate_v2" ? `Evaluate ${releaseVersion(cycle.target_release)}` : labels[stage.name] ?? stage.name}</p>{stage.detail && <p className="mt-1 text-xs text-slate-500">{stage.detail}</p>}{stage.status === "RUNNING" && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${Math.max(4, stage.progress * 100)}%` }} /></div>}</div>
       <div className="pt-1"><StatusPill status={stage.status} /></div>
       {stage.name !== "production_approval" && <span className="absolute left-[15px] top-8 h-[calc(100%-1.4rem)] w-px bg-slate-800" />}
     </li>
@@ -49,12 +54,21 @@ function metricText(value: unknown, digits = 4) {
   return typeof value === "number" ? value.toFixed(digits) : String(value ?? "—");
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function percent(value: unknown) {
+  return typeof value === "number" ? `${(value * 100).toFixed(2)}%` : "—";
+}
+
 export function PipelineControl() {
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [activeId, setActiveId] = useState("");
   const [cycle, setCycle] = useState<Cycle | null>(null);
   const [events, setEvents] = useState<CycleEvent[]>([]);
-  const [dataset, setDataset] = useState("dukemtmc-reid");
   const [actor, setActor] = useState("gialam77k1");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -97,9 +111,16 @@ export function PipelineControl() {
   const reviewEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "evaluate_v1").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
   const approvedDecision = useMemo(() => events.filter((event) => event.kind === "retraining.decision_created").at(-1)?.payload, [events]);
   const driftChecks = driftEvidence?.checks as Record<string, { value: number; maximum: number; passed: boolean }> | undefined;
+  const evaluationEvidence = record(reviewEvidence?.evaluation);
+  const qualityChecks = record(reviewEvidence?.quality_checks) as Record<string, { actual?: number; retrain_below?: number; triggered?: boolean }> | undefined;
+  const evidenceChecks = record(reviewEvidence?.evidence_checks) as Record<string, { actual?: unknown; expected?: unknown; passed?: boolean }> | undefined;
+  const triggeredQuality = qualityChecks ? Object.entries(qualityChecks).filter(([, check]) => check.triggered) : [];
+  const approvalReason = driftEvidence?.drift_detected === true && triggeredQuality.length
+    ? `Drift đã được phát hiện và ${triggeredQuality.map(([name, check]) => `${name} ${percent(check.actual)} thấp hơn ngưỡng ${percent(check.retrain_below)}`).join(", ")}.`
+    : "Chỉ phê duyệt khi drift và chất lượng source champion đã được kiểm chứng bằng report đầy đủ.";
   const stage = (name: string) => cycle?.stages.find((item) => item.name === name);
   const canApprove = cycle?.status === "WAITING_APPROVAL" && stage("retraining_approval")?.status === "WAITING_APPROVAL";
-  const canPromote = cycle?.status === "WAITING_APPROVAL" && stage("staging_test")?.status === "PASS";
+  const canPromote = cycle?.status === "WAITING_APPROVAL" && stage("register_candidate")?.status === "PASS";
 
   async function perform(callback: () => Promise<void>) {
     setBusy(true); setError("");
@@ -108,18 +129,7 @@ export function PipelineControl() {
     finally { setBusy(false); }
   }
 
-  async function start() {
-    await perform(async () => {
-      // A deliberate Start creates a new lifecycle cycle. The busy state still
-      // protects the same click from being submitted twice, while the UUID
-      // prevents a failed cycle from being returned for every retry that day.
-      const idempotency = `${dataset.toLowerCase()}-${new Date().toISOString()}-${crypto.randomUUID()}`;
-      const response = await jsonRequest<{ cycle: Cycle }>("/control/cycles", { method: "POST", body: JSON.stringify({ dataset, actor, idempotency_key: idempotency }) });
-      setActiveId(response.cycle.id); setCycle(response.cycle);
-    });
-  }
-
-  async function action(name: "approve-retraining" | "promote" | "rollback", prompt: string) {
+  async function action(name: "approve-retraining" | "promote" | "rollback" | "abandon", prompt: string) {
     if (!cycle || !window.confirm(prompt)) return;
     await perform(async () => {
       const updated = await jsonRequest<Cycle>(`/control/cycles/${cycle.id}/${name}`, { method: "POST", body: JSON.stringify({ actor }) });
@@ -129,37 +139,31 @@ export function PipelineControl() {
 
   return (
     <div>
-      <section className="panel mt-7 rounded-2xl p-5">
-        <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-          <label className="text-xs font-bold text-slate-400">Dataset<select value={dataset} onChange={(event) => setDataset(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-3 text-sm text-white"><option value="dukemtmc-reid">DukeMTMC-reID</option></select></label>
-          <label className="text-xs font-bold text-slate-400">Operator<input value={actor} onChange={(event) => setActor(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-3 text-sm text-white" /></label>
-          <button onClick={start} disabled={busy || !actor.trim()} className="rounded-lg bg-teal-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:opacity-40">{busy ? "PROCESSING…" : "START MLOPS LIFECYCLE"}</button>
-        </div>
-        {error && <p role="alert" className="mt-4 rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-      </section>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_0.65fr]">
+      {error && <p role="alert" className="mt-7 rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+      <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_0.65fr]">
         <section className="panel rounded-2xl p-6">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-center">
-            <div><p className="eyebrow">Lifecycle timeline</p><h2 className="mt-2 text-xl font-bold">Model v1 → model v2</h2></div>
+            <div><p className="eyebrow">Lifecycle timeline</p><h2 className="mt-2 text-xl font-bold">{cycle ? `${releaseVersion(cycle.source_release)} → ${releaseVersion(cycle.target_release)}` : "Champion → next version"}</h2></div>
             <select value={activeId} onChange={(event) => setActiveId(event.target.value)} className="max-w-xs rounded-lg border border-slate-700 bg-[#09111b] px-3 py-2 text-xs text-slate-300"><option value="">Select cycle</option>{cycles.map((item) => <option key={item.id} value={item.id}>{item.dataset} · {item.status} · {item.id.slice(0, 8)}</option>)}</select>
           </div>
-          {cycle ? <ol className="mt-6">{cycle.stages.map((item) => <StageRow key={item.name} stage={item} />)}</ol> : <p className="mt-8 text-sm text-slate-500">Bấm Start để tạo cycle đầu tiên.</p>}
+          {cycle ? <ol className="mt-6">{cycle.stages.map((item) => <StageRow key={item.name} stage={item} cycle={cycle} />)}</ol> : <p className="mt-8 text-sm text-slate-500">Import batch hợp lệ trong Data Inbox để tạo cycle đầu tiên.</p>}
         </section>
 
         <aside className="space-y-6">
           <section className="panel rounded-2xl p-5">
             <div className="flex items-center justify-between"><p className="eyebrow">Cycle control</p>{cycle && <StatusPill status={cycle.status} />}</div>
             {cycle && <p className="mt-3 break-all font-mono text-[11px] text-slate-500">{cycle.id}</p>}
+            <label className="mt-4 block text-xs font-bold text-slate-400">Operator<input value={actor} onChange={(event) => setActor(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-2 text-sm text-white" /></label>
             <div className="mt-5 grid gap-2">
-              <button disabled={!canApprove || busy} onClick={() => action("approve-retraining", `Phê duyệt retraining model v2 từ evidence ${String(reviewEvidence?.artifact_name ?? "chưa xác định")}?`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
+              <button disabled={!canApprove || busy || !evaluationEvidence} onClick={() => action("approve-retraining", `Phê duyệt retraining ${cycle?.target_release ?? "model kế tiếp"}?\n\nSource mAP: ${percent(evaluationEvidence?.mAP)}\nSource Rank-1: ${percent(evaluationEvidence?.rank1)}\nDrift: ${String(driftEvidence?.drift_detected ?? "unknown")}\n\n${approvalReason}`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
               <button disabled={!canPromote || busy} onClick={() => action("promote", "Promote model candidate lên production?")} className="rounded-lg border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-bold text-teal-100 disabled:cursor-not-allowed disabled:opacity-30">Promote to Production</button>
-              <button disabled={!cycle || busy} onClick={() => action("rollback", "Rollback production về model v1?")} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback to v1</button>
+              <button disabled={!cycle || busy} onClick={() => action("rollback", `Rollback production về ${cycle?.source_release ?? "model trước"}?`)} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback previous</button>
+              {cycle?.status === "FAIL" && <button disabled={busy} onClick={() => action("abandon", `Đóng cycle lỗi ${cycle.id.slice(0, 8)} và mở khóa ${cycle.target_release}?\n\nLog, evidence và audit cũ vẫn được giữ. Sau đó bạn có thể quay lại Data Inbox và import lại batch.`)} className="rounded-lg border border-slate-500/40 bg-slate-500/10 px-4 py-3 text-sm font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-30">Abandon failed attempt</button>}
             </div>
           </section>
           <section className="panel overflow-hidden rounded-2xl p-5">
             <div className="flex items-center justify-between gap-3">
-              <div><p className="eyebrow">Model v2 training</p><p className="mt-2 text-sm text-slate-400">Self-hosted GPU runner</p></div>
+              <div><p className="eyebrow">{releaseVersion(cycle?.target_release)} training</p><p className="mt-2 text-sm text-slate-400">Self-hosted GPU runner</p></div>
               {stage("train_v2") && <StatusPill status={stage("train_v2")!.status} />}
             </div>
             {trainingMetrics ? <>
@@ -179,6 +183,26 @@ export function PipelineControl() {
           </section>
           <section className="panel rounded-2xl p-5">
             <div className="flex items-center justify-between"><p className="eyebrow">Approval evidence</p>{Boolean(reviewEvidence?.status) && <StatusPill status={String(reviewEvidence?.status)} />}</div>
+            <div className={`mt-4 rounded-xl border p-4 text-sm ${triggeredQuality.length ? "border-amber-300/25 bg-amber-300/5 text-amber-100" : "border-slate-700 bg-[#09111b] text-slate-300"}`}>
+              <p className="font-bold">Vì sao hệ thống đề xuất retraining?</p>
+              <p className="mt-2 leading-6 text-slate-300">{approvalReason}</p>
+              <p className="mt-2 text-xs text-slate-500">Approve sẽ khóa evidence/checksum hiện tại và bắt đầu train {cycle?.target_release ?? "candidate kế tiếp"}; thao tác này không tự promote production.</p>
+            </div>
+            {evaluationEvidence ? <>
+              <p className="mt-5 text-xs font-bold uppercase tracking-wider text-slate-400">Source champion evaluation</p>
+              <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Rank-1</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{percent(evaluationEvidence.rank1)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Rank-5</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{percent(evaluationEvidence.rank5)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">mAP</dt><dd className="mt-1 font-mono text-lg font-bold text-teal-200">{percent(evaluationEvidence.mAP)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">mINP</dt><dd className="mt-1 font-mono text-lg font-bold text-teal-200">{percent(evaluationEvidence.mINP)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Queries</dt><dd className="mt-1 font-mono font-bold">{metricText(evaluationEvidence.num_query_samples ?? evaluationEvidence.query_count, 0)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Gallery</dt><dd className="mt-1 font-mono font-bold">{metricText(evaluationEvidence.num_gallery_samples ?? evaluationEvidence.gallery_count, 0)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Coverage</dt><dd className="mt-1 font-mono font-bold">{percent(evaluationEvidence.query_coverage)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Embedding</dt><dd className="mt-1 font-mono font-bold">{metricText(evaluationEvidence.embedding_dim, 0)}D · {evaluationEvidence.embeddings_finite === true ? "finite" : "invalid"}</dd></div>
+              </dl>
+            </> : <p className="mt-4 rounded-lg border border-amber-300/20 bg-amber-300/5 p-3 text-xs text-amber-200">Chưa nhận được evaluation report nên Approve đang bị khóa.</p>}
+            {qualityChecks && <div className="mt-4 space-y-2"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Quality trigger</p>{Object.entries(qualityChecks).map(([name, check]) => <div key={name} className="flex items-center justify-between gap-3 rounded-lg bg-[#09111b] px-3 py-2 text-xs"><span className="font-semibold">{name}</span><span className={check.triggered ? "font-mono text-amber-300" : "font-mono text-teal-300"}>{percent(check.actual)} / retrain below {percent(check.retrain_below)} · {check.triggered ? "TRIGGERED" : "PASS"}</span></div>)}</div>}
+            {evidenceChecks && <details className="mt-4 rounded-lg border border-slate-800 bg-[#09111b] p-3"><summary className="cursor-pointer text-xs font-bold text-slate-400">Evidence integrity checks</summary><div className="mt-3 space-y-2">{Object.entries(evidenceChecks).map(([name, check]) => <div key={name} className="flex justify-between gap-3 text-[11px]"><span className="text-slate-400">{name}</span><span className={check.passed ? "font-mono text-teal-300" : "font-mono text-rose-300"}>{check.passed ? "PASS" : "FAIL"} · {String(check.actual ?? "—")} / {String(check.expected ?? "—")}</span></div>)}</div></details>}
             {driftEvidence ? <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
               <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Release</dt><dd className="mt-1 break-all font-mono text-sky-200">{String(driftEvidence.release_id)}</dd></div>
               <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Drift</dt><dd className="mt-1 font-mono text-rose-200">{String(driftEvidence.drift_detected)}</dd></div>

@@ -41,7 +41,15 @@ class ControlSettings:
     callback_token: str
     allowed_datasets: tuple[str, ...]
     dataset_root: Path
+    host_dataset_root: Path
     evaluation_artifacts_root: Path
+    inbox_min_valid_images: int
+    inbox_min_identities: int
+    inbox_min_cameras: int
+    inbox_bootstrap_release: str
+    inbox_target_family: str
+    registry_model_name: str
+    registry_champion_alias: str
 
     @classmethod
     def from_env(cls) -> "ControlSettings":
@@ -110,5 +118,24 @@ class ControlSettings:
             ),
             allowed_datasets=datasets,
             dataset_root=dataset_root,
+            host_dataset_root=Path(
+                os.getenv("CONTROL_HOST_DATASET_ROOT", str(dataset_root))
+            ),
             evaluation_artifacts_root=artifacts_root,
+            inbox_min_valid_images=int(os.getenv("CONTROL_INBOX_MIN_VALID_IMAGES", "1000")),
+            inbox_min_identities=int(os.getenv("CONTROL_INBOX_MIN_IDENTITIES", "50")),
+            inbox_min_cameras=int(os.getenv("CONTROL_INBOX_MIN_CAMERAS", "2")),
+            inbox_bootstrap_release=os.getenv(
+                "CONTROL_INBOX_BOOTSTRAP_RELEASE",
+                os.getenv("CONTROL_INBOX_SOURCE_RELEASE", "market1501-vit-bnneck:v1-dvc"),
+            ),
+            inbox_target_family=os.getenv(
+                "CONTROL_INBOX_TARGET_FAMILY", "market1501-duke-vit-bnneck"
+            ),
+            registry_model_name=os.getenv(
+                "CONTROL_REGISTRY_MODEL_NAME", "market1501-duke-vit-bnneck"
+            ),
+            registry_champion_alias=os.getenv(
+                "CONTROL_REGISTRY_CHAMPION_ALIAS", "champion"
+            ),
         )

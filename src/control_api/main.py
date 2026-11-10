@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.control_api.config import ControlSettings
 from src.control_api.evaluations import EvaluationService
 from src.control_api.github_actions import GitHubActionsClient, WorkflowDispatchError
+from src.control_api.inbox import ActiveCycleError, DataInboxService, InvalidBatchError
 from src.control_api.lifecycle import InvalidTransitionError, LifecycleController
 from src.control_api.metrics import render_control_metrics
 from src.control_api.overview import OverviewService
@@ -17,6 +18,8 @@ from src.control_api.schemas import (
     CycleCreate,
     CycleCreateResponse,
     EventListResponse,
+    InboxImportResponse,
+    InboxImportRequest,
     StageUpdateRequest,
 )
 from src.control_api.state import StageStatus
@@ -37,6 +40,7 @@ def create_app(
     )
     progress_service = ProgressService(cycle_store)
     evaluation_service = EvaluationService(configured, cycle_store)
+    inbox_service = DataInboxService(configured, cycle_store, lifecycle_service)
     api = FastAPI(
         title="Person ReID MLOps Control API",
         version="0.1.0",
@@ -76,6 +80,38 @@ def create_app(
     @api.get("/control/evaluations")
     async def get_evaluations() -> dict:
         return evaluation_service.overview()
+
+    @api.get("/control/inbox")
+    async def get_inbox(limit: int = Query(default=25, ge=1, le=100)) -> dict:
+        return {
+            "batches": cycle_store.list_inbox_batches(limit),
+            "sources": inbox_service.discover_sources(),
+            "policy": {
+                "allowed_datasets": list(configured.allowed_datasets),
+                "min_valid_images": configured.inbox_min_valid_images,
+                "min_identities": configured.inbox_min_identities,
+                "min_cameras": configured.inbox_min_cameras,
+            },
+        }
+
+    @api.post("/control/inbox/import", response_model=InboxImportResponse)
+    async def import_batch(request: InboxImportRequest) -> InboxImportResponse:
+        try:
+            batch, created = inbox_service.import_batch(
+                source_path=request.source_path,
+                dataset=request.dataset,
+                actor=request.actor,
+            )
+        except ActiveCycleError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(exc), "cycle_id": exc.cycle["id"]},
+            ) from exc
+        except (FileNotFoundError, InvalidBatchError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except WorkflowDispatchError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return InboxImportResponse(created=created, batch=batch)
 
     @api.get("/control/evaluation-images/{dataset}/{image_path:path}")
     async def get_evaluation_image(dataset: str, image_path: str) -> Response:
@@ -167,6 +203,12 @@ def create_app(
     @api.post("/control/cycles/{cycle_id}/rollback")
     async def rollback(cycle_id: str, request: ActorRequest) -> dict:
         return _lifecycle_action(lifecycle_service.rollback, cycle_id, request.actor)
+
+    @api.post("/control/cycles/{cycle_id}/abandon")
+    async def abandon_failed_cycle(cycle_id: str, request: ActorRequest) -> dict:
+        return _lifecycle_action(
+            lifecycle_service.abandon_failed, cycle_id, request.actor
+        )
 
     @api.post("/control/cycles/{cycle_id}/stages/{stage}")
     async def update_stage(

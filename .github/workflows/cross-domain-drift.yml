@@ -19,6 +19,26 @@ on:
         description: Model release ID
         required: true
         default: market1501-vit-bnneck:v1-dvc
+      release_slug:
+        description: Filesystem-safe source release ID
+        required: true
+        default: market1501-vit-bnneck-v1-dvc
+      inbox_batch_id:
+        description: Data Inbox batch record
+        required: false
+        default: ""
+      dataset_revision:
+        description: Immutable batch fingerprint
+        required: false
+        default: ""
+      dataset_path:
+        description: Batch path relative to CONTROL_HOST_DATASET_ROOT
+        required: false
+        default: ""
+      dataset_host_path:
+        description: Absolute batch path on the self-hosted runner
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -34,6 +54,11 @@ jobs:
     env:
       CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8090' }}
       CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
+      INBOX_BATCH_ID: ${{ inputs.inbox_batch_id }}
+      INBOX_DATASET_REVISION: ${{ inputs.dataset_revision }}
+      INBOX_DATASET_PATH: ${{ inputs.dataset_path }}
+      INBOX_DATASET_HOST_PATH: ${{ inputs.dataset_host_path }}
+      BASE_MANIFEST: ${{ runner.temp }}/reid-source-${{ inputs.cycle_id }}/model_manifest.json
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -42,7 +67,7 @@ jobs:
         run: >-
           test "${{ inputs.dataset }}" = "dukemtmc-reid" &&
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_data RUNNING
-          --detail "Checking DukeMTMC-reID, model v1 and serving stack"
+          --detail "Checking DukeMTMC-reID, source champion and serving stack"
 
       - name: Configure local MLOps credentials
         env:
@@ -54,6 +79,23 @@ jobs:
 
       - name: Verify persistent serving stack
         run: ./scripts/mlops_stack.sh verify
+
+      - name: Materialize source champion manifest
+        run: |
+          mkdir -p "$(dirname "$BASE_MANIFEST")"
+          if [[ '${{ inputs.release_id }}' == market1501-vit-bnneck:v1* ]]; then
+            ./scripts/dvc_local.sh pull validate_release
+            cp artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json "$BASE_MANIFEST"
+          else
+            set -a
+            source .env.mlops
+            set +a
+            conda run --no-capture-output -n reid python -m src.materialize_registry_checkpoint \
+              --release-id '${{ inputs.release_id }}' \
+              --manifest-destination "$BASE_MANIFEST" \
+              --tracking-uri "${MLFLOW_TRACKING_URI:-http://localhost:5000}"
+          fi
+          test -s "$BASE_MANIFEST"
 
       - name: Mark data validation complete
         run: >-
@@ -70,25 +112,34 @@ jobs:
           CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
           SAMPLE_SIZE: ${{ inputs.sample_size }}
           RELEASE_ID: ${{ inputs.release_id }}
+          RELEASE_SLUG: ${{ inputs.release_slug }}
+          MODEL_MANIFEST_PATH: ${{ env.BASE_MANIFEST }}
           LOG_DRIFT_MLFLOW: "1"
-        run: ./scripts/cross_dataset_drift.sh
+        run: |
+          set -a
+          source .env.mlops
+          set +a
+          ./scripts/cross_dataset_drift.sh
 
       - name: Mark drift stages complete
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" extract_embeddings PASS --progress 1 --detail "DukeMTMC-reID embeddings captured"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" detect_drift PASS --progress 1 --detail "Drift detected and recorded in Prometheus/MLflow" --metrics-file artifacts/cross-domain/market1501-v1-on-duke/drift/drift_report.json
 
-      - name: Evaluate model v1 on DukeMTMC-reID
+      - name: Evaluate source champion on DukeMTMC-reID
         env:
           RELEASE_ID: ${{ inputs.release_id }}
+          DATASET_POINTER: ${{ runner.temp }}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc
         run: |
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Running full DukeMTMC-reID deployment evaluation"
+          if [[ -z "${{ inputs.dataset_path }}" ]]; then
+            export DATASET_POINTER=datasets/dukemtmc-reid.dvc
+          fi
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Evaluating source champion ${{ inputs.release_id }} on DukeMTMC-reID"
           ./scripts/evaluate_duke_v1.sh
           ./scripts/retraining_decision.sh
 
       - name: Build immutable retraining evidence
         run: |
-          ./scripts/dvc_local.sh pull validate_release
           python src/retraining_evidence.py build \
             --cycle-id "${{ inputs.cycle_id }}" \
             --release-id "${{ inputs.release_id }}" \
@@ -96,7 +147,7 @@ jobs:
             --drift-report artifacts/cross-domain/market1501-v1-on-duke/drift/drift_report.json \
             --evaluation-report artifacts/cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json \
             --decision artifacts/cross-domain/market1501-v1-on-duke/retraining/decision.json \
-            --base-manifest artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json \
+            --base-manifest "$BASE_MANIFEST" \
             --source-commit "${{ github.sha }}" \
             --workflow-run-id "${{ github.run_id }}" \
             --output artifacts/cross-domain/market1501-v1-on-duke/retraining/bundle/evidence_manifest.json

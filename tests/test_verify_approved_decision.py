@@ -15,6 +15,7 @@ class VerifyApprovedDecisionTest(unittest.TestCase):
             "status": "RETRAIN_APPROVED",
             "cycle_id": "cycle-1",
             "base_release_id": "model:v1",
+            "target_release_id": "model:v2",
             "target_dataset": "dukemtmc-reid",
             "target_epochs": 50,
             "approved_by": "reviewer",
@@ -30,6 +31,7 @@ class VerifyApprovedDecisionTest(unittest.TestCase):
             manifest_sha256=self.manifest_sha,
             cycle_id="cycle-1",
             source_release="model:v1",
+            target_release="model:v2",
             dataset="dukemtmc-reid",
             target_epochs=50,
         )
@@ -44,6 +46,7 @@ class VerifyApprovedDecisionTest(unittest.TestCase):
                 manifest_sha256=self.manifest_sha,
                 cycle_id="cycle-1",
                 source_release="model:v1",
+                target_release="model:v2",
                 dataset="dukemtmc-reid",
                 target_epochs=50,
             )

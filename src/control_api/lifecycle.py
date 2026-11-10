@@ -9,6 +9,7 @@ from src.control_api.approval import create_approved_decision, load_policy
 from src.control_api.config import ControlSettings
 from src.control_api.state import CycleStatus, StageStatus
 from src.control_api.store import CycleStore
+from src.control_api.releases import release_slug
 
 
 class Dispatcher(Protocol):
@@ -36,6 +37,9 @@ class LifecycleController:
         target_release: str,
         idempotency_key: str,
         actor: str,
+        inbox_batch_id: str | None = None,
+        dataset_revision: str | None = None,
+        dataset_path: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         cycle, created = self.store.create_cycle(
             dataset=dataset,
@@ -43,6 +47,9 @@ class LifecycleController:
             target_release=target_release,
             idempotency_key=idempotency_key,
             actor=actor,
+            inbox_batch_id=inbox_batch_id,
+            dataset_revision=dataset_revision,
+            dataset_path=dataset_path,
         )
         if not created:
             return cycle, False
@@ -55,6 +62,15 @@ class LifecycleController:
                     "dataset": dataset,
                     "sample_size": "1000",
                     "release_id": source_release,
+                    "release_slug": release_slug(source_release),
+                    "inbox_batch_id": inbox_batch_id or "",
+                    "dataset_revision": dataset_revision or "",
+                    "dataset_path": dataset_path or "",
+                    "dataset_host_path": (
+                        str(self.settings.host_dataset_root / dataset_path)
+                        if dataset_path
+                        else ""
+                    ),
                 },
             )
         except Exception as exc:
@@ -99,6 +115,7 @@ class LifecycleController:
                 cycle_id=cycle_id,
                 actor=actor,
                 source_release=cycle["source_release"],
+                target_release=cycle["target_release"],
                 dataset=cycle["dataset"],
                 evidence_run_id=str(evidence["workflow_run_id"]),
                 evidence_artifact=str(evidence["artifact_name"]),
@@ -123,6 +140,14 @@ class LifecycleController:
                 "evaluation_report": "evidence/evaluation_report.json",
                 "decision": "evidence/approved_decision.json",
                 "decision_sha256": decision_sha256,
+                "inbox_batch_id": str(cycle.get("inbox_batch_id") or ""),
+                "dataset_revision": str(cycle.get("dataset_revision") or ""),
+                "dataset_path": str(cycle.get("dataset_path") or ""),
+                "dataset_host_path": (
+                    str(self.settings.host_dataset_root / str(cycle["dataset_path"]))
+                    if cycle.get("dataset_path")
+                    else ""
+                ),
             },
         )
         self.store.audit(
@@ -169,11 +194,12 @@ class LifecycleController:
 
     def promote(self, cycle_id: str, actor: str) -> dict[str, Any]:
         cycle = self.store.get_cycle(cycle_id)
-        if self._stage(cycle, "staging_test")["status"] != StageStatus.PASS.value:
-            raise InvalidTransitionError("Staging test must PASS before production promotion.")
+        if self._stage(cycle, "register_candidate")["status"] != StageStatus.PASS.value:
+            raise InvalidTransitionError("A validated MLflow candidate is required before release.")
         dispatch = self.dispatcher.dispatch(
             self.settings.release_workflow,
             {
+                "cycle_id": cycle_id,
                 "release_id": cycle["target_release"],
                 "release_slug": cycle["target_release"].replace(":", "-").replace("_", "-"),
             },
@@ -196,6 +222,39 @@ class LifecycleController:
         self.store.audit(cycle_id, "production.rollback", actor, dispatch)
         self.store.record_event(cycle_id, "workflow.dispatched", "Rollback workflow dispatched", dispatch)
         return cycle
+
+    def abandon_failed(self, cycle_id: str, actor: str) -> dict[str, Any]:
+        cycle = self.store.get_cycle(cycle_id)
+        if cycle["status"] != CycleStatus.FAIL.value:
+            raise InvalidTransitionError("Only a failed cycle can be abandoned.")
+        skipped = []
+        for stage in cycle["stages"]:
+            if stage["status"] in {
+                StageStatus.PENDING.value,
+                StageStatus.RUNNING.value,
+                StageStatus.WAITING_APPROVAL.value,
+            }:
+                self.store.update_stage(
+                    cycle_id,
+                    stage["name"],
+                    StageStatus.SKIPPED,
+                    detail=f"Cycle abandoned by {actor}; previous evidence remains available",
+                )
+                skipped.append(stage["name"])
+        self.store.update_cycle(cycle_id, status=CycleStatus.CANCELLED)
+        payload = {
+            "target_release": cycle["target_release"],
+            "previous_error": cycle.get("error"),
+            "skipped_stages": skipped,
+        }
+        self.store.audit(cycle_id, "cycle.abandon_failed", actor, payload)
+        self.store.record_event(
+            cycle_id,
+            "cycle.abandoned",
+            f"Failed cycle abandoned by {actor}; target release unlocked",
+            payload,
+        )
+        return self.store.get_cycle(cycle_id)
 
     @staticmethod
     def _stage(cycle: dict[str, Any], name: str) -> dict[str, Any]:

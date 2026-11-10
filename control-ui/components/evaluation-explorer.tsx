@@ -138,7 +138,7 @@ export function EvaluationExplorer({
             )}
           </div>
         ) : (
-          <div className="mt-5 rounded-xl border border-amber-300/25 bg-amber-300/5 p-4 text-sm text-amber-200">Chưa có report evaluation. Sau khi lifecycle chạy evaluate v1/v2, kết quả thật sẽ tự xuất hiện tại đây.</div>
+          <div className="mt-5 rounded-xl border border-amber-300/25 bg-amber-300/5 p-4 text-sm text-amber-200">Chưa có report evaluation. Sau khi lifecycle đánh giá source champion và candidate kế tiếp, kết quả thật sẽ tự xuất hiện tại đây.</div>
         )}
       </section>
     </div>

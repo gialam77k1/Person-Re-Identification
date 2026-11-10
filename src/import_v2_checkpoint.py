@@ -56,15 +56,15 @@ def import_checkpoint(
     mlflow_run = read_json(mlflow_run_path)
     transfer = read_json(transfer_report_path)
     data = read_json(data_manifest_path)
-    release_id = "market1501-duke-vit-bnneck:v2"
-    if training.get("release_id") != release_id:
-        raise ValueError("Training metrics do not belong to the v2 release")
+    release_id = str(training.get("release_id") or "")
+    if not release_id:
+        raise ValueError("Training metrics are missing the release ID")
     if mlflow_run.get("status") != "FINISHED" or not mlflow_run.get("run_id"):
         raise ValueError("Training MLflow run must be FINISHED and have a run_id")
-    if int(transfer.get("source_epoch", -1)) != 48:
-        raise ValueError("v2 checkpoint must originate from model v1 epoch 48")
+    if int(transfer.get("source_epoch", -1)) < 1:
+        raise ValueError("Candidate checkpoint must originate from a valid champion epoch")
     if transfer.get("reset_classifier_heads") is not True:
-        raise ValueError("v2 training did not reset the Market-1501 classifier")
+        raise ValueError("Iterative retraining did not reset the classifier")
     if data.get("passed") is not True:
         raise ValueError("Release dataset validation did not pass")
 

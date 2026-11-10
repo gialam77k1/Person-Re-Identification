@@ -32,7 +32,7 @@ class EvaluationService:
                         seen,
                         report,
                         release_id=cycle["target_release"],
-                        model_version="v2",
+                        model_version=self._release_version(cycle["target_release"]),
                         domain=label,
                         cycle_id=cycle["id"],
                     )
@@ -45,7 +45,7 @@ class EvaluationService:
                     seen,
                     report,
                     release_id=cycle["source_release"],
-                    model_version="v1",
+                    model_version=self._release_version(cycle["source_release"]),
                     domain="DukeMTMC-reID",
                     cycle_id=cycle["id"],
                 )
@@ -63,7 +63,7 @@ class EvaluationService:
                     report.get("release_id")
                     or str(report.get("run_slug", "evaluation")).removesuffix("-deployment")
                 ),
-                model_version="v2" if ":v2" in str(report.get("release_id")) else "v1",
+                model_version=self._release_version(str(report.get("release_id") or "model")),
                 domain=self._domain_label(str(report.get("dataset") or "evaluation")),
                 cycle_id=None,
             )
@@ -154,7 +154,7 @@ class EvaluationService:
         root = self.settings.evaluation_artifacts_root
         patterns = (
             "cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json",
-            "duke/market1501-duke-vit-bnneck-v2/evaluations/*/metrics/evaluation_*.json",
+            "duke/*/evaluations/*/metrics/evaluation_*.json",
             "pipeline/*/deployment/metrics/deployment_retrieval_latest.json",
         )
         paths: list[Path] = []
@@ -167,6 +167,11 @@ class EvaluationService:
         if dataset not in self.settings.allowed_datasets and dataset not in DATASET_DIR_ALIASES:
             raise ValueError("Dataset is not allowed")
         return self.settings.dataset_root / directory
+
+    @staticmethod
+    def _release_version(release_id: str) -> str:
+        match = re.search(r":v(\d+)(?:\b|-)", release_id)
+        return f"v{match.group(1)}" if match else release_id
 
     @staticmethod
     def _domain_label(dataset: str) -> str:

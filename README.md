@@ -88,6 +88,7 @@ Thay tất cả giá trị `change-me` trong `.env.mlops`. Tối thiểu cần c
 - `CONTROL_GITHUB_TOKEN` có quyền Actions read/write cho repository;
 - `CONTROL_CALLBACK_TOKEN` là chuỗi ngẫu nhiên dài;
 - `CONTROL_WORKFLOW_REF=main`;
+- `CONTROL_HOST_DATASET_ROOT`: đường dẫn tuyệt đối tới `datasets/` mà self-hosted runner đọc được;
 - `DOCKER_CONTEXT=default`.
 
 Không commit `.env.mlops`, token hoặc secret. GitHub Actions cần có:
@@ -110,19 +111,24 @@ Kiểm tra container:
 docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
 ```
 
-### 3. Mở Control Center
+### 3. Import batch trong Control Center
 
-Mở **http://localhost:3001**, chọn `DukeMTMC-reID` và bấm **Start MLOps lifecycle**.
+Mở **http://localhost:3001/inbox**, chọn batch có nhãn rồi bấm **Import selected batch**.
+Batch mới đặt tại `datasets/inbox/<batch_id>/` và khai báo ảnh, person ID, camera ID trong
+`manifest.json`. Duke train hiện tại vẫn xuất hiện như batch khởi tạo. Xem định dạng chi tiết tại
+[Data Inbox](docs/DATA_INBOX.md).
 Luồng vận hành bình thường không yêu cầu chạy từng script bằng terminal.
+Vòng đầu bootstrap `v1 → v2`; sau khi promote, Control API tự đọc alias MLflow `champion` và
+tạo `vN → v(N+1)`. Vì vậy các batch sau lần lượt tạo v3, v4, v5 mà không sửa code hoặc ghi đè release cũ.
 
 ```text
 Validate dataset
   → Extract current embeddings
   → Detect drift
-  → Evaluate model v1 on DukeMTMC-reID
+  → Evaluate source champion on DukeMTMC-reID
   → WAITING_APPROVAL
   → Approve Retraining
-  → Train model v2 (tối đa 50 epoch)
+  → Train next model version (tối đa 50 epoch)
   → Evaluate DukeMTMC-reID + Market-1501
   → Validation/forgetting gate
   → Export ONNX + parity

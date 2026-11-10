@@ -5,11 +5,12 @@ import { usePathname } from "next/navigation";
 
 const links = [
   ["/", "Overview", "01"],
-  ["/pipeline", "Pipeline", "02"],
-  ["/models", "Models", "03"],
-  ["/evaluation", "Evaluation", "04"],
-  ["/monitoring", "Monitoring", "05"],
-  ["/services", "Services", "06"],
+  ["/inbox", "Data Inbox", "02"],
+  ["/pipeline", "Pipeline", "03"],
+  ["/models", "Models", "04"],
+  ["/evaluation", "Evaluation", "05"],
+  ["/monitoring", "Monitoring", "06"],
+  ["/services", "Services", "07"],
 ];
 
 export function Sidebar() {

@@ -1,8 +1,8 @@
 export function StatusPill({ status }: { status: string }) {
   const tone =
-    status === "PASS" || status === "READY" || status === "STABLE"
+    status === "PASS" || status === "READY" || status === "STABLE" || status === "DISPATCHED"
       ? "border-teal-300/30 bg-teal-300/10 text-teal-200"
-      : status === "FAIL" || status === "UNAVAILABLE" || status === "DRIFT"
+      : status === "FAIL" || status === "REJECTED" || status === "UNAVAILABLE" || status === "DRIFT"
         ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
         : status.includes("WAITING") || status === "LINK"
           ? "border-amber-300/30 bg-amber-300/10 text-amber-200"

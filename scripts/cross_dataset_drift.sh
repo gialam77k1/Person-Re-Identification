@@ -9,10 +9,13 @@ TRITON_URL="${TRITON_URL:-http://localhost:8000}"
 SAMPLE_SIZE="${SAMPLE_SIZE:-1000}"
 WORKERS="${WORKERS:-4}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-artifacts/cross-domain/market1501-v1-on-duke/drift}"
-REFERENCE="artifacts/pipeline/${RELEASE_SLUG}/reference/embeddings/reference_embeddings.npy"
+REFERENCE="${REFERENCE_PATH:-artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_embeddings.npy}"
 CURRENT="${OUTPUT_ROOT}/duke_query_embeddings.npy"
 METADATA="${OUTPUT_ROOT}/duke_query_metadata.json"
-MODEL_MANIFEST="artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
+MODEL_MANIFEST="${MODEL_MANIFEST_PATH:-artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json}"
+CAPTURE_CONFIG="configs/duke_v1_evaluation.yaml"
+CAPTURE_SPLIT="query"
+DATASET_POINTER="datasets/dukemtmc-reid.dvc"
 
 if [[ -f "${PROJECT_ROOT}/.env.mlops" ]]; then
   set -a
@@ -36,15 +39,31 @@ fi
 if [[ ! -f "${REFERENCE}" ]]; then
   ./scripts/dvc_local.sh pull extract_reference
 fi
-if [[ ! -f "${MODEL_MANIFEST}" ]]; then
+if [[ ! -f "${MODEL_MANIFEST}" && "${MODEL_MANIFEST}" == artifacts/* ]]; then
   ./scripts/dvc_local.sh pull validate_release
+fi
+if [[ -n "${INBOX_DATASET_PATH:-}" ]]; then
+  : "${INBOX_DATASET_HOST_PATH:?INBOX_DATASET_HOST_PATH is required for Data Inbox workflows}"
+  : "${INBOX_DATASET_REVISION:?INBOX_DATASET_REVISION is required for Data Inbox workflows}"
+  INBOX_RUNTIME="${RUNNER_TEMP:-/tmp}/reid-inbox-${CONTROL_CYCLE_ID:-manual}"
+  CAPTURE_CONFIG="configs/runtime/duke_v1_inbox_${CONTROL_CYCLE_ID:-manual}.yaml"
+  DATASET_POINTER="${INBOX_RUNTIME}/inbox_dataset.dvc"
+  CAPTURE_SPLIT="train"
+  conda run --no-capture-output -n reid python -m src.prepare_inbox_dataset \
+    --source "${INBOX_DATASET_HOST_PATH}" \
+    --base-dataset datasets/dukemtmc-reid \
+    --base-config configs/duke_v1_evaluation.yaml \
+    --output-root "${INBOX_RUNTIME}/dataset" \
+    --output-config "${CAPTURE_CONFIG}" \
+    --output-pointer "${DATASET_POINTER}" \
+    --revision "${INBOX_DATASET_REVISION}"
 fi
 mkdir -p "${MONITORING_ROOT}/textfile" "${MONITORING_ROOT}/reports"
 
 conda run --no-capture-output -n reid python src/capture_external_embeddings.py \
-  --config configs/duke_v1_evaluation.yaml \
-  --dataset-pointer datasets/dukemtmc-reid.dvc \
-  --split query \
+  --config "${CAPTURE_CONFIG}" \
+  --dataset-pointer "${DATASET_POINTER}" \
+  --split "${CAPTURE_SPLIT}" \
   --max-samples "${SAMPLE_SIZE}" \
   --seed 42 \
   --workers "${WORKERS}" \

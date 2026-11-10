@@ -30,6 +30,7 @@ def verify_approved_decision(
     manifest_sha256: str,
     cycle_id: str,
     source_release: str,
+    target_release: str,
     dataset: str,
     target_epochs: int,
 ) -> None:
@@ -41,6 +42,8 @@ def verify_approved_decision(
         raise ValueError("Decision cycle ID does not match this workflow.")
     if decision.get("base_release_id") != source_release:
         raise ValueError("Decision source release does not match this workflow.")
+    if decision.get("target_release_id") != target_release:
+        raise ValueError("Decision target release does not match this workflow.")
     if str(decision.get("target_dataset", "")).lower() != dataset.lower():
         raise ValueError("Decision target dataset does not match this workflow.")
     if int(decision.get("target_epochs", 0)) != target_epochs:
@@ -69,6 +72,7 @@ def main() -> int:
     parser.add_argument("--decision-sha256", required=True)
     parser.add_argument("--cycle-id", required=True)
     parser.add_argument("--source-release", required=True)
+    parser.add_argument("--target-release", required=True)
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--target-epochs", type=int, required=True)
     args = parser.parse_args()
@@ -84,6 +88,7 @@ def main() -> int:
             manifest_sha256=file_sha256(manifest_path),
             cycle_id=args.cycle_id,
             source_release=args.source_release,
+            target_release=args.target_release,
             dataset=args.dataset,
             target_epochs=args.target_epochs,
         )

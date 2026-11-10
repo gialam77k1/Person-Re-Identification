@@ -20,7 +20,7 @@ export default async function OverviewPage() {
   const cycle = data.latest_cycle;
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader eyebrow="System overview" title="MLOps Control Center" description="Theo dõi model, drift, hạ tầng và vòng đời v1 → v2 từ một giao diện duy nhất." />
+      <PageHeader eyebrow="System overview" title="MLOps Control Center" description="Theo dõi model, drift, hạ tầng và mọi vòng đời vN → vN+1 từ một giao diện duy nhất." />
       {data.unavailable && <Unavailable message={data.error ?? "Hãy khởi động control-api."} />}
       <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Service health" value={`${ready}/${checked}`} detail="Các dependency đang phản hồi" accent={ready > 0 && ready === checked} />
@@ -44,7 +44,7 @@ export default async function OverviewPage() {
               </div>
               <Link href={`/pipeline?cycle=${cycle.id}`} className="mt-6 inline-flex rounded-lg bg-teal-300 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-teal-200">Mở pipeline →</Link>
             </div>
-          ) : <p className="mt-8 text-sm text-slate-500">Chưa có cycle. Mở Pipeline để bắt đầu vòng đời đầu tiên.</p>}
+          ) : <p className="mt-8 text-sm text-slate-500">Chưa có cycle. Import một batch hợp lệ trong Data Inbox để bắt đầu.</p>}
         </article>
         <article className="panel rounded-2xl p-6">
           <p className="eyebrow">Quick assessment</p><h2 className="mt-2 text-xl font-bold">Release posture</h2>

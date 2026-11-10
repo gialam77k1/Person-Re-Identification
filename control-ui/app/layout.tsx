@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ReID MLOps Control Center",
-  description: "Operate the Person Re-Identification model lifecycle from v1 to v2.",
+  description: "Operate iterative Person Re-Identification model lifecycles.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

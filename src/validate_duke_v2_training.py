@@ -33,30 +33,20 @@ def validate_training_contract(config: dict, decision: dict) -> None:
     progressive = train.get("progressive_unfreeze", {})
     early_stopping = train.get("early_stopping", {})
 
+    expected_release = decision.get("target_release_id", EXPECTED_RELEASE_ID)
+    expected_base = decision.get("base_release_id", EXPECTED_BASE_RELEASE_ID)
     expected_values = {
-        "release.id": (release.get("id"), EXPECTED_RELEASE_ID),
+        "release.id": (release.get("id"), expected_release),
         "release.base_release_id": (
             release.get("base_release_id"),
-            EXPECTED_BASE_RELEASE_ID,
+            expected_base,
         ),
         "data.dataset.name": (str(dataset.get("name", "")).lower(), EXPECTED_DATASET),
         "data.dataset.version": (dataset.get("version"), EXPECTED_DATASET_VERSION),
-        "data.expected_train_images": (
-            data.get("expected_train_images"),
-            EXPECTED_TRAIN_IMAGES,
-        ),
-        "data.expected_train_identities": (
-            data.get("expected_train_identities"),
-            EXPECTED_TRAIN_IDENTITIES,
-        ),
         "data.batch_size": (data.get("batch_size"), EXPECTED_TRAIN_BATCH_SIZE),
         "data.eval_batch_size": (
             data.get("eval_batch_size"),
             EXPECTED_EVAL_BATCH_SIZE,
-        ),
-        "transfer.expected_checkpoint_epoch": (
-            transfer.get("expected_checkpoint_epoch"),
-            EXPECTED_CHECKPOINT_EPOCH,
         ),
         "train.epochs": (train.get("epochs"), EXPECTED_EPOCHS),
         "train.progressive_unfreeze.freeze_lower_blocks": (
@@ -104,7 +94,7 @@ def validate_training_contract(config: dict, decision: dict) -> None:
         raise ValueError("Training contract requires train.backbone_lr_factor=0.05")
 
     decision_values = {
-        "base_release_id": EXPECTED_BASE_RELEASE_ID,
+        "base_release_id": expected_base,
         "target_dataset": EXPECTED_DATASET,
         "target_dataset_version": EXPECTED_DATASET_VERSION,
         "target_epochs": EXPECTED_EPOCHS,
@@ -145,7 +135,7 @@ def validate_inputs(
     if decision_status != "RETRAIN_APPROVED":
         raise ValueError("Retraining gate is not RETRAIN_APPROVED")
     if not config_path.is_file():
-        raise FileNotFoundError(f"Missing v2 training config: {config_path}")
+        raise FileNotFoundError(f"Missing iterative training config: {config_path}")
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     validate_training_contract(config, decision)
     configured_epochs = int(config.get("train", {}).get("epochs", 0))
@@ -156,7 +146,7 @@ def validate_inputs(
             f"decision={approved_epochs}, config={configured_epochs}"
         )
     if not checkpoint_path.is_file():
-        raise FileNotFoundError(f"Missing v1 checkpoint: {checkpoint_path}")
+        raise FileNotFoundError(f"Missing source champion checkpoint: {checkpoint_path}")
     if not dataset_path.is_dir():
         raise FileNotFoundError(f"Missing DukeMTMC-reID dataset: {dataset_path}")
 
@@ -173,19 +163,27 @@ def validate_inputs(
         raise ValueError("DukeMTMC-reID train contains an invalid filename")
     train_ids = {int(match.group("pid")) for match in parsed if match and int(match.group("pid")) >= 0}
     train_cameras = {int(match.group("camera")) for match in parsed if match}
-    if len(train_images) != EXPECTED_TRAIN_IMAGES:
+    expected_train_images = int(config.get("data", {}).get("expected_train_images", 0))
+    expected_train_identities = int(
+        config.get("data", {}).get("expected_train_identities", 0)
+    )
+    if expected_train_images < 1000:
+        raise ValueError("Training config requires at least 1000 labeled images")
+    if expected_train_identities < 50:
+        raise ValueError("Training config requires at least 50 identities")
+    if len(train_images) != expected_train_images:
         raise ValueError(
-            f"DukeMTMC-reID train must contain {EXPECTED_TRAIN_IMAGES} images, "
+            f"DukeMTMC-reID train must contain {expected_train_images} images, "
             f"received {len(train_images)}"
         )
-    if len(train_ids) != EXPECTED_TRAIN_IDENTITIES:
+    if len(train_ids) != expected_train_identities:
         raise ValueError(
-            f"DukeMTMC-reID train must contain {EXPECTED_TRAIN_IDENTITIES} identities, "
+            f"DukeMTMC-reID train must contain {expected_train_identities} identities, "
             f"received {len(train_ids)}"
         )
-    if train_cameras != set(range(1, 9)):
+    if len(train_cameras) < 2:
         raise ValueError(
-            "DukeMTMC-reID train must contain cameras 1..8, "
+            "DukeMTMC-reID train must contain at least 2 cameras, "
             f"received {sorted(train_cameras)}"
         )
 
