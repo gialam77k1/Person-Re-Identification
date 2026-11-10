@@ -22,6 +22,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-config", required=True)
     parser.add_argument("--output-pointer", required=True)
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--source-release")
+    parser.add_argument("--target-release")
+    parser.add_argument("--base-checkpoint")
+    parser.add_argument("--run-root")
     return parser.parse_args()
 
 
@@ -101,6 +105,21 @@ def build_view(args: argparse.Namespace) -> dict[str, object]:
     config["data"]["expected_train_images"] = len(samples)
     config["data"]["expected_train_identities"] = len(identities)
     config["evaluation"]["dataset_pointer"] = str(Path(args.output_pointer).resolve())
+    source_release = getattr(args, "source_release", None)
+    target_release = getattr(args, "target_release", None)
+    base_checkpoint = getattr(args, "base_checkpoint", None)
+    run_root = getattr(args, "run_root", None)
+    if source_release:
+        config.setdefault("release", {})["base_release_id"] = source_release
+    if target_release:
+        config.setdefault("release", {})["id"] = target_release
+        config["experiment_name"] = target_release.replace(":", "-")
+    if base_checkpoint:
+        config.setdefault("transfer", {})["base_checkpoint"] = base_checkpoint
+        if source_release and not source_release.startswith("market1501-vit-bnneck:v1"):
+            config["transfer"]["expected_checkpoint_epoch"] = None
+    if run_root:
+        config.setdefault("artifacts", {})["run_root"] = run_root
     Path(args.output_config).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_config).write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     Path(args.output_pointer).write_text(

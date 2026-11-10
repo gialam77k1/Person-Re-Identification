@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_ROOT="${ROOT_DIR}/artifacts/duke/market1501-duke-vit-bnneck-v2"
-PIPELINE_ROOT="${ROOT_DIR}/artifacts/pipeline/market1501-duke-vit-bnneck-v2"
+SOURCE_ROOT="${SOURCE_ROOT:-${V2_ROOT:-${ROOT_DIR}/artifacts/duke/market1501-duke-vit-bnneck-v2}}"
+PIPELINE_ROOT="${PIPELINE_ROOT:-${V2_PIPELINE_ROOT:-${ROOT_DIR}/artifacts/pipeline/market1501-duke-vit-bnneck-v2}}"
 BEST_CHECKPOINT="${SOURCE_ROOT}/checkpoints/best_model.pth"
 LAST_CHECKPOINT="${SOURCE_ROOT}/checkpoints/last_model.pth"
 PUBLICATION_REPORT="${PIPELINE_ROOT}/release/dvc_publication.json"
@@ -16,7 +16,7 @@ for required in \
   "${PIPELINE_ROOT}/release/model_manifest.json" \
   "${PIPELINE_ROOT}/release/validation_report.json"; do
   if [[ ! -f "${required}" ]]; then
-    echo "Missing required v2 release artifact: ${required}" >&2
+    echo "Missing required iterative release artifact: ${required}" >&2
     exit 2
   fi
 done
@@ -46,4 +46,4 @@ conda run --no-capture-output -n reid python -m src.verify_v2_artifact_publicati
 ./scripts/dvc_local.sh push "${PUBLICATION_REPORT}.dvc"
 ./scripts/dvc_local.sh status --cloud --quiet "${PUBLICATION_REPORT}.dvc"
 
-echo "V2 release artifacts are synchronized with MinIO: ${PUBLICATION_REPORT}"
+echo "Iterative release artifacts are synchronized with MinIO: ${PUBLICATION_REPORT}"

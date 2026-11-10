@@ -1,4 +1,4 @@
-name: Retrain DukeMTMC-reID model v2
+name: Retrain next DukeMTMC-reID model version
 
 on:
   workflow_dispatch:
@@ -55,7 +55,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: retrain-duke-v2
+  group: retrain-duke-${{ inputs.target_release }}
   cancel-in-progress: false
 
 jobs:
@@ -66,12 +66,7 @@ jobs:
       CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
       CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8090' }}
       CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
-      V2_ROOT: artifacts/duke/market1501-duke-vit-bnneck-v2
-      BASE_CHECKPOINT: artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth
-      DUKE_V2_REPORT: artifacts/duke/market1501-duke-vit-bnneck-v2/evaluations/duke/metrics/evaluation_duke.json
-      MARKET1501_V2_REPORT: artifacts/duke/market1501-duke-vit-bnneck-v2/evaluations/market1501/metrics/evaluation_market1501.json
-      FORGETTING_REPORT: artifacts/duke/market1501-duke-vit-bnneck-v2/release/catastrophic_forgetting_report.json
-      V2_PIPELINE_ROOT: artifacts/pipeline/market1501-duke-vit-bnneck-v2
+      BASE_CHECKPOINT: ${{ runner.temp }}/reid-base-${{ inputs.cycle_id }}/best_model.pth
       # Reduce CUDA allocator fragmentation on the long-lived self-hosted runner.
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True,max_split_size_mb:128
       INBOX_CONFIG: configs/runtime/duke_v2_inbox_${{ inputs.cycle_id }}.yaml
@@ -89,6 +84,28 @@ jobs:
           printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
           chmod 600 .env.mlops
 
+      - name: Resolve immutable release paths
+        run: |
+          target='${{ inputs.target_release }}'
+          [[ "$target" =~ ^[A-Za-z0-9._-]+:v([0-9]+)$ ]]
+          version="${BASH_REMATCH[1]}"
+          slug="${target//:/-}"
+          run_root="artifacts/duke/${slug}"
+          pipeline_root="artifacts/pipeline/${slug}"
+          {
+            echo "TARGET_VERSION=${version}"
+            echo "TARGET_SLUG=${slug}"
+            echo "V2_ROOT=${run_root}"
+            echo "V2_PIPELINE_ROOT=${pipeline_root}"
+            echo "RUN_ROOT=${run_root}"
+            echo "CHECKPOINT=${run_root}/checkpoints/best_model.pth"
+            echo "RELEASE_ID=${target}"
+            echo "CHECKPOINT_DVC_PATH="
+            echo "DUKE_V2_REPORT=${run_root}/evaluations/duke/metrics/evaluation_duke.json"
+            echo "MARKET1501_V2_REPORT=${run_root}/evaluations/market1501/metrics/evaluation_market1501.json"
+            echo "FORGETTING_REPORT=${run_root}/release/catastrophic_forgetting_report.json"
+          } >> "$GITHUB_ENV"
+
       - name: Download exact pre-approval evidence
         uses: actions/download-artifact@v4
         with:
@@ -97,10 +114,39 @@ jobs:
           github-token: ${{ github.token }}
           path: evidence
 
-      - name: Materialize versioned dataset and base checkpoint
+      - name: Materialize versioned dataset
         run: |
           ./scripts/dvc_local.sh pull datasets/dukemtmc-reid.dvc
-          ./scripts/dvc_local.sh pull artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth.dvc
+
+      - name: Materialize source champion checkpoint
+        run: |
+          mkdir -p "$(dirname "$BASE_CHECKPOINT")"
+          if [[ '${{ inputs.source_release }}' == market1501-vit-bnneck:v1* ]]; then
+            pointer=artifacts/market1501/market1501-vit-bnneck-v1/checkpoints/best_model.pth.dvc
+            ./scripts/dvc_local.sh pull "$pointer"
+            cp "${pointer%.dvc}" "$BASE_CHECKPOINT"
+          else
+            set -a
+            source .env.mlops
+            set +a
+            conda run --no-capture-output -n reid python -m src.materialize_registry_checkpoint \
+              --release-id '${{ inputs.source_release }}' \
+              --destination "$BASE_CHECKPOINT" \
+              --tracking-uri "${MLFLOW_TRACKING_URI:-http://localhost:5000}" \
+              --output "${RUNNER_TEMP}/source-release-${{ inputs.cycle_id }}.json"
+          fi
+          test -s "$BASE_CHECKPOINT"
+
+      - name: Prepare generic vN to vN+1 workspace
+        run: |
+          python -m src.prepare_iterative_release \
+            --source-release '${{ inputs.source_release }}' \
+            --target-release '${{ inputs.target_release }}' \
+            --checkpoint "$BASE_CHECKPOINT" \
+            --run-root "$V2_ROOT" \
+            --dataset-root "$INBOX_DATASET_ROOT" \
+            --dataset-pointer "$INBOX_DATASET_POINTER" \
+            --output "${RUNNER_TEMP}/release-lineage-${{ inputs.cycle_id }}.json"
 
       - name: Build immutable Data Inbox training view
         if: ${{ inputs.dataset_path != '' }}
@@ -113,7 +159,11 @@ jobs:
             --output-root "${INBOX_DATASET_ROOT}" \
             --output-config "${INBOX_CONFIG}" \
             --output-pointer "${INBOX_DATASET_POINTER}" \
-            --revision "${{ inputs.dataset_revision }}"
+            --revision "${{ inputs.dataset_revision }}" \
+            --source-release '${{ inputs.source_release }}' \
+            --target-release '${{ inputs.target_release }}' \
+            --base-checkpoint "$BASE_CHECKPOINT" \
+            --run-root "$V2_ROOT"
 
       - name: Verify Git, DVC, dataset and checkpoint lineage
         run: >-
@@ -138,10 +188,11 @@ jobs:
             --decision-sha256 "${{ inputs.decision_sha256 }}" \
             --cycle-id "${{ inputs.cycle_id }}" \
             --source-release "${{ inputs.source_release }}" \
+            --target-release "${{ inputs.target_release }}" \
             --dataset "${{ inputs.dataset }}" \
             --target-epochs 50
 
-      - name: Preflight model v2 training
+      - name: Preflight next-version training
         env:
           DECISION_PATH: evidence/approved_decision.json
           CONFIG_PATH: ${{ inputs.dataset_path != '' && env.INBOX_CONFIG || 'configs/duke_v2_train.yaml' }}
@@ -149,7 +200,7 @@ jobs:
           DATASET_DVC_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_POINTER || 'datasets/dukemtmc-reid.dvc' }}
         run: ./scripts/train_duke_v2_local.sh --check
 
-      - name: Train model v2
+      - name: Train next model version
         env:
           DECISION_PATH: evidence/approved_decision.json
           CONFIG_PATH: ${{ inputs.dataset_path != '' && env.INBOX_CONFIG || 'configs/duke_v2_train.yaml' }}
@@ -174,7 +225,7 @@ jobs:
             --progress 1 --detail "Model v2 training completed and artifact gate passed" \
             --metrics-file "${V2_ROOT}/logs/training_completion_report.json"
 
-      - name: Evaluate model v2 on DukeMTMC-reID and Market-1501
+      - name: Evaluate candidate on DukeMTMC-reID and Market-1501
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating the same v2 checkpoint on DukeMTMC-reID and Market-1501"
           ./scripts/evaluate_v2_dual_domain.sh
@@ -230,7 +281,7 @@ jobs:
             --output "${V2_ROOT}/release/validation_report.json" \
             --manifest-output "${V2_ROOT}/release/model_manifest.json"
 
-      - name: Export, verify and validate model v2 release
+      - name: Export, verify and validate candidate release
         run: |
           mkdir -p artifacts/cross-domain/market1501-v1-on-duke/metrics
           cp "${{ inputs.evaluation_report }}" \
@@ -271,19 +322,20 @@ jobs:
       - name: Upload training reports
         uses: actions/upload-artifact@v4
         with:
+          # Keep the legacy prefix so existing artifact consumers remain compatible.
           name: duke-v2-retraining-reports-${{ inputs.cycle_id }}
           path: |
             evidence/evidence_manifest.json
             evidence/approved_decision.json
-            artifacts/duke/market1501-duke-vit-bnneck-v2/logs/*.json
-            artifacts/duke/market1501-duke-vit-bnneck-v2/metrics/*.json
-            artifacts/duke/market1501-duke-vit-bnneck-v2/evaluations/**/metrics/*.json
-            artifacts/duke/market1501-duke-vit-bnneck-v2/release/*.json
-            artifacts/duke/market1501-duke-vit-bnneck-v2/checkpoints/*.dvc
-            artifacts/pipeline/market1501-duke-vit-bnneck-v2/onnx/exports/onnx_export_manifest.json
-            artifacts/pipeline/market1501-duke-vit-bnneck-v2/parity/metrics/onnx_parity.json
-            artifacts/pipeline/market1501-duke-vit-bnneck-v2/reference/embeddings/reference_manifest.json
-            artifacts/pipeline/market1501-duke-vit-bnneck-v2/release/*.json
+            ${{ env.V2_ROOT }}/logs/*.json
+            ${{ env.V2_ROOT }}/metrics/*.json
+            ${{ env.V2_ROOT }}/evaluations/**/metrics/*.json
+            ${{ env.V2_ROOT }}/release/*.json
+            ${{ env.V2_ROOT }}/checkpoints/*.dvc
+            ${{ env.V2_PIPELINE_ROOT }}/onnx/exports/onnx_export_manifest.json
+            ${{ env.V2_PIPELINE_ROOT }}/parity/metrics/onnx_parity.json
+            ${{ env.V2_PIPELINE_ROOT }}/reference/embeddings/reference_manifest.json
+            ${{ env.V2_PIPELINE_ROOT }}/release/*.json
             dvc.lock
           if-no-files-found: error
           retention-days: 30

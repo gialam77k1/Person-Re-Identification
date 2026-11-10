@@ -9,10 +9,10 @@ TRITON_URL="${TRITON_URL:-http://localhost:8000}"
 SAMPLE_SIZE="${SAMPLE_SIZE:-1000}"
 WORKERS="${WORKERS:-4}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-artifacts/cross-domain/market1501-v1-on-duke/drift}"
-REFERENCE="artifacts/pipeline/${RELEASE_SLUG}/reference/embeddings/reference_embeddings.npy"
+REFERENCE="${REFERENCE_PATH:-artifacts/pipeline/market1501-vit-bnneck-v1-dvc/reference/embeddings/reference_embeddings.npy}"
 CURRENT="${OUTPUT_ROOT}/duke_query_embeddings.npy"
 METADATA="${OUTPUT_ROOT}/duke_query_metadata.json"
-MODEL_MANIFEST="artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
+MODEL_MANIFEST="${MODEL_MANIFEST_PATH:-artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json}"
 CAPTURE_CONFIG="configs/duke_v1_evaluation.yaml"
 CAPTURE_SPLIT="query"
 DATASET_POINTER="datasets/dukemtmc-reid.dvc"
@@ -39,7 +39,7 @@ fi
 if [[ ! -f "${REFERENCE}" ]]; then
   ./scripts/dvc_local.sh pull extract_reference
 fi
-if [[ ! -f "${MODEL_MANIFEST}" ]]; then
+if [[ ! -f "${MODEL_MANIFEST}" && "${MODEL_MANIFEST}" == artifacts/* ]]; then
   ./scripts/dvc_local.sh pull validate_release
 fi
 if [[ -n "${INBOX_DATASET_PATH:-}" ]]; then

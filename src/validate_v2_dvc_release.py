@@ -94,9 +94,10 @@ def build_release(
     def check(name: str, passed: bool, actual: Any, expected: Any) -> None:
         checks.append({"name": name, "passed": bool(passed), "status": "PASS" if passed else "FAIL", "actual": actual, "expected": expected})
 
-    check("validation_policy_release", policy.get("release_id") == RELEASE_ID, policy.get("release_id"), RELEASE_ID)
+    release_id = str(checkpoint.get("release_id") or policy.get("release_id") or "")
+    check("validation_policy_release", bool(release_id) and policy.get("release_id") == release_id, policy.get("release_id"), release_id)
     check("data_validation", data.get("passed") is True, data.get("passed"), True)
-    check("checkpoint_release", checkpoint.get("release_id") == RELEASE_ID, checkpoint.get("release_id"), RELEASE_ID)
+    check("checkpoint_release", checkpoint.get("release_id") == release_id, checkpoint.get("release_id"), release_id)
     checkpoint_sha = sha256_file(checkpoint_path) if checkpoint_path.is_file() else None
     check("checkpoint_checksum", checkpoint_sha == checkpoint.get("checkpoint_sha256"), checkpoint_sha, checkpoint.get("checkpoint_sha256"))
     check("mlflow_run_id", bool(checkpoint.get("mlflow_run_id")), checkpoint.get("mlflow_run_id"), "non-empty")
@@ -104,7 +105,7 @@ def build_release(
     check("training_config_hash", len(str(checkpoint.get("training_config_sha256", ""))) == 64, checkpoint.get("training_config_sha256"), "SHA256")
     revisions = checkpoint.get("dataset_revisions", {})
     check("dataset_revisions", bool(revisions.get("duke")) and bool(revisions.get("market1501")), revisions, "both non-empty")
-    check("evaluation_release", duke.get("release_id") == market1501.get("release_id") == RELEASE_ID, {"duke": duke.get("release_id"), "market1501": market1501.get("release_id")}, RELEASE_ID)
+    check("evaluation_release", duke.get("release_id") == market1501.get("release_id") == release_id, {"duke": duke.get("release_id"), "market1501": market1501.get("release_id")}, release_id)
     check("evaluation_metrics_finite", finite_metrics(duke) and finite_metrics(market1501), {"duke": {key: duke.get(key) for key in METRICS}, "market1501": {key: market1501.get(key) for key in METRICS}}, "all finite")
     threshold_keys = {"rank1": "rank1_min", "rank5": "rank5_min", "mAP": "map_min", "mINP": "minp_min"}
     for dataset_name, evaluation in (("duke", duke), ("market1501", market1501)):
@@ -118,7 +119,7 @@ def build_release(
     contract = policy.get("contract", {})
     expected_input_shape = contract.get("input_shape")
     onnx_contract = (
-        onnx.get("release_id") == RELEASE_ID
+        onnx.get("release_id") == release_id
         and onnx.get("input_name") == contract.get("input_name")
         and onnx.get("input_dtype") == contract.get("input_dtype")
         and onnx.get("input_shape") == expected_input_shape
@@ -176,9 +177,9 @@ def build_release(
     norm_error = float(np.max(np.abs(norms - 1.0))) if norms.size and np.isfinite(norms).all() else float("inf")
     norm_atol = float(contract.get("reference_l2_norm_atol", 0.0))
     check("reference_l2_normalized", finite_embeddings and bool(np.allclose(norms, 1.0, atol=norm_atol, rtol=0.0)), norm_error, {"max_abs_error": norm_atol})
-    check("reference_manifest_contract", reference.get("release_id") == RELEASE_ID and int(reference.get("feature_dim", 0)) == expected_dim and int(reference.get("num_samples", 0)) == len(embeddings) and reference.get("finite") is True and reference.get("l2_normalized") is True, {key: reference.get(key) for key in ("release_id", "feature_dim", "num_samples", "finite", "l2_normalized")}, {"release_id": RELEASE_ID, "feature_dim": expected_dim, "num_samples": len(embeddings), "finite": True, "l2_normalized": True})
+    check("reference_manifest_contract", reference.get("release_id") == release_id and int(reference.get("feature_dim", 0)) == expected_dim and int(reference.get("num_samples", 0)) == len(embeddings) and reference.get("finite") is True and reference.get("l2_normalized") is True, {key: reference.get(key) for key in ("release_id", "feature_dim", "num_samples", "finite", "l2_normalized")}, {"release_id": release_id, "feature_dim": expected_dim, "num_samples": len(embeddings), "finite": True, "l2_normalized": True})
 
-    preprocessing["release_id"] = RELEASE_ID
+    preprocessing["release_id"] = release_id
     preprocessing_output_path.parent.mkdir(parents=True, exist_ok=True)
     preprocessing_output_path.write_text(json.dumps(preprocessing, indent=2) + "\n", encoding="utf-8")
     files = [artifact("pytorch_checkpoint", checkpoint_path), artifact("onnx_graph", onnx_path), artifact("onnx_external_weights", onnx_path.with_name(f"{onnx_path.name}.data")), artifact("preprocessing_contract", preprocessing_output_path), artifact("validation_policy", policy_path), *[artifact(role, path) for role, path in reference_files]]
@@ -193,7 +194,7 @@ def build_release(
     now = datetime.now(timezone.utc).isoformat()
     manifest = {
         "schema_version": 2,
-        "release": {"name": "market1501-duke-vit-bnneck", "version": "v2", "release_id": RELEASE_ID, "status": "validated" if passed else "rejected", "created_at": now},
+        "release": {"name": release_id.partition(":")[0], "version": release_id.partition(":")[2], "release_id": release_id, "status": "validated" if passed else "rejected", "created_at": now},
         "source": {"git_commit": checkpoint.get("git_commit"), "training_git_commit": checkpoint.get("training_git_commit"), "dataset_revisions": revisions, "mlflow_run_id": checkpoint.get("mlflow_run_id"), "config_sha256": checkpoint.get("training_config_sha256"), "checkpoint_epoch": checkpoint.get("best_epoch")},
         "model": {"task": "person-re-identification", "architecture": "vit_b_16", "embedding_dim": expected_dim, "training_dataset": "duke"},
         "quality_metrics": {"duke": {key: duke.get(key) for key in METRICS}, "market1501": {key: market1501.get(key) for key in METRICS}},
@@ -203,7 +204,7 @@ def build_release(
         "files": files,
         "validation": {"status": "PASS" if passed else "FAIL", "report_path": repository_path(report_path), "catastrophic_forgetting_report": repository_path(forgetting_report_path), "parity_report": repository_path(parity_report_path)},
     }
-    report = {"schema_version": 2, "release_id": RELEASE_ID, "status": "PASS" if passed else "FAIL", "passed": passed, "checked_at": now, "policy": manifest["policy"], "checks": checks, "failed_checks": [item["name"] for item in checks if not item["passed"]], "validated_artifacts": files, "manifest_path": repository_path(manifest_path)}
+    report = {"schema_version": 2, "release_id": release_id, "status": "PASS" if passed else "FAIL", "passed": passed, "checked_at": now, "policy": manifest["policy"], "checks": checks, "failed_checks": [item["name"] for item in checks if not item["passed"]], "validated_artifacts": files, "manifest_path": repository_path(manifest_path)}
     return report, manifest
 
 
@@ -219,7 +220,7 @@ def log_validation_to_mlflow(report_path: Path, manifest_path: Path, policy_path
     client = MlflowClient()
     client.get_run(str(run_id))
     client.set_tag(str(run_id), "validation.v2.status", report["status"])
-    client.set_tag(str(run_id), "validation.v2.release_id", RELEASE_ID)
+    client.set_tag(str(run_id), "validation.v2.release_id", str(report.get("release_id")))
     client.log_metric(str(run_id), "validation.v2.passed", 1.0 if report["passed"] else 0.0)
     client.log_metric(str(run_id), "validation.v2.failed_checks", float(len(report["failed_checks"])))
     for path in (report_path, manifest_path, policy_path):
@@ -244,8 +245,9 @@ def main() -> int:
         )
     except Exception as error:
         now = datetime.now(timezone.utc).isoformat()
-        report = {"schema_version": 2, "release_id": RELEASE_ID, "status": "FAIL", "passed": False, "checked_at": now, "checks": [], "failed_checks": ["validation_exception"], "error": f"{type(error).__name__}: {error}", "manifest_path": repository_path(manifest_path)}
-        manifest = {"schema_version": 2, "release": {"release_id": RELEASE_ID, "status": "rejected", "created_at": now}, "validation": {"status": "FAIL", "report_path": repository_path(report_path)}, "files": []}
+        failed_release = str(read_yaml(policy_path).get("release_id") or RELEASE_ID)
+        report = {"schema_version": 2, "release_id": failed_release, "status": "FAIL", "passed": False, "checked_at": now, "checks": [], "failed_checks": ["validation_exception"], "error": f"{type(error).__name__}: {error}", "manifest_path": repository_path(manifest_path)}
+        manifest = {"schema_version": 2, "release": {"release_id": failed_release, "status": "rejected", "created_at": now}, "validation": {"status": "FAIL", "report_path": repository_path(report_path)}, "files": []}
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     try:
