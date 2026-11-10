@@ -16,6 +16,7 @@ export default async function EvaluationPage() {
       <EvaluationExplorer
         dataset={evaluation.dataset}
         samples={evaluation.dataset_samples}
+        identityCameraGroups={evaluation.identity_camera_groups}
         versions={evaluation.versions}
       />
     </div>

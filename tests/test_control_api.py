@@ -47,6 +47,7 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
         query_dir = settings.dataset_root / "dukemtmc-reid" / "query"
         query_dir.mkdir(parents=True)
         (query_dir / "0001_c2_sample.jpg").write_bytes(b"fake-jpeg")
+        (query_dir / "0001_c3_sample.jpg").write_bytes(b"fake-jpeg")
         train_dir = settings.dataset_root / "dukemtmc-reid" / "bounding_box_train"
         train_dir.mkdir(parents=True)
         (train_dir / "0001_c2_train.jpg").write_bytes(b"\xff\xd8\xfftrain")
@@ -249,6 +250,12 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
 
         payload = (await self.request("GET", "/control/evaluations")).json()
         self.assertEqual(payload["versions"][0]["metrics"]["mAP"], 0.37)
+        self.assertEqual(payload["identity_camera_groups"][0]["person_id"], 1)
+        self.assertEqual(payload["identity_camera_groups"][0]["camera_count"], 2)
+        self.assertEqual(
+            [image["camera_id"] for image in payload["identity_camera_groups"][0]["images"]],
+            [2, 3],
+        )
         image = await self.request(
             "GET", "/control/evaluation-images/dukemtmc-reid/query/0001_c2_sample.jpg"
         )

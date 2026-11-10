@@ -45,6 +45,6 @@ export async function getEvaluations(): Promise<EvaluationOverview> {
   try {
     return await request<EvaluationOverview>("/control/evaluations");
   } catch {
-    return { dataset: "dukemtmc-reid", dataset_samples: [], versions: [] };
+    return { dataset: "dukemtmc-reid", dataset_samples: [], identity_camera_groups: [], versions: [] };
   }
 }
