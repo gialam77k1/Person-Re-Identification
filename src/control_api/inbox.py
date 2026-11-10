@@ -9,6 +9,7 @@ from typing import Any
 from src.control_api.config import ControlSettings
 from src.control_api.lifecycle import LifecycleController
 from src.control_api.releases import ReleaseResolver
+from src.control_api.state import CycleStatus
 from src.control_api.store import CycleStore
 
 
@@ -82,14 +83,28 @@ class DataInboxService:
                 },
             }
         )
-        if (
-            not created
-            and batch["status"] in {"BLOCKED", "FAILED"}
-            and not batch.get("cycle_id")
+        linked_cycle = None
+        if not created and batch.get("cycle_id"):
+            try:
+                linked_cycle = self.store.get_cycle(str(batch["cycle_id"]))
+            except KeyError:
+                linked_cycle = None
+        retryable_terminal_link = bool(
+            linked_cycle
+            and linked_cycle["status"]
+            in {CycleStatus.FAIL.value, CycleStatus.CANCELLED.value}
+        )
+        if not created and (
+            (
+                batch["status"] in {"BLOCKED", "FAILED"}
+                and (not batch.get("cycle_id") or retryable_terminal_link)
+            )
+            or (batch["status"] == "DISPATCHED" and retryable_terminal_link)
         ):
             # A release collision or transient dispatch error may be resolved by
-            # the operator. Reuse the immutable batch record and fingerprint,
-            # but allow the lifecycle dispatch to be attempted again.
+            # the operator. A legacy retry may also point a DISPATCHED batch at
+            # a terminal cycle. Reuse the immutable batch record and fingerprint,
+            # but create a fresh lifecycle attempt instead of returning that cycle.
             batch = self.store.update_inbox_batch(
                 batch["id"], status="VALIDATED", error=None
             )

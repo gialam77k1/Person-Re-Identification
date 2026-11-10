@@ -205,6 +205,29 @@ class DataInboxServiceTest(unittest.TestCase):
         retry_cycle = self.store.get_cycle(retried["cycle_id"])
         self.assertTrue(retry_cycle["idempotency_key"].endswith(":attempt:2"))
 
+    def test_dispatched_batch_linked_to_cancelled_cycle_can_retry(self) -> None:
+        first_batch, _ = self.inbox.import_batch(
+            source_path="dukemtmc-reid/bounding_box_train",
+            dataset="dukemtmc-reid",
+            actor="operator",
+        )
+        first_cycle_id = first_batch["cycle_id"]
+        self.store.update_cycle(first_cycle_id, status=CycleStatus.FAIL, error="old failure")
+        self.lifecycle.abandon_failed(first_cycle_id, "operator")
+
+        retried, created = self.inbox.import_batch(
+            source_path="dukemtmc-reid/bounding_box_train",
+            dataset="dukemtmc-reid",
+            actor="operator",
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(retried["status"], "DISPATCHED")
+        self.assertNotEqual(retried["cycle_id"], first_cycle_id)
+        self.assertEqual(len(self.dispatcher.calls), 2)
+        retry_cycle = self.store.get_cycle(retried["cycle_id"])
+        self.assertTrue(retry_cycle["idempotency_key"].endswith(":attempt:2"))
+
 
 if __name__ == "__main__":
     unittest.main()
