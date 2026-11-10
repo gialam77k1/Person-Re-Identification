@@ -31,6 +31,21 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
             Loader=yaml.BaseLoader,
         )
         self.assertEqual(set(workflow["on"]), {"workflow_dispatch"})
+        inputs = workflow["on"]["workflow_dispatch"]["inputs"]
+        self.assertTrue(
+            {
+                "cycle_id",
+                "dataset",
+                "sample_size",
+                "release_id",
+                "release_slug",
+                "inbox_batch_id",
+                "dataset_revision",
+                "dataset_path",
+                "dataset_host_path",
+            }.issubset(inputs),
+            "Control API and workflow_dispatch inputs must remain compatible",
+        )
         job = workflow["jobs"]["detect-drift"]
         self.assertEqual(job["runs-on"], ["self-hosted", "linux"])
 
