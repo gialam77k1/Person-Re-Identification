@@ -11,6 +11,10 @@ on:
         description: DVC pipeline release directory
         required: true
         default: market1501-vit-bnneck-v1-dvc
+      cycle_id:
+        description: Control Center cycle ID
+        required: false
+        default: manual
 
 permissions:
   contents: read
@@ -135,15 +139,18 @@ jobs:
           IMAGE: ${{ needs.build-image.outputs.image }}
           RELEASE_ID: ${{ inputs.release_id }}
           RELEASE_SLUG: ${{ inputs.release_slug }}
-        run: >-
-          ./scripts/deploy_local.sh deploy
-          --environment staging
-          --image "$IMAGE"
-          --image-git-commit "$GITHUB_SHA"
-          --release-id "$RELEASE_ID"
-          --validation-report "artifacts/pipeline/${RELEASE_SLUG}/release/validation_report.json"
-          --manifest "artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
-          --triton-model-repository "artifacts/pipeline/${RELEASE_SLUG}/triton/model_repository"
+        run: |
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" deploy_staging RUNNING --detail "Deploying validated candidate to staging"
+          ./scripts/deploy_local.sh deploy \
+            --environment staging \
+            --image "$IMAGE" \
+            --image-git-commit "$GITHUB_SHA" \
+            --release-id "$RELEASE_ID" \
+            --validation-report "artifacts/pipeline/${RELEASE_SLUG}/release/validation_report.json" \
+            --manifest "artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json" \
+            --triton-model-repository "artifacts/pipeline/${RELEASE_SLUG}/triton/model_repository"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" deploy_staging PASS --progress 1 --detail "Staging deployment completed"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" staging_test PASS --progress 1 --detail "Staging deployment smoke checks passed"
 
   deploy-production:
     name: Approve and deploy production
@@ -187,3 +194,18 @@ jobs:
           --validation-report "artifacts/pipeline/${RELEASE_SLUG}/release/validation_report.json"
           --manifest "artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
           --triton-model-repository "artifacts/pipeline/${RELEASE_SLUG}/triton/model_repository"
+
+      - name: Promote validated registry release to champion
+        env:
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          set -a
+          source .env.mlops
+          set +a
+          conda run --no-capture-output -n reid python -m src.promote_registry_release \
+            --release-id "$RELEASE_ID" \
+            --alias champion \
+            --tracking-uri "${MLFLOW_TRACKING_URI:-http://localhost:5000}" \
+            --output "artifacts/deployments/production/registry_promotion.json"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" production_approval PASS \
+            --progress 1 --detail "Production deployed; MLflow champion now points to $RELEASE_ID"

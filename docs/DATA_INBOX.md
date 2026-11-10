@@ -55,5 +55,25 @@ CONTROL_INBOX_MIN_CAMERAS=2
 ```
 
 Không commit dữ liệu hoặc `.env.mlops`. Sau khi chép batch vào `datasets/inbox`, mở **Data Inbox**,
-chọn batch và bấm **Import selected batch**. Batch hợp lệ tự chạy drift/evaluate-v1 rồi dừng tại
-`WAITING_APPROVAL`; retraining chỉ bắt đầu sau xác nhận của người vận hành.
+chọn batch và bấm **Import selected batch**. Batch hợp lệ tự chạy drift/evaluate source champion rồi
+dừng tại `WAITING_APPROVAL`; retraining chỉ bắt đầu sau xác nhận của người vận hành.
+
+## Version lặp vô hạn
+
+Data Inbox không gắn cứng `v1 → v2`. Trước khi tạo cycle, Control API đọc alias `champion` từ
+MLflow Model Registry, khóa release đó vào cycle rồi sinh target theo công thức `vN → v(N+1)`.
+Nếu MLflow tạm thời không truy cập được, release đã promote gần nhất trong audit database được dùng;
+bootstrap v1 chỉ dùng khi chưa có lần promote nào.
+
+```text
+champion v1 + batch A → candidate v2
+promote v2 thành champion
+champion v2 + batch B → candidate v3
+promote v3 thành champion
+champion v3 + batch C → candidate v4
+```
+
+Candidate chưa promote không được dùng làm base. Hệ thống cũng chặn tạo lại cùng target version để
+tránh ghi đè checkpoint/artifact. Runner lấy checkpoint champion theo release ID từ MLflow, tạo
+runtime config và đường dẫn DVC/MinIO riêng cho target version. Tên stage nội bộ `train_v2` và
+`evaluate_v2` được giữ để tương thích database cũ; UI luôn hiển thị source/target thực tế của cycle.

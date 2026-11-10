@@ -1,6 +1,6 @@
 # MLOps Control Center
 
-Control Center là giao diện vận hành local cho toàn bộ vòng đời model v1 → v2. Người vận hành import
+Control Center là giao diện vận hành local cho toàn bộ vòng đời lặp model vN → vN+1. Người vận hành import
 batch trong Data Inbox, theo dõi timeline/metrics/log và thực hiện approval, promotion
 hoặc rollback trên web; không phải chạy script bằng terminal trong luồng vận hành bình thường.
 

@@ -20,7 +20,7 @@ export default async function OverviewPage() {
   const cycle = data.latest_cycle;
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader eyebrow="System overview" title="MLOps Control Center" description="Theo dõi model, drift, hạ tầng và vòng đời v1 → v2 từ một giao diện duy nhất." />
+      <PageHeader eyebrow="System overview" title="MLOps Control Center" description="Theo dõi model, drift, hạ tầng và mọi vòng đời vN → vN+1 từ một giao diện duy nhất." />
       {data.unavailable && <Unavailable message={data.error ?? "Hãy khởi động control-api."} />}
       <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Service health" value={`${ready}/${checked}`} detail="Các dependency đang phản hồi" accent={ready > 0 && ready === checked} />

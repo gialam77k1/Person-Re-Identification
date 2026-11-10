@@ -118,15 +118,17 @@ Batch mới đặt tại `datasets/inbox/<batch_id>/` và khai báo ảnh, perso
 `manifest.json`. Duke train hiện tại vẫn xuất hiện như batch khởi tạo. Xem định dạng chi tiết tại
 [Data Inbox](docs/DATA_INBOX.md).
 Luồng vận hành bình thường không yêu cầu chạy từng script bằng terminal.
+Vòng đầu bootstrap `v1 → v2`; sau khi promote, Control API tự đọc alias MLflow `champion` và
+tạo `vN → v(N+1)`. Vì vậy các batch sau lần lượt tạo v3, v4, v5 mà không sửa code hoặc ghi đè release cũ.
 
 ```text
 Validate dataset
   → Extract current embeddings
   → Detect drift
-  → Evaluate model v1 on DukeMTMC-reID
+  → Evaluate source champion on DukeMTMC-reID
   → WAITING_APPROVAL
   → Approve Retraining
-  → Train model v2 (tối đa 50 epoch)
+  → Train next model version (tối đa 50 epoch)
   → Evaluate DukeMTMC-reID + Market-1501
   → Validation/forgetting gate
   → Export ONNX + parity

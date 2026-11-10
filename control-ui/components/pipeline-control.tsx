@@ -9,10 +9,10 @@ const labels: Record<string, string> = {
   validate_data: "Validate dataset",
   extract_embeddings: "Extract current embeddings",
   detect_drift: "Detect drift",
-  evaluate_v1: "Evaluate model v1",
+  evaluate_v1: "Evaluate source champion",
   retraining_approval: "Retraining approval",
-  train_v2: "Train model v2",
-  evaluate_v2: "Evaluate model v2",
+  train_v2: "Train next candidate",
+  evaluate_v2: "Evaluate next candidate",
   validate_release: "Validation gate",
   export_onnx: "Export ONNX & verify parity",
   publish_artifacts: "Publish artifacts to DVC / MinIO",
@@ -32,13 +32,18 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-function StageRow({ stage }: { stage: Stage }) {
+function releaseVersion(release?: string) {
+  const version = release?.match(/:v(\d+)/)?.[1];
+  return version ? `v${version}` : release ?? "model";
+}
+
+function StageRow({ stage, cycle }: { stage: Stage; cycle: Cycle }) {
   const symbol = stage.status === "PASS" ? "✓" : stage.status === "FAIL" ? "×" : stage.status === "RUNNING" ? "●" : stage.status === "WAITING_APPROVAL" ? "!" : "○";
   const color = stage.status === "PASS" ? "text-teal-300" : stage.status === "FAIL" ? "text-rose-300" : stage.status === "RUNNING" ? "text-sky-300" : stage.status === "WAITING_APPROVAL" ? "text-amber-300" : "text-slate-600";
   return (
     <li className="relative grid grid-cols-[2rem_1fr_auto] gap-3 pb-6 last:pb-0">
       <div className={`relative z-10 grid h-8 w-8 place-items-center rounded-full border border-current bg-[#101b28] font-black ${color}`}>{symbol}</div>
-      <div className="pt-1"><p className="text-sm font-bold">{labels[stage.name] ?? stage.name}</p>{stage.detail && <p className="mt-1 text-xs text-slate-500">{stage.detail}</p>}{stage.status === "RUNNING" && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${Math.max(4, stage.progress * 100)}%` }} /></div>}</div>
+      <div className="pt-1"><p className="text-sm font-bold">{stage.name === "evaluate_v1" ? `Evaluate ${releaseVersion(cycle.source_release)}` : stage.name === "train_v2" ? `Train ${releaseVersion(cycle.target_release)}` : stage.name === "evaluate_v2" ? `Evaluate ${releaseVersion(cycle.target_release)}` : labels[stage.name] ?? stage.name}</p>{stage.detail && <p className="mt-1 text-xs text-slate-500">{stage.detail}</p>}{stage.status === "RUNNING" && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${Math.max(4, stage.progress * 100)}%` }} /></div>}</div>
       <div className="pt-1"><StatusPill status={stage.status} /></div>
       {stage.name !== "production_approval" && <span className="absolute left-[15px] top-8 h-[calc(100%-1.4rem)] w-px bg-slate-800" />}
     </li>
@@ -98,7 +103,7 @@ export function PipelineControl() {
   const driftChecks = driftEvidence?.checks as Record<string, { value: number; maximum: number; passed: boolean }> | undefined;
   const stage = (name: string) => cycle?.stages.find((item) => item.name === name);
   const canApprove = cycle?.status === "WAITING_APPROVAL" && stage("retraining_approval")?.status === "WAITING_APPROVAL";
-  const canPromote = cycle?.status === "WAITING_APPROVAL" && stage("staging_test")?.status === "PASS";
+  const canPromote = cycle?.status === "WAITING_APPROVAL" && stage("register_candidate")?.status === "PASS";
 
   async function perform(callback: () => Promise<void>) {
     setBusy(true); setError("");
@@ -121,10 +126,10 @@ export function PipelineControl() {
       <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_0.65fr]">
         <section className="panel rounded-2xl p-6">
           <div className="flex flex-col justify-between gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-center">
-            <div><p className="eyebrow">Lifecycle timeline</p><h2 className="mt-2 text-xl font-bold">Model v1 → model v2</h2></div>
+            <div><p className="eyebrow">Lifecycle timeline</p><h2 className="mt-2 text-xl font-bold">{cycle ? `${releaseVersion(cycle.source_release)} → ${releaseVersion(cycle.target_release)}` : "Champion → next version"}</h2></div>
             <select value={activeId} onChange={(event) => setActiveId(event.target.value)} className="max-w-xs rounded-lg border border-slate-700 bg-[#09111b] px-3 py-2 text-xs text-slate-300"><option value="">Select cycle</option>{cycles.map((item) => <option key={item.id} value={item.id}>{item.dataset} · {item.status} · {item.id.slice(0, 8)}</option>)}</select>
           </div>
-          {cycle ? <ol className="mt-6">{cycle.stages.map((item) => <StageRow key={item.name} stage={item} />)}</ol> : <p className="mt-8 text-sm text-slate-500">Import batch hợp lệ trong Data Inbox để tạo cycle đầu tiên.</p>}
+          {cycle ? <ol className="mt-6">{cycle.stages.map((item) => <StageRow key={item.name} stage={item} cycle={cycle} />)}</ol> : <p className="mt-8 text-sm text-slate-500">Import batch hợp lệ trong Data Inbox để tạo cycle đầu tiên.</p>}
         </section>
 
         <aside className="space-y-6">
@@ -133,14 +138,14 @@ export function PipelineControl() {
             {cycle && <p className="mt-3 break-all font-mono text-[11px] text-slate-500">{cycle.id}</p>}
             <label className="mt-4 block text-xs font-bold text-slate-400">Operator<input value={actor} onChange={(event) => setActor(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-2 text-sm text-white" /></label>
             <div className="mt-5 grid gap-2">
-              <button disabled={!canApprove || busy} onClick={() => action("approve-retraining", `Phê duyệt retraining model v2 từ evidence ${String(reviewEvidence?.artifact_name ?? "chưa xác định")}?`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
+              <button disabled={!canApprove || busy} onClick={() => action("approve-retraining", `Phê duyệt retraining ${cycle?.target_release ?? "model kế tiếp"} từ evidence ${String(reviewEvidence?.artifact_name ?? "chưa xác định")}?`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
               <button disabled={!canPromote || busy} onClick={() => action("promote", "Promote model candidate lên production?")} className="rounded-lg border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-bold text-teal-100 disabled:cursor-not-allowed disabled:opacity-30">Promote to Production</button>
-              <button disabled={!cycle || busy} onClick={() => action("rollback", "Rollback production về model v1?")} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback to v1</button>
+              <button disabled={!cycle || busy} onClick={() => action("rollback", `Rollback production về ${cycle?.source_release ?? "model trước"}?`)} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback previous</button>
             </div>
           </section>
           <section className="panel overflow-hidden rounded-2xl p-5">
             <div className="flex items-center justify-between gap-3">
-              <div><p className="eyebrow">Model v2 training</p><p className="mt-2 text-sm text-slate-400">Self-hosted GPU runner</p></div>
+              <div><p className="eyebrow">{releaseVersion(cycle?.target_release)} training</p><p className="mt-2 text-sm text-slate-400">Self-hosted GPU runner</p></div>
               {stage("train_v2") && <StatusPill status={stage("train_v2")!.status} />}
             </div>
             {trainingMetrics ? <>
