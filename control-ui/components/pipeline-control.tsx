@@ -106,7 +106,16 @@ export function PipelineControl() {
   }, [refreshCycle]);
 
   const metrics = useMemo(() => events.filter((event) => event.kind === "stage.metrics").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
-  const trainingMetrics = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "train_v2").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
+  const trainingMetrics = useMemo(() => {
+    const candidates = events
+      .filter((event) => event.kind === "stage.metrics" && event.payload.stage === "train_v2")
+      .map((event) => event.payload.metrics as Record<string, unknown> | undefined)
+      .filter((item): item is Record<string, unknown> => Boolean(item));
+    // Completion reports intentionally omit live GPU/LR fields. Keep the most
+    // recent epoch telemetry instead of replacing the UI with empty values.
+    return [...candidates].reverse().find((item) => typeof item.epoch === "number")
+      ?? candidates.at(-1);
+  }, [events]);
   const driftEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "detect_drift").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
   const reviewEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "evaluate_v1").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
   const approvedDecision = useMemo(() => events.filter((event) => event.kind === "retraining.decision_created").at(-1)?.payload, [events]);

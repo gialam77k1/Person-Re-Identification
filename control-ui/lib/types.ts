@@ -88,9 +88,16 @@ export type EvaluationVersion = {
   retrieval_preview: RetrievalPreview[];
 };
 
+export type IdentityCameraGroup = {
+  person_id: number;
+  camera_count: number;
+  images: EvaluationImage[];
+};
+
 export type EvaluationOverview = {
   dataset: string;
   dataset_samples: EvaluationImage[];
+  identity_camera_groups: IdentityCameraGroup[];
   versions: EvaluationVersion[];
 };
 

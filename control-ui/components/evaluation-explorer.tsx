@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { EvaluationImage, EvaluationVersion } from "@/lib/types";
+import type { EvaluationImage, EvaluationVersion, IdentityCameraGroup } from "@/lib/types";
 
 function imageUrl(dataset: string, imagePath: string) {
   const segments = [dataset, ...imagePath.split("/")].map(encodeURIComponent);
@@ -26,10 +26,12 @@ function DatasetImage({ dataset, image, className = "" }: { dataset: string; ima
 export function EvaluationExplorer({
   dataset,
   samples,
+  identityCameraGroups,
   versions,
 }: {
   dataset: string;
   samples: EvaluationImage[];
+  identityCameraGroups: IdentityCameraGroup[];
   versions: EvaluationVersion[];
 }) {
   const [selectedKey, setSelectedKey] = useState(
@@ -61,6 +63,44 @@ export function EvaluationExplorer({
             ))}
           </div>
         ) : <p className="mt-5 text-sm text-amber-300">Dataset chưa được mount vào Control API.</p>}
+      </section>
+
+      <section className="panel rounded-2xl p-5 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow">Cross-camera identity view</p>
+            <h2 className="mt-2 text-xl font-bold">Cùng một ID qua nhiều camera</h2>
+            <p className="mt-2 text-sm text-slate-400">Mỗi hàng là một người thật trong dataset. Ảnh được lấy từ các camera khác nhau để kiểm tra biến thiên góc nhìn, ánh sáng và chất lượng ảnh.</p>
+          </div>
+          <span className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-400">{identityCameraGroups.length} identities</span>
+        </div>
+        {identityCameraGroups.length ? (
+          <div className="mt-5 space-y-4">
+            {identityCameraGroups.map((group) => (
+              <article key={group.person_id} className="rounded-2xl border border-slate-700 bg-slate-950/35 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-black text-teal-200">Person ID {group.person_id}</p>
+                    <p className="mt-1 text-xs text-slate-500">Xuất hiện trong {group.camera_count} camera</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.images.map((image) => <span key={image.camera_id} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-[10px] text-slate-400">CAM {image.camera_id}</span>)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+                  {group.images.map((image) => (
+                    <figure key={`${image.camera_id}-${image.image_path}`} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950/70">
+                      <DatasetImage dataset={dataset} image={image} className="aspect-[1/2] w-full" />
+                      <figcaption className="p-2 text-center font-mono text-[10px] font-bold text-slate-400">CAM {image.camera_id}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-5 rounded-xl border border-amber-300/25 bg-amber-300/5 p-4 text-sm text-amber-200">Chưa tìm thấy identity có ảnh từ ít nhất hai camera. Kiểm tra dataset mount và quy tắc tên file ReID.</p>
+        )}
       </section>
 
       <section className="panel rounded-2xl p-5 sm:p-6">

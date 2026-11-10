@@ -72,6 +72,7 @@ class EvaluationService:
         return {
             "dataset": dataset,
             "dataset_samples": self.dataset_samples(dataset),
+            "identity_camera_groups": self.identity_camera_groups(dataset),
             "versions": versions,
         }
 
@@ -93,6 +94,50 @@ class EvaluationService:
                 "camera_id": self._filename_field(path.name, 1, prefix="c"),
             }
             for path in images
+        ]
+
+    def identity_camera_groups(
+        self,
+        dataset: str,
+        limit: int = 4,
+        cameras_per_identity: int = 6,
+    ) -> list[dict[str, Any]]:
+        """Return deterministic examples of one identity observed by multiple cameras."""
+        root = self._dataset_dir(dataset)
+        identities: dict[int, dict[int, dict[str, Any]]] = {}
+        for split in SPLITS:
+            split_dir = root / split
+            if not split_dir.is_dir():
+                continue
+            for path in sorted(split_dir.iterdir()):
+                if path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+                    continue
+                person_id = self._filename_field(path.name, 0)
+                camera_id = self._filename_field(path.name, 1, prefix="c")
+                if person_id is None or camera_id is None or person_id < 0:
+                    continue
+                identities.setdefault(person_id, {}).setdefault(
+                    camera_id,
+                    {
+                        "image_path": f"{split}/{path.name}",
+                        "person_id": person_id,
+                        "camera_id": camera_id,
+                    },
+                )
+
+        candidates = [
+            (person_id, cameras)
+            for person_id, cameras in identities.items()
+            if len(cameras) >= 2
+        ]
+        candidates.sort(key=lambda item: (-len(item[1]), item[0]))
+        return [
+            {
+                "person_id": person_id,
+                "camera_count": len(cameras),
+                "images": [cameras[camera_id] for camera_id in sorted(cameras)[:cameras_per_identity]],
+            }
+            for person_id, cameras in candidates[:limit]
         ]
 
     def resolve_image(self, dataset: str, image_path: str) -> Path:

@@ -37,6 +37,37 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         ):
             self.assertIn(command, self.text)
 
+    def test_evaluation_wrappers_ignore_training_config_environment(self) -> None:
+        duke = (ROOT / "scripts/evaluate_duke_v2.sh").read_text(encoding="utf-8")
+        market = (ROOT / "scripts/evaluate_market1501_v2.sh").read_text(encoding="utf-8")
+        self.assertIn("DUKE_EVAL_CONFIG", duke)
+        self.assertIn("DUKE_V2_REPORT", duke)
+        self.assertNotIn('${CONFIG_PATH', duke)
+        self.assertIn("MARKET1501_EVAL_CONFIG", market)
+        self.assertIn("MARKET1501_V2_REPORT", market)
+        self.assertNotIn('${CONFIG_PATH', market)
+
+    def test_dvc_release_wrapper_uses_valid_shell_identifiers(self) -> None:
+        wrapper = (ROOT / "scripts/validate_v2_dvc_release.sh").read_text(encoding="utf-8")
+        dvc_pipeline = (ROOT / "dvc.yaml").read_text(encoding="utf-8")
+        self.assertIn('DUKE_REPORT=', wrapper)
+        self.assertNotIn('DukeMTMC-reID_REPORT', wrapper)
+        self.assertIn(
+            'env V2_PIPELINE_ROOT=artifacts/pipeline/${v2_pipeline.release_slug}',
+            dvc_pipeline,
+        )
+
+    def test_failures_are_reported_against_the_stage_that_failed(self) -> None:
+        self.assertIn('id: evaluate', self.text)
+        self.assertIn('evaluate_v2 FAIL', self.text)
+        self.assertIn('id: lineage_gate', self.text)
+        self.assertIn('id: release_gate', self.text)
+        self.assertIn('id: publish', self.text)
+        self.assertIn('publish_artifacts FAIL', self.text)
+        self.assertIn('id: registry', self.text)
+        self.assertIn('register_candidate FAIL', self.text)
+        self.assertNotIn('name: Report workflow failure', self.text)
+
     def test_training_contract_is_memory_safe_and_capped_at_fifty_epochs(self) -> None:
         self.assertIn("PYTORCH_CUDA_ALLOC_CONF", self.text)
         self.assertIn("expandable_segments:True,max_split_size_mb:128", self.text)
@@ -82,6 +113,7 @@ class RetrainV2WorkflowTest(unittest.TestCase):
             "evaluate_market1501_v2.sh",
             "evaluate_v2_dual_domain.sh",
             "publish_v2_artifacts.sh",
+            "validate_v2_dvc_release.sh",
         ):
             subprocess.run(["bash", "-n", str(ROOT / "scripts" / script)], check=True)
 
