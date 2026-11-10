@@ -215,6 +215,7 @@ jobs:
         run: ./scripts/train_duke_v2_local.sh --check
 
       - name: Train next model version
+        id: train
         env:
           DECISION_PATH: evidence/approved_decision.json
         run: |
@@ -222,7 +223,7 @@ jobs:
           ./scripts/train_duke_v2_local.sh
 
       - name: Report training failure
-        if: ${{ failure() || cancelled() }}
+        if: ${{ (failure() || cancelled()) && (steps.train.outcome == 'failure' || steps.train.outcome == 'cancelled') }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
           --detail "Model v2 training failed or was cancelled; inspect runner RAM and MLflow logs"
@@ -237,11 +238,19 @@ jobs:
             --metrics-file "${V2_ROOT}/logs/training_completion_report.json"
 
       - name: Evaluate candidate on DukeMTMC-reID and Market-1501
+        id: evaluate
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating the same v2 checkpoint on DukeMTMC-reID and Market-1501"
           ./scripts/evaluate_v2_dual_domain.sh
 
+      - name: Report evaluation failure
+        if: ${{ (failure() || cancelled()) && (steps.evaluate.outcome == 'failure' || steps.evaluate.outcome == 'cancelled') }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL
+          --detail "Candidate evaluation failed; inspect the Duke and Market-1501 report paths in GitHub Actions"
+
       - name: Check improvement and catastrophic forgetting
+        id: quality_gate
         run: |
           set +e
           conda run --no-capture-output -n reid python -m src.catastrophic_forgetting_gate \
@@ -276,6 +285,7 @@ jobs:
             --metrics-file "market1501=${MARKET1501_V2_REPORT}"
 
       - name: Run retraining lineage gate
+        id: lineage_gate
         run: |
           python -m src.retraining_validation_gate \
             --evidence evidence/evidence_manifest.json \
@@ -292,7 +302,14 @@ jobs:
             --output "${V2_ROOT}/release/validation_report.json" \
             --manifest-output "${V2_ROOT}/release/model_manifest.json"
 
+      - name: Report lineage validation failure
+        if: ${{ (failure() || cancelled()) && (steps.lineage_gate.outcome == 'failure' || steps.lineage_gate.outcome == 'cancelled') }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release FAIL
+          --detail "Retraining lineage validation failed; evidence, decision, checkpoint or config checksum did not match"
+
       - name: Export, verify and validate candidate release
+        id: release_gate
         run: |
           mkdir -p artifacts/cross-domain/market1501-v1-on-duke/metrics
           cp "${{ inputs.evaluation_report }}" \
@@ -309,7 +326,14 @@ jobs:
             --progress 1 --detail "Full v2 release validation gate PASS" \
             --metrics-file "${V2_PIPELINE_ROOT}/release/validation_report.json"
 
+      - name: Report release validation failure
+        if: ${{ (failure() || cancelled()) && (steps.release_gate.outcome == 'failure' || steps.release_gate.outcome == 'cancelled') }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release FAIL
+          --detail "ONNX export, parity, reference extraction or immutable release validation failed"
+
       - name: Persist large candidate artifacts with DVC
+        id: publish
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" publish_artifacts RUNNING \
             --detail "Publishing the complete v2 release graph to DVC / MinIO"
@@ -318,7 +342,14 @@ jobs:
             --progress 1 --detail "DVC remote is clean and publication evidence is versioned" \
             --metrics-file "${V2_PIPELINE_ROOT}/release/dvc_publication.json"
 
+      - name: Report artifact publication failure
+        if: ${{ (failure() || cancelled()) && (steps.publish.outcome == 'failure' || steps.publish.outcome == 'cancelled') }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" publish_artifacts FAIL
+          --detail "DVC / MinIO publication failed or remote verification was not clean"
+
       - name: Register MLflow candidate alias
+        id: registry
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate RUNNING --detail "Registering validated MLflow candidate"
           conda run --no-capture-output -n reid python -m src.register_retraining_candidate \
@@ -329,6 +360,12 @@ jobs:
             --alias candidate \
             --output "${V2_ROOT}/release/registration_result.json"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate PASS --progress 1 --detail "MLflow candidate alias assigned" --metrics-file "${V2_ROOT}/release/registration_result.json"
+
+      - name: Report registry failure
+        if: ${{ (failure() || cancelled()) && (steps.registry.outcome == 'failure' || steps.registry.outcome == 'cancelled') }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" register_candidate FAIL
+          --detail "Validated artifacts were not registered with the MLflow candidate alias"
 
       - name: Upload training reports
         uses: actions/upload-artifact@v4
@@ -351,11 +388,11 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Report workflow failure
-        if: ${{ failure() || cancelled() }}
+      - name: Report setup or preflight failure
+        if: ${{ (failure() || cancelled()) && steps.train.outcome == 'skipped' }}
         run: >-
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release FAIL
-          --detail "Retraining workflow failed; inspect GitHub Actions and MLflow logs"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
+          --detail "Retraining setup, lineage materialization or preflight failed before training started"
 
       - name: Remove temporary credential file
         if: ${{ always() }}

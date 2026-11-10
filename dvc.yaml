@@ -494,6 +494,7 @@ stages:
   v2_validate_release:
     cmd: >-
       conda run --no-capture-output -n ${v2_pipeline.conda_env}
+      env V2_PIPELINE_ROOT=artifacts/pipeline/${v2_pipeline.release_slug}
       bash scripts/validate_v2_dvc_release.sh
     deps:
       - scripts/validate_v2_dvc_release.sh
