@@ -12,7 +12,7 @@ def validate_report(path: Path, release_id: str, dataset: str) -> dict:
         raise ValueError("Evaluation release does not match the requested v2 release.")
     if str(report.get("dataset", "")).lower() != dataset.lower():
         raise ValueError("Evaluation dataset does not match the requested dataset.")
-    for key in ("rank1", "rank5", "mAP", "mINP"):
+    for key in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP"):
         value = report.get(key)
         if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
             raise ValueError(f"Evaluation metric {key} is missing or non-finite.")
@@ -35,7 +35,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         report = validate_report(Path(args.report), args.release_id, args.dataset)
-        print(json.dumps({"status": "PASS", "metrics": {key: report[key] for key in ("rank1", "rank5", "mAP", "mINP")}}, indent=2))
+        print(json.dumps({"status": "PASS", "metrics": {key: report[key] for key in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")}}, indent=2))
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}")

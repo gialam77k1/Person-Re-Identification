@@ -69,8 +69,12 @@ def build_lineage_tags(
     metric_tags: dict[str, str] = {}
     for dataset in ("duke", "market1501"):
         values = manifest.get("quality_metrics", {}).get(dataset, {})
-        for metric in ("rank1", "rank5", "mAP", "mINP"):
+        for metric in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP"):
             value = values.get(metric)
+            if metric in {"rank10", "rank20"} and value is None:
+                # Keep old manifests registerable while all newly generated
+                # evaluation reports publish the complete CMC metric family.
+                continue
             if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
                 raise ValueError(f"Invalid {dataset}.{metric} metric in release manifest.")
             metric_tags[f"metrics.{dataset}.{metric}"] = str(float(value))

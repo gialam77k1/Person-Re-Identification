@@ -3,6 +3,18 @@
 import { useMemo, useState } from "react";
 import type { EvaluationImage, EvaluationVersion, IdentityCameraGroup } from "@/lib/types";
 
+const metricLabels = {
+  rank1: "Rank-1",
+  rank5: "Rank-5",
+  rank10: "Rank-10",
+  rank20: "Rank-20",
+  mAP: "mAP",
+  mINP: "mINP",
+} as const;
+
+type MetricName = keyof typeof metricLabels;
+const metricNames = Object.keys(metricLabels) as MetricName[];
+
 function imageUrl(dataset: string, imagePath: string) {
   const segments = [dataset, ...imagePath.split("/")].map(encodeURIComponent);
   return `/evaluation-image/${segments.join("/")}`;
@@ -105,6 +117,28 @@ export function EvaluationExplorer({
 
       <section className="panel rounded-2xl p-5 sm:p-6">
         <p className="eyebrow">Version comparison</p>
+        {versions.length ? (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-700">
+            <table className="min-w-full divide-y divide-slate-700 text-left text-xs">
+              <thead className="bg-slate-950/70 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Model / domain</th>
+                  <th className="px-4 py-3">Protocol</th>
+                  {metricNames.map((metric) => <th key={metric} className="px-4 py-3">{metricLabels[metric]}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {versions.map((version) => (
+                  <tr key={`${version.release_id}:${version.domain}:summary`} className="bg-[#09111b]/50">
+                    <td className="px-4 py-3"><span className="font-black text-white">{version.model_version.toUpperCase()}</span><span className="ml-2 text-slate-500">{version.domain}</span></td>
+                    <td className="px-4 py-3 font-mono text-teal-200">{version.primary_protocol}</td>
+                    {metricNames.map((metric) => <td key={metric} className="px-4 py-3 font-mono text-slate-300">{percentage(version.metrics[metric])}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-2">
           {versions.map((version) => {
             const key = `${version.release_id}:${version.domain}`;
@@ -130,14 +164,28 @@ export function EvaluationExplorer({
               </div>
               <p className="text-xs text-slate-500">Query {selected.metrics.query_count ?? "—"} · Gallery {selected.metrics.gallery_count ?? "—"}</p>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {(["rank1", "rank5", "mAP", "mINP"] as const).map((metric) => (
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              {metricNames.map((metric) => (
                 <div key={metric} className="rounded-xl border border-slate-700 bg-slate-950/50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{metric}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{metricLabels[metric]}</p>
                   <p className="mt-2 text-2xl font-black">{percentage(selected.metrics[metric])}</p>
                 </div>
               ))}
             </div>
+            <p className="mt-3 text-xs text-slate-500">Primary protocol: <span className="font-mono font-bold text-teal-200">{selected.primary_protocol}</span></p>
+
+            {selected.protocols.reranked ? (
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                {(["base", "reranked"] as const).map((protocol) => (
+                  <div key={protocol} className="rounded-xl border border-slate-700 bg-slate-950/35 p-4">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-400">{protocol} metrics</p>
+                    <dl className="mt-3 grid grid-cols-3 gap-3 text-xs">
+                      {metricNames.map((metric) => <div key={metric}><dt className="text-slate-600">{metricLabels[metric]}</dt><dd className="mt-1 font-mono font-bold text-slate-200">{percentage(selected.protocols[protocol]?.[metric])}</dd></div>)}
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {selected.retrieval_preview.length ? (
               <div className="mt-7 space-y-5">

@@ -197,7 +197,10 @@ def build_release(
         "release": {"name": release_id.partition(":")[0], "version": release_id.partition(":")[2], "release_id": release_id, "status": "validated" if passed else "rejected", "created_at": now},
         "source": {"git_commit": checkpoint.get("git_commit"), "training_git_commit": checkpoint.get("training_git_commit"), "dataset_revisions": revisions, "mlflow_run_id": checkpoint.get("mlflow_run_id"), "config_sha256": checkpoint.get("training_config_sha256"), "checkpoint_epoch": checkpoint.get("best_epoch")},
         "model": {"task": "person-re-identification", "architecture": "vit_b_16", "embedding_dim": expected_dim, "training_dataset": "duke"},
-        "quality_metrics": {"duke": {key: duke.get(key) for key in METRICS}, "market1501": {key: market1501.get(key) for key in METRICS}},
+        "quality_metrics": {
+            "duke": {key: duke.get(key) for key in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")},
+            "market1501": {key: market1501.get(key) for key in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")},
+        },
         "contract": {"input_name": contract.get("input_name"), "input_shape": expected_input_shape, "output_name": contract.get("output_name"), "output_shape": ["batch_size", expected_dim], "preprocessing_path": repository_path(preprocessing_output_path), "reference_embeddings_l2_normalized": True},
         "reference": {"num_samples": len(embeddings), "embedding_dim": expected_dim, "norm_max_abs_error": norm_error},
         "policy": {"path": repository_path(policy_path), "sha256": sha256_file(policy_path)},

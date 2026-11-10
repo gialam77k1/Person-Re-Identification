@@ -227,6 +227,8 @@ def main() -> None:
             "server_url": args.server_url,
             "model_name": args.model_name,
             "protocol": "Triton HTTP, letterbox preprocessing, L2-normalized embeddings, cosine distance, no flip test, no re-ranking",
+            "primary_protocol": "base",
+            "use_rerank": False,
             "workers": args.workers,
             "num_query_samples": int(query_vectors.shape[0]),
             "num_gallery_samples": int(gallery_vectors.shape[0]),
@@ -239,6 +241,11 @@ def main() -> None:
                 and np.allclose(np.linalg.norm(gallery_vectors, axis=1), 1.0, atol=1e-5)
             ),
             **retrieval_metrics,
+            **{f"{name}_base": retrieval_metrics[name] for name in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")},
+            "protocols": {
+                "base": {name: retrieval_metrics[name] for name in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")},
+                "reranked": None,
+            },
             "retrieval_preview": build_retrieval_preview(
                 query_features=query_vectors,
                 gallery_features=gallery_vectors,

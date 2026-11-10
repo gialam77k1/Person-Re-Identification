@@ -243,6 +243,21 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
                 "mINP": base_results["mINP"],
             }
         )
+    results["primary_protocol"] = "reranked" if results["use_rerank"] else "base"
+    results["protocols"] = {
+        "base": {
+            metric: results[f"{metric}_base"]
+            for metric in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")
+        },
+        "reranked": (
+            {
+                metric: results[f"{metric}_rerank"]
+                for metric in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")
+            }
+            if results["use_rerank"]
+            else None
+        ),
+    }
     print(results)
 
     output_path = Path(config["artifacts"]["metrics_dir"]) / config["evaluation"].get(
