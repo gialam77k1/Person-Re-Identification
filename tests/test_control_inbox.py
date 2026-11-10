@@ -16,9 +16,13 @@ from src.control_api.store import CycleStore
 class FakeDispatcher:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, str]]] = []
+        self.fail_next = False
 
     def dispatch(self, workflow: str, inputs: dict[str, str]) -> dict[str, Any]:
         self.calls.append((workflow, inputs))
+        if self.fail_next:
+            self.fail_next = False
+            raise RuntimeError("temporary dispatch failure")
         return {"workflow": workflow, "inputs": inputs}
 
     def download_artifact(self, run_id: str, artifact_name: str) -> dict[str, bytes]:
@@ -174,6 +178,55 @@ class DataInboxServiceTest(unittest.TestCase):
         self.assertEqual(retried["id"], blocked["id"])
         self.assertEqual(retried["status"], "DISPATCHED")
         self.assertIsNotNone(retried["cycle_id"])
+
+    def test_failed_dispatch_retry_creates_a_new_cycle_attempt(self) -> None:
+        self.dispatcher.fail_next = True
+        with self.assertRaisesRegex(RuntimeError, "temporary dispatch failure"):
+            self.inbox.import_batch(
+                source_path="dukemtmc-reid/bounding_box_train",
+                dataset="dukemtmc-reid",
+                actor="operator",
+            )
+
+        first = self.store.list_cycles()[0]
+        self.assertEqual(first["status"], CycleStatus.FAIL.value)
+        self.lifecycle.abandon_failed(first["id"], "operator")
+
+        retried, created = self.inbox.import_batch(
+            source_path="dukemtmc-reid/bounding_box_train",
+            dataset="dukemtmc-reid",
+            actor="operator",
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(retried["status"], "DISPATCHED")
+        self.assertNotEqual(retried["cycle_id"], first["id"])
+        self.assertEqual(len(self.dispatcher.calls), 2)
+        retry_cycle = self.store.get_cycle(retried["cycle_id"])
+        self.assertTrue(retry_cycle["idempotency_key"].endswith(":attempt:2"))
+
+    def test_dispatched_batch_linked_to_cancelled_cycle_can_retry(self) -> None:
+        first_batch, _ = self.inbox.import_batch(
+            source_path="dukemtmc-reid/bounding_box_train",
+            dataset="dukemtmc-reid",
+            actor="operator",
+        )
+        first_cycle_id = first_batch["cycle_id"]
+        self.store.update_cycle(first_cycle_id, status=CycleStatus.FAIL, error="old failure")
+        self.lifecycle.abandon_failed(first_cycle_id, "operator")
+
+        retried, created = self.inbox.import_batch(
+            source_path="dukemtmc-reid/bounding_box_train",
+            dataset="dukemtmc-reid",
+            actor="operator",
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(retried["status"], "DISPATCHED")
+        self.assertNotEqual(retried["cycle_id"], first_cycle_id)
+        self.assertEqual(len(self.dispatcher.calls), 2)
+        retry_cycle = self.store.get_cycle(retried["cycle_id"])
+        self.assertTrue(retry_cycle["idempotency_key"].endswith(":attempt:2"))
 
 
 if __name__ == "__main__":

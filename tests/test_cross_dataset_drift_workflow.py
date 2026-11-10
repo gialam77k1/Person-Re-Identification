@@ -60,6 +60,14 @@ class CrossDatasetDriftWorkflowTest(unittest.TestCase):
         self.assertIn('"workflow_run_id":"${{ github.run_id }}"', workflow_text)
         self.assertIn('LOG_DRIFT_MLFLOW: "1"', workflow_text)
 
+    def test_runner_context_is_not_used_in_job_level_environment(self) -> None:
+        workflow_text = (ROOT / ".github/workflows/cross-domain-drift.yml").read_text(
+            encoding="utf-8"
+        )
+        job_environment = workflow_text.split("    steps:", 1)[0]
+        self.assertNotIn("runner.temp", job_environment)
+        self.assertIn('base_manifest="${RUNNER_TEMP}/reid-source-', workflow_text)
+
 
 if __name__ == "__main__":
     unittest.main()

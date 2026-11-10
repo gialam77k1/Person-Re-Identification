@@ -66,15 +66,32 @@ jobs:
       CONTROL_CYCLE_ID: ${{ inputs.cycle_id }}
       CONTROL_API_URL: ${{ vars.CONTROL_API_URL || 'http://localhost:8090' }}
       CONTROL_CALLBACK_TOKEN: ${{ secrets.CONTROL_CALLBACK_TOKEN }}
-      BASE_CHECKPOINT: ${{ runner.temp }}/reid-base-${{ inputs.cycle_id }}/best_model.pth
       # Reduce CUDA allocator fragmentation on the long-lived self-hosted runner.
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True,max_split_size_mb:128
       INBOX_CONFIG: configs/runtime/duke_v2_inbox_${{ inputs.cycle_id }}.yaml
-      INBOX_DATASET_ROOT: ${{ runner.temp }}/reid-inbox-${{ inputs.cycle_id }}/dataset
-      INBOX_DATASET_POINTER: ${{ runner.temp }}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Resolve runner runtime paths
+        run: |
+          base_checkpoint="${RUNNER_TEMP}/reid-base-${{ inputs.cycle_id }}/best_model.pth"
+          inbox_root="${RUNNER_TEMP}/reid-inbox-${{ inputs.cycle_id }}/dataset"
+          inbox_pointer="${RUNNER_TEMP}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc"
+          {
+            echo "BASE_CHECKPOINT=${base_checkpoint}"
+            echo "INBOX_DATASET_ROOT=${inbox_root}"
+            echo "INBOX_DATASET_POINTER=${inbox_pointer}"
+            if [[ -n '${{ inputs.dataset_path }}' ]]; then
+              echo "CONFIG_PATH=${INBOX_CONFIG}"
+              echo "DATASET_PATH=${inbox_root}"
+              echo "DATASET_DVC_PATH=${inbox_pointer}"
+            else
+              echo "CONFIG_PATH=configs/duke_v2_train.yaml"
+              echo "DATASET_PATH=datasets/dukemtmc-reid"
+              echo "DATASET_DVC_PATH=datasets/dukemtmc-reid.dvc"
+            fi
+          } >> "$GITHUB_ENV"
 
       - name: Configure local MLOps credentials
         env:
@@ -173,7 +190,7 @@ jobs:
           --release-id "${{ inputs.source_release }}"
           --dataset "${{ inputs.dataset }}"
           --current-commit "${{ github.sha }}"
-          --dataset-pointer "${{ inputs.dataset_path != '' && env.INBOX_DATASET_POINTER || 'datasets/dukemtmc-reid.dvc' }}"
+          --dataset-pointer "${DATASET_DVC_PATH}"
           --base-checkpoint "${BASE_CHECKPOINT}"
 
       - name: Fetch and verify approved decision from Control API
@@ -195,17 +212,11 @@ jobs:
       - name: Preflight next-version training
         env:
           DECISION_PATH: evidence/approved_decision.json
-          CONFIG_PATH: ${{ inputs.dataset_path != '' && env.INBOX_CONFIG || 'configs/duke_v2_train.yaml' }}
-          DATASET_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_ROOT || 'datasets/dukemtmc-reid' }}
-          DATASET_DVC_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_POINTER || 'datasets/dukemtmc-reid.dvc' }}
         run: ./scripts/train_duke_v2_local.sh --check
 
       - name: Train next model version
         env:
           DECISION_PATH: evidence/approved_decision.json
-          CONFIG_PATH: ${{ inputs.dataset_path != '' && env.INBOX_CONFIG || 'configs/duke_v2_train.yaml' }}
-          DATASET_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_ROOT || 'datasets/dukemtmc-reid' }}
-          DATASET_DVC_PATH: ${{ inputs.dataset_path != '' && env.INBOX_DATASET_POINTER || 'datasets/dukemtmc-reid.dvc' }}
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 RUNNING --detail "Approved retraining started"
           ./scripts/train_duke_v2_local.sh

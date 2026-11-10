@@ -58,10 +58,17 @@ jobs:
       INBOX_DATASET_REVISION: ${{ inputs.dataset_revision }}
       INBOX_DATASET_PATH: ${{ inputs.dataset_path }}
       INBOX_DATASET_HOST_PATH: ${{ inputs.dataset_host_path }}
-      BASE_MANIFEST: ${{ runner.temp }}/reid-source-${{ inputs.cycle_id }}/model_manifest.json
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Resolve runner runtime paths
+        run: |
+          base_manifest="${RUNNER_TEMP}/reid-source-${{ inputs.cycle_id }}/model_manifest.json"
+          {
+            echo "BASE_MANIFEST=${base_manifest}"
+            echo "MODEL_MANIFEST_PATH=${base_manifest}"
+          } >> "$GITHUB_ENV"
 
       - name: Mark data validation running
         run: >-
@@ -113,7 +120,6 @@ jobs:
           SAMPLE_SIZE: ${{ inputs.sample_size }}
           RELEASE_ID: ${{ inputs.release_id }}
           RELEASE_SLUG: ${{ inputs.release_slug }}
-          MODEL_MANIFEST_PATH: ${{ env.BASE_MANIFEST }}
           LOG_DRIFT_MLFLOW: "1"
         run: |
           set -a
@@ -129,9 +135,10 @@ jobs:
       - name: Evaluate source champion on DukeMTMC-reID
         env:
           RELEASE_ID: ${{ inputs.release_id }}
-          DATASET_POINTER: ${{ runner.temp }}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc
         run: |
-          if [[ -z "${{ inputs.dataset_path }}" ]]; then
+          if [[ -n "${{ inputs.dataset_path }}" ]]; then
+            export DATASET_POINTER="${RUNNER_TEMP}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc"
+          else
             export DATASET_POINTER=datasets/dukemtmc-reid.dvc
           fi
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Evaluating source champion ${{ inputs.release_id }} on DukeMTMC-reID"
