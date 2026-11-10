@@ -32,7 +32,7 @@ Bộ quét repository từ chối file model/data nhị phân được track, fi
 Để pull request lỗi không thể merge, vào GitHub:
 
 1. `Settings → Branches` hoặc `Settings → Rules → Rulesets`.
-2. Bảo vệ nhánh `lam` và nhánh production (`main` nếu dùng).
+2. Bảo vệ nhánh production `main`.
 3. Bật `Require status checks to pass before merging`.
 4. Chọn cả hai required checks nêu trên.
 
