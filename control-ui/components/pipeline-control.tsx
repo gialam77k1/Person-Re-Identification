@@ -54,6 +54,16 @@ function metricText(value: unknown, digits = 4) {
   return typeof value === "number" ? value.toFixed(digits) : String(value ?? "—");
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function percent(value: unknown) {
+  return typeof value === "number" ? `${(value * 100).toFixed(2)}%` : "—";
+}
+
 export function PipelineControl() {
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -101,6 +111,13 @@ export function PipelineControl() {
   const reviewEvidence = useMemo(() => events.filter((event) => event.kind === "stage.metrics" && event.payload.stage === "evaluate_v1").at(-1)?.payload.metrics as Record<string, unknown> | undefined, [events]);
   const approvedDecision = useMemo(() => events.filter((event) => event.kind === "retraining.decision_created").at(-1)?.payload, [events]);
   const driftChecks = driftEvidence?.checks as Record<string, { value: number; maximum: number; passed: boolean }> | undefined;
+  const evaluationEvidence = record(reviewEvidence?.evaluation);
+  const qualityChecks = record(reviewEvidence?.quality_checks) as Record<string, { actual?: number; retrain_below?: number; triggered?: boolean }> | undefined;
+  const evidenceChecks = record(reviewEvidence?.evidence_checks) as Record<string, { actual?: unknown; expected?: unknown; passed?: boolean }> | undefined;
+  const triggeredQuality = qualityChecks ? Object.entries(qualityChecks).filter(([, check]) => check.triggered) : [];
+  const approvalReason = driftEvidence?.drift_detected === true && triggeredQuality.length
+    ? `Drift đã được phát hiện và ${triggeredQuality.map(([name, check]) => `${name} ${percent(check.actual)} thấp hơn ngưỡng ${percent(check.retrain_below)}`).join(", ")}.`
+    : "Chỉ phê duyệt khi drift và chất lượng source champion đã được kiểm chứng bằng report đầy đủ.";
   const stage = (name: string) => cycle?.stages.find((item) => item.name === name);
   const canApprove = cycle?.status === "WAITING_APPROVAL" && stage("retraining_approval")?.status === "WAITING_APPROVAL";
   const canPromote = cycle?.status === "WAITING_APPROVAL" && stage("register_candidate")?.status === "PASS";
@@ -138,7 +155,7 @@ export function PipelineControl() {
             {cycle && <p className="mt-3 break-all font-mono text-[11px] text-slate-500">{cycle.id}</p>}
             <label className="mt-4 block text-xs font-bold text-slate-400">Operator<input value={actor} onChange={(event) => setActor(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-[#09111b] px-3 py-2 text-sm text-white" /></label>
             <div className="mt-5 grid gap-2">
-              <button disabled={!canApprove || busy} onClick={() => action("approve-retraining", `Phê duyệt retraining ${cycle?.target_release ?? "model kế tiếp"} từ evidence ${String(reviewEvidence?.artifact_name ?? "chưa xác định")}?`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
+              <button disabled={!canApprove || busy || !evaluationEvidence} onClick={() => action("approve-retraining", `Phê duyệt retraining ${cycle?.target_release ?? "model kế tiếp"}?\n\nSource mAP: ${percent(evaluationEvidence?.mAP)}\nSource Rank-1: ${percent(evaluationEvidence?.rank1)}\nDrift: ${String(driftEvidence?.drift_detected ?? "unknown")}\n\n${approvalReason}`)} className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100 disabled:cursor-not-allowed disabled:opacity-30">Approve Retraining</button>
               <button disabled={!canPromote || busy} onClick={() => action("promote", "Promote model candidate lên production?")} className="rounded-lg border border-teal-300/30 bg-teal-300/10 px-4 py-3 text-sm font-bold text-teal-100 disabled:cursor-not-allowed disabled:opacity-30">Promote to Production</button>
               <button disabled={!cycle || busy} onClick={() => action("rollback", `Rollback production về ${cycle?.source_release ?? "model trước"}?`)} className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100 disabled:cursor-not-allowed disabled:opacity-30">Rollback previous</button>
             </div>
@@ -165,6 +182,26 @@ export function PipelineControl() {
           </section>
           <section className="panel rounded-2xl p-5">
             <div className="flex items-center justify-between"><p className="eyebrow">Approval evidence</p>{Boolean(reviewEvidence?.status) && <StatusPill status={String(reviewEvidence?.status)} />}</div>
+            <div className={`mt-4 rounded-xl border p-4 text-sm ${triggeredQuality.length ? "border-amber-300/25 bg-amber-300/5 text-amber-100" : "border-slate-700 bg-[#09111b] text-slate-300"}`}>
+              <p className="font-bold">Vì sao hệ thống đề xuất retraining?</p>
+              <p className="mt-2 leading-6 text-slate-300">{approvalReason}</p>
+              <p className="mt-2 text-xs text-slate-500">Approve sẽ khóa evidence/checksum hiện tại và bắt đầu train {cycle?.target_release ?? "candidate kế tiếp"}; thao tác này không tự promote production.</p>
+            </div>
+            {evaluationEvidence ? <>
+              <p className="mt-5 text-xs font-bold uppercase tracking-wider text-slate-400">Source champion evaluation</p>
+              <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Rank-1</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{percent(evaluationEvidence.rank1)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Rank-5</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{percent(evaluationEvidence.rank5)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">mAP</dt><dd className="mt-1 font-mono text-lg font-bold text-teal-200">{percent(evaluationEvidence.mAP)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">mINP</dt><dd className="mt-1 font-mono text-lg font-bold text-teal-200">{percent(evaluationEvidence.mINP)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Queries</dt><dd className="mt-1 font-mono font-bold">{metricText(evaluationEvidence.num_query_samples ?? evaluationEvidence.query_count, 0)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Gallery</dt><dd className="mt-1 font-mono font-bold">{metricText(evaluationEvidence.num_gallery_samples ?? evaluationEvidence.gallery_count, 0)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Coverage</dt><dd className="mt-1 font-mono font-bold">{percent(evaluationEvidence.query_coverage)}</dd></div>
+                <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Embedding</dt><dd className="mt-1 font-mono font-bold">{metricText(evaluationEvidence.embedding_dim, 0)}D · {evaluationEvidence.embeddings_finite === true ? "finite" : "invalid"}</dd></div>
+              </dl>
+            </> : <p className="mt-4 rounded-lg border border-amber-300/20 bg-amber-300/5 p-3 text-xs text-amber-200">Chưa nhận được evaluation report nên Approve đang bị khóa.</p>}
+            {qualityChecks && <div className="mt-4 space-y-2"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Quality trigger</p>{Object.entries(qualityChecks).map(([name, check]) => <div key={name} className="flex items-center justify-between gap-3 rounded-lg bg-[#09111b] px-3 py-2 text-xs"><span className="font-semibold">{name}</span><span className={check.triggered ? "font-mono text-amber-300" : "font-mono text-teal-300"}>{percent(check.actual)} / retrain below {percent(check.retrain_below)} · {check.triggered ? "TRIGGERED" : "PASS"}</span></div>)}</div>}
+            {evidenceChecks && <details className="mt-4 rounded-lg border border-slate-800 bg-[#09111b] p-3"><summary className="cursor-pointer text-xs font-bold text-slate-400">Evidence integrity checks</summary><div className="mt-3 space-y-2">{Object.entries(evidenceChecks).map(([name, check]) => <div key={name} className="flex justify-between gap-3 text-[11px]"><span className="text-slate-400">{name}</span><span className={check.passed ? "font-mono text-teal-300" : "font-mono text-rose-300"}>{check.passed ? "PASS" : "FAIL"} · {String(check.actual ?? "—")} / {String(check.expected ?? "—")}</span></div>)}</div></details>}
             {driftEvidence ? <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
               <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Release</dt><dd className="mt-1 break-all font-mono text-sky-200">{String(driftEvidence.release_id)}</dd></div>
               <div className="rounded-lg bg-[#09111b] p-3"><dt className="text-slate-500">Drift</dt><dd className="mt-1 font-mono text-rose-200">{String(driftEvidence.drift_detected)}</dd></div>
