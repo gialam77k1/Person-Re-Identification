@@ -69,6 +69,18 @@ class ReleaseWorkflowTest(unittest.TestCase):
         )
         self.assertIn("production_approval FAIL", report_step["run"])
 
+    def test_every_release_callback_loads_local_credentials(self) -> None:
+        callback_steps = []
+        for job in self.workflow["jobs"].values():
+            for step in job.get("steps", []):
+                if "control_callback.py" in step.get("run", ""):
+                    callback_steps.append(step)
+
+        self.assertGreaterEqual(len(callback_steps), 3)
+        for step in callback_steps:
+            with self.subTest(step=step["name"]):
+                self.assertIn("source .env.mlops", step["run"])
+
 
 if __name__ == "__main__":
     unittest.main()
