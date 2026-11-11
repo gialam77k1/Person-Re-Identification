@@ -189,6 +189,9 @@ jobs:
           RELEASE_ID: ${{ inputs.release_id }}
           RELEASE_SLUG: ${{ inputs.release_slug }}
         run: |
+          set -a
+          source .env.mlops
+          set +a
           python scripts/control_callback.py "${{ inputs.cycle_id }}" deploy_staging RUNNING --detail "Deploying validated candidate to staging"
           ./scripts/deploy_local.sh deploy \
             --environment staging \
