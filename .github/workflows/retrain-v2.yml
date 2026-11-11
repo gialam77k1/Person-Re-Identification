@@ -204,15 +204,23 @@ jobs:
             --run-root "$V2_ROOT"
 
       - name: Verify Git, DVC, dataset and checkpoint lineage
-        run: >-
-          python -m src.retraining_evidence verify
-          --manifest evidence/evidence_manifest.json
-          --cycle-id "${{ inputs.cycle_id }}"
-          --release-id "${{ inputs.source_release }}"
-          --dataset "${{ inputs.dataset }}"
-          --current-commit "${{ github.sha }}"
-          --dataset-pointer "${DATASET_DVC_PATH}"
-          --base-checkpoint "${BASE_CHECKPOINT}"
+        id: evidence_lineage
+        run: |
+          lineage_args=(
+            --manifest evidence/evidence_manifest.json
+            --cycle-id "${{ inputs.cycle_id }}"
+            --release-id "${{ inputs.source_release }}"
+            --dataset "${{ inputs.dataset }}"
+            --current-commit "${{ github.sha }}"
+            --dataset-pointer "${DATASET_DVC_PATH}"
+            --base-checkpoint "${BASE_CHECKPOINT}"
+          )
+          if [[ -n '${{ inputs.resume_training_run_id }}' ]]; then
+            # Training is already FINISHED and immutable in MLflow. A recovery
+            # checkout may intentionally contain a newer evaluation-only fix.
+            lineage_args+=(--allow-source-commit-mismatch)
+          fi
+          python -m src.retraining_evidence verify "${lineage_args[@]}"
 
       - name: Fetch and verify approved decision from Control API
         run: |
@@ -463,10 +471,16 @@ jobs:
           --detail "Retraining setup, lineage materialization or preflight failed before training started"
 
       - name: Report post-training recovery failure
-        if: ${{ (failure() || cancelled()) && inputs.resume_training_run_id != '' && steps.restore.outcome != 'success' }}
+        if: ${{ (failure() || cancelled()) && inputs.resume_training_run_id != '' && (steps.restore.outcome == 'failure' || steps.restore.outcome == 'cancelled') }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL
           --detail "Could not restore the completed MLflow training run; GPU training was not restarted"
+
+      - name: Report post-training evidence verification failure
+        if: ${{ (failure() || cancelled()) && inputs.resume_training_run_id != '' && (steps.evidence_lineage.outcome == 'failure' || steps.evidence_lineage.outcome == 'cancelled') }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL
+          --detail "Immutable evidence, dataset revision, or base checkpoint verification failed before MLflow restore; GPU training was not restarted"
 
       - name: Remove temporary credential file
         if: ${{ always() }}

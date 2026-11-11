@@ -65,6 +65,41 @@ class RetrainingEvidenceTest(unittest.TestCase):
                 current_commit="deadbeef",
             )
 
+    def test_post_training_recovery_allows_new_evaluation_commit_only(self) -> None:
+        manifest = self.root / "bundle" / "evidence_manifest.json"
+        build_bundle(
+            cycle_id="cycle-1", release_id=self.release, dataset="dukemtmc-reid",
+            drift_path=self.root / "drift.json", evaluation_path=self.root / "evaluation.json",
+            decision_path=self.root / "decision.json", base_manifest_path=self.root / "base.json",
+            output_path=manifest, source_commit="training-commit",
+        )
+        verified = verify_bundle(
+            manifest,
+            cycle_id="cycle-1",
+            release_id=self.release,
+            dataset="dukemtmc-reid",
+            current_commit="evaluation-fix-commit",
+            allow_source_commit_mismatch=True,
+        )
+        self.assertEqual(verified["source_git_commit"], "training-commit")
+
+    def test_normal_retraining_rejects_new_checkout_commit(self) -> None:
+        manifest = self.root / "bundle" / "evidence_manifest.json"
+        build_bundle(
+            cycle_id="cycle-1", release_id=self.release, dataset="dukemtmc-reid",
+            drift_path=self.root / "drift.json", evaluation_path=self.root / "evaluation.json",
+            decision_path=self.root / "decision.json", base_manifest_path=self.root / "base.json",
+            output_path=manifest, source_commit="approved-commit",
+        )
+        with self.assertRaisesRegex(ValueError, "source_git_commit"):
+            verify_bundle(
+                manifest,
+                cycle_id="cycle-1",
+                release_id=self.release,
+                dataset="dukemtmc-reid",
+                current_commit="different-commit",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

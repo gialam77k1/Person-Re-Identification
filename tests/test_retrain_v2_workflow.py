@@ -48,8 +48,12 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("src.materialize_training_run", self.text)
         self.assertIn("inputs.resume_training_run_id == ''", self.text)
         self.assertIn("inputs.resume_training_run_id != ''", self.text)
+        self.assertIn("--allow-source-commit-mismatch", self.text)
+        self.assertIn("id: evidence_lineage", self.text)
         recovery_failure = self.text.index("Report post-training recovery failure")
         self.assertIn("evaluate_v2 FAIL", self.text[recovery_failure:])
+        self.assertIn("steps.restore.outcome == 'failure'", self.text)
+        self.assertIn("steps.evidence_lineage.outcome == 'failure'", self.text)
 
     def test_runtime_evaluation_configs_follow_each_target_version(self) -> None:
         self.assertIn("src.prepare_candidate_evaluation", self.text)

@@ -102,6 +102,7 @@ def verify_bundle(
     release_id: str,
     dataset: str,
     current_commit: str | None = None,
+    allow_source_commit_mismatch: bool = False,
     dataset_pointer: Path | None = None,
     base_checkpoint: Path | None = None,
 ) -> dict[str, Any]:
@@ -110,11 +111,19 @@ def verify_bundle(
         "cycle_id": cycle_id,
         "release_id": release_id,
         "dataset": dataset.lower(),
-        "source_git_commit": current_commit or git_commit(),
     }
     for key, value in expected.items():
         if manifest.get(key) != value:
             raise ValueError(f"Evidence lineage mismatch for {key}: {manifest.get(key)!r} != {value!r}")
+    evidence_commit = str(manifest.get("source_git_commit") or "")
+    evaluation_commit = current_commit or git_commit()
+    if not evidence_commit:
+        raise ValueError("Evidence lineage is missing source_git_commit.")
+    if evidence_commit != evaluation_commit and not allow_source_commit_mismatch:
+        raise ValueError(
+            "Evidence lineage mismatch for source_git_commit: "
+            f"{evidence_commit!r} != {evaluation_commit!r}"
+        )
     for spec in [manifest["base_manifest"], *manifest["evidence"].values()]:
         path = manifest_path.parent / spec["path"]
         if sha256_file(path) != spec["sha256"]:
@@ -158,6 +167,14 @@ def parse_args() -> argparse.Namespace:
     verify.add_argument("--release-id", required=True)
     verify.add_argument("--dataset", required=True)
     verify.add_argument("--current-commit")
+    verify.add_argument(
+        "--allow-source-commit-mismatch",
+        action="store_true",
+        help=(
+            "Allow a newer checkout to resume post-training evaluation while the "
+            "immutable evidence remains bound to the commit that performed training."
+        ),
+    )
     verify.add_argument("--dataset-pointer")
     verify.add_argument("--base-checkpoint")
     return parser.parse_args()
@@ -186,6 +203,7 @@ def main() -> int:
                 release_id=args.release_id,
                 dataset=args.dataset,
                 current_commit=args.current_commit,
+                allow_source_commit_mismatch=args.allow_source_commit_mismatch,
                 dataset_pointer=Path(args.dataset_pointer) if args.dataset_pointer else None,
                 base_checkpoint=Path(args.base_checkpoint) if args.base_checkpoint else None,
             )
