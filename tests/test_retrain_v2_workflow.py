@@ -24,6 +24,18 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("src.verify_approved_decision", self.text)
         self.assertIn("/retraining-decision", self.text)
 
+    def test_fresh_training_is_pinned_to_the_approved_evidence_commit(self) -> None:
+        inputs = self.workflow["on"]["workflow_dispatch"]["inputs"]
+        self.assertIn("evidence_git_commit", inputs)
+        self.assertEqual(inputs["evidence_git_commit"]["required"], "true")
+        self.assertIn(
+            "inputs.resume_training_run_id == '' && inputs.evidence_git_commit || github.sha",
+            self.text,
+        )
+        self.assertIn('EXECUTION_GIT_COMMIT=${execution_commit}', self.text)
+        self.assertIn('--current-commit "${EXECUTION_GIT_COMMIT}"', self.text)
+        self.assertIn("--git-commit '${{ inputs.evidence_git_commit }}'", self.text)
+
     def test_workflow_preflights_trains_evaluates_and_gates(self) -> None:
         for command in (
             "train_duke_v2_local.sh --check",

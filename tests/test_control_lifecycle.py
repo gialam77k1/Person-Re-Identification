@@ -50,7 +50,7 @@ def approval_artifact(cycle_id: str) -> dict[str, bytes]:
         "release_id": release,
         "dataset": "dukemtmc-reid",
         "dataset_dvc_revision": "abc.dir",
-        "source_git_commit": "deadbeef",
+        "source_git_commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
         "evidence": {
             "drift_report": {
                 "path": "drift_report.json",
@@ -141,6 +141,10 @@ class LifecycleControllerTest(unittest.TestCase):
         dispatched = self.dispatcher.calls[-1][1]
         self.assertEqual(dispatched["evidence_run_id"], "12345")
         self.assertEqual(dispatched["dataset"], "dukemtmc-reid")
+        self.assertEqual(
+            dispatched["evidence_git_commit"],
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        )
         self.assertEqual(len(dispatched["decision_sha256"]), 64)
         stored = self.store.get_retraining_decision(cycle["id"])
         self.assertEqual(stored["decision"]["status"], "RETRAIN_APPROVED")
@@ -216,6 +220,66 @@ class LifecycleControllerTest(unittest.TestCase):
         self.store.update_cycle(cycle["id"], status=CycleStatus.FAIL)
         with self.assertRaisesRegex(InvalidTransitionError, "completed training"):
             self.lifecycle.retry_post_training(cycle["id"], "operator")
+
+    def test_failed_preflight_retries_with_the_approved_evidence_commit(self) -> None:
+        cycle, _ = self.lifecycle.start(
+            dataset="dukemtmc-reid",
+            source_release="market1501-vit-bnneck:v1-dvc",
+            target_release="market1501-duke-vit-bnneck:v2",
+            idempotency_key="training-setup-retry",
+            actor="tester",
+        )
+        self.store.update_cycle(cycle["id"], status=CycleStatus.WAITING_APPROVAL)
+        self.store.update_stage(
+            cycle["id"], "retraining_approval", StageStatus.WAITING_APPROVAL
+        )
+        self.store.record_event(
+            cycle["id"],
+            "stage.metrics",
+            "Evidence uploaded",
+            {
+                "stage": "evaluate_v1",
+                "metrics": {
+                    "workflow_run_id": "12345",
+                    "artifact_name": f"mlops-evidence-{cycle['id']}",
+                },
+            },
+        )
+        self.dispatcher.artifact = approval_artifact(cycle["id"])
+        self.lifecycle.approve_retraining(cycle["id"], "reviewer")
+        self.store.update_stage(
+            cycle["id"],
+            "train_v2",
+            StageStatus.FAIL,
+            detail="Retraining setup failed before training started",
+        )
+        self.store.update_cycle(cycle["id"], status=CycleStatus.FAIL)
+
+        retried = self.lifecycle.retry_training_setup(cycle["id"], "operator")
+
+        self.assertEqual(retried["status"], CycleStatus.RUNNING.value)
+        self.assertEqual(
+            self.dispatcher.calls[-1][1]["evidence_git_commit"],
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        )
+        self.assertEqual(self.dispatcher.calls[-1][1]["resume_training_run_id"], "")
+        train = next(stage for stage in retried["stages"] if stage["name"] == "train_v2")
+        self.assertEqual(train["status"], StageStatus.RUNNING.value)
+
+    def test_training_setup_retry_rejects_cycle_with_finished_training_run(self) -> None:
+        cycle, _ = self.lifecycle.start(
+            dataset="dukemtmc-reid", source_release="v1", target_release="v2",
+            idempotency_key="training-setup-has-run", actor="tester",
+        )
+        self.store.update_stage(cycle["id"], "retraining_approval", StageStatus.PASS)
+        self.store.update_stage(cycle["id"], "train_v2", StageStatus.FAIL)
+        self.store.record_event(
+            cycle["id"], "stage.metrics", "Training run exists",
+            {"stage": "train_v2", "metrics": {"mlflow_run_id": "finished-run"}},
+        )
+        self.store.update_cycle(cycle["id"], status=CycleStatus.FAIL)
+        with self.assertRaisesRegex(InvalidTransitionError, "post-training recovery"):
+            self.lifecycle.retry_training_setup(cycle["id"], "operator")
 
     def test_only_failed_cycle_can_be_abandoned_and_audit_is_preserved(self) -> None:
         cycle, _ = self.lifecycle.start(
