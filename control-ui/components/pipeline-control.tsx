@@ -60,6 +60,44 @@ function record(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+function structured(value: unknown) {
+  return value !== null && typeof value === "object";
+}
+
+function MetricValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  if (!structured(value)) {
+    if (typeof value === "boolean") return <>{value ? "true" : "false"}</>;
+    return <>{String(value ?? "—")}</>;
+  }
+
+  const entries: [string, unknown][] = Array.isArray(value)
+    ? value.map((item, index) => [String(index + 1), item])
+    : Object.entries(value as Record<string, unknown>);
+
+  if (!entries.length) return <span className="text-slate-500">Empty</span>;
+  if (depth >= 2) {
+    return <span className="break-all text-xs font-normal text-slate-300">{JSON.stringify(value)}</span>;
+  }
+
+  return (
+    <details open={depth === 0} className="font-sans text-xs font-normal text-slate-300">
+      <summary className="cursor-pointer select-none font-semibold text-sky-200">
+        {entries.length} {Array.isArray(value) ? "items" : "fields"}
+      </summary>
+      <div className="mt-2 space-y-2 border-l border-slate-700 pl-3">
+        {entries.map(([key, item]) => (
+          <div key={key} className="min-w-0">
+            <p className="break-all font-mono text-[10px] uppercase text-slate-500">{key}</p>
+            <div className="mt-0.5 break-all font-mono text-xs leading-5 text-slate-200">
+              <MetricValue value={item} depth={depth + 1} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function percent(value: unknown) {
   return typeof value === "number" ? `${(value * 100).toFixed(2)}%` : "—";
 }
@@ -224,7 +262,7 @@ export function PipelineControl() {
             {driftChecks && <div className="mt-3 space-y-2">{Object.entries(driftChecks).map(([name, check]) => <div key={name} className="flex justify-between gap-3 text-[11px]"><span className="text-slate-400">{name}</span><span className={check.passed ? "font-mono text-teal-300" : "font-mono text-rose-300"}>{check.value.toFixed(4)} / {check.maximum}</span></div>)}</div>}
             {approvedDecision && <div className="mt-4 rounded-lg border border-teal-300/20 bg-teal-300/5 p-3 text-xs"><p className="font-bold text-teal-200">{String(approvedDecision.status)}</p><p className="mt-1 text-slate-400">Approved by {String(approvedDecision.approved_by)} · {String(approvedDecision.approved_at)}</p><p className="mt-2 break-all font-mono text-[10px] text-slate-600">SHA256 {String(approvedDecision.decision_sha256)}</p></div>}
           </section>
-          <section className="panel rounded-2xl p-5"><p className="eyebrow">Live metrics</p>{metrics ? <dl className="mt-4 grid grid-cols-2 gap-3">{Object.entries(metrics).map(([key, value]) => <div key={key} className="rounded-lg bg-[#09111b] p-3"><dt className="text-[10px] uppercase text-slate-500">{key}</dt><dd className="mt-1 font-mono text-lg font-bold text-sky-200">{String(value)}</dd></div>)}</dl> : <p className="mt-4 text-sm text-slate-500">Metrics sẽ xuất hiện khi runner gửi callback.</p>}</section>
+          <section className="panel rounded-2xl p-5"><p className="eyebrow">Live metrics</p>{metrics ? <dl className="mt-4 grid grid-cols-2 gap-3">{Object.entries(metrics).map(([key, value]) => <div key={key} className={`min-w-0 rounded-lg bg-[#09111b] p-3 ${structured(value) ? "col-span-2" : ""}`}><dt className="text-[10px] uppercase text-slate-500">{key}</dt><dd className={`mt-1 break-all font-mono text-sky-200 ${structured(value) ? "text-sm" : "text-lg font-bold"}`}><MetricValue value={value} /></dd></div>)}</dl> : <p className="mt-4 text-sm text-slate-500">Metrics sẽ xuất hiện khi runner gửi callback.</p>}</section>
           <section className="panel rounded-2xl p-5"><p className="eyebrow">Live events</p><div className="mt-4 max-h-80 space-y-3 overflow-auto">{events.slice().reverse().map((event) => <div key={event.id} className="border-l border-slate-700 pl-3"><p className="text-xs font-semibold text-slate-300">{event.message}</p><p className="mt-1 font-mono text-[10px] text-slate-600">{new Date(event.created_at).toLocaleString()}</p></div>)}</div></section>
         </aside>
       </div>
