@@ -34,8 +34,27 @@ class RetrainV2WorkflowTest(unittest.TestCase):
             "src.retraining_validation_gate",
             "publish_v2_artifacts.sh",
             "src.register_retraining_candidate",
+            "src.validate_post_training_contract",
         ):
             self.assertIn(command, self.text)
+
+    def test_post_training_contract_is_checked_before_gpu_training(self) -> None:
+        contract = self.text.index("src.validate_post_training_contract")
+        training = self.text.index("./scripts/train_duke_v2_local.sh\n")
+        self.assertLess(contract, training)
+
+    def test_can_resume_a_finished_mlflow_run_without_retraining(self) -> None:
+        self.assertIn("resume_training_run_id", self.text)
+        self.assertIn("src.materialize_training_run", self.text)
+        self.assertIn("inputs.resume_training_run_id == ''", self.text)
+        self.assertIn("inputs.resume_training_run_id != ''", self.text)
+        recovery_failure = self.text.index("Report post-training recovery failure")
+        self.assertIn("evaluate_v2 FAIL", self.text[recovery_failure:])
+
+    def test_runtime_evaluation_configs_follow_each_target_version(self) -> None:
+        self.assertIn("src.prepare_candidate_evaluation", self.text)
+        self.assertIn("DUKE_EVAL_CONFIG=configs/runtime/", self.text)
+        self.assertIn("MARKET1501_EVAL_CONFIG=configs/runtime/", self.text)
 
     def test_evaluation_wrappers_ignore_training_config_environment(self) -> None:
         duke = (ROOT / "scripts/evaluate_duke_v2.sh").read_text(encoding="utf-8")

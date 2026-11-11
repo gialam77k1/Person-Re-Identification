@@ -129,26 +129,12 @@ class LifecycleController:
         self.store.save_retraining_decision(cycle_id, decision, decision_sha256)
         dispatch = self.dispatcher.dispatch(
             self.settings.retraining_workflow,
-            {
-                "cycle_id": cycle_id,
-                "source_release": cycle["source_release"],
-                "target_release": cycle["target_release"],
-                "dataset": cycle["dataset"],
-                "evidence_run_id": str(evidence["workflow_run_id"]),
-                "evidence_artifact": str(evidence["artifact_name"]),
-                "drift_report": "evidence/drift_report.json",
-                "evaluation_report": "evidence/evaluation_report.json",
-                "decision": "evidence/approved_decision.json",
-                "decision_sha256": decision_sha256,
-                "inbox_batch_id": str(cycle.get("inbox_batch_id") or ""),
-                "dataset_revision": str(cycle.get("dataset_revision") or ""),
-                "dataset_path": str(cycle.get("dataset_path") or ""),
-                "dataset_host_path": (
-                    str(self.settings.host_dataset_root / str(cycle["dataset_path"]))
-                    if cycle.get("dataset_path")
-                    else ""
-                ),
-            },
+            self._retraining_inputs(
+                cycle,
+                evidence=evidence,
+                decision_sha256=decision_sha256,
+                resume_training_run_id="",
+            ),
         )
         self.store.audit(
             cycle_id,
@@ -183,6 +169,68 @@ class LifecycleController:
         )
         return self.store.get_cycle(cycle_id)
 
+    def retry_post_training(self, cycle_id: str, actor: str) -> dict[str, Any]:
+        cycle = self.store.get_cycle(cycle_id)
+        if cycle["status"] != CycleStatus.FAIL.value:
+            raise InvalidTransitionError("Only a failed cycle can resume post-training stages.")
+        if self._stage(cycle, "train_v2")["status"] != StageStatus.PASS.value:
+            raise InvalidTransitionError(
+                "A completed training stage is required; this retry never starts GPU training."
+            )
+        post_training = (
+            "evaluate_v2",
+            "validate_release",
+            "export_onnx",
+            "publish_artifacts",
+            "register_candidate",
+        )
+        if not any(
+            self._stage(cycle, name)["status"] == StageStatus.FAIL.value
+            for name in post_training
+        ):
+            raise InvalidTransitionError("No failed post-training stage is available to retry.")
+        training_run_id = self._latest_training_run_id(cycle_id)
+        if not training_run_id:
+            raise InvalidTransitionError(
+                "The completed training stage has no MLflow run ID to restore."
+            )
+        evidence = self._preapproval_evidence(cycle_id)
+        decision = self.store.get_retraining_decision(cycle_id)
+        dispatch_inputs = self._retraining_inputs(
+            cycle,
+            evidence=evidence,
+            decision_sha256=str(decision["sha256"]),
+            resume_training_run_id=training_run_id,
+        )
+        dispatch = self.dispatcher.dispatch(
+            self.settings.retraining_workflow, dispatch_inputs
+        )
+        for name in post_training:
+            self.store.update_stage(
+                cycle_id,
+                name,
+                StageStatus.RUNNING if name == "evaluate_v2" else StageStatus.PENDING,
+                detail=(
+                    f"Restoring MLflow run {training_run_id} and resuming at evaluation"
+                    if name == "evaluate_v2"
+                    else "Waiting for resumed post-training dependencies"
+                ),
+            )
+        self.store.update_cycle(cycle_id, status=CycleStatus.RUNNING, error="")
+        payload = {
+            "dispatch": dispatch,
+            "mlflow_run_id": training_run_id,
+            "resume_stage": "evaluate_v2",
+        }
+        self.store.audit(cycle_id, "post_training.retry", actor, payload)
+        self.store.record_event(
+            cycle_id,
+            "workflow.dispatched",
+            "Post-training workflow resumed from the completed MLflow run",
+            payload,
+        )
+        return self.store.get_cycle(cycle_id)
+
     def _preapproval_evidence(self, cycle_id: str) -> dict[str, Any]:
         for event in reversed(self.store.events(cycle_id)):
             if event["kind"] != "stage.metrics":
@@ -191,6 +239,48 @@ class LifecycleController:
             if payload.get("stage") == "evaluate_v1":
                 return dict(payload.get("metrics", {}))
         return {}
+
+    def _latest_training_run_id(self, cycle_id: str) -> str:
+        for event in reversed(self.store.events(cycle_id)):
+            if event["kind"] != "stage.metrics":
+                continue
+            payload = event.get("payload", {})
+            if payload.get("stage") != "train_v2":
+                continue
+            run_id = str(payload.get("metrics", {}).get("mlflow_run_id", "")).strip()
+            if run_id:
+                return run_id
+        return ""
+
+    def _retraining_inputs(
+        self,
+        cycle: dict[str, Any],
+        *,
+        evidence: dict[str, Any],
+        decision_sha256: str,
+        resume_training_run_id: str,
+    ) -> dict[str, str]:
+        return {
+            "cycle_id": str(cycle["id"]),
+            "source_release": str(cycle["source_release"]),
+            "target_release": str(cycle["target_release"]),
+            "dataset": str(cycle["dataset"]),
+            "evidence_run_id": str(evidence["workflow_run_id"]),
+            "evidence_artifact": str(evidence["artifact_name"]),
+            "drift_report": "evidence/drift_report.json",
+            "evaluation_report": "evidence/evaluation_report.json",
+            "decision": "evidence/approved_decision.json",
+            "decision_sha256": decision_sha256,
+            "inbox_batch_id": str(cycle.get("inbox_batch_id") or ""),
+            "dataset_revision": str(cycle.get("dataset_revision") or ""),
+            "dataset_path": str(cycle.get("dataset_path") or ""),
+            "dataset_host_path": (
+                str(self.settings.host_dataset_root / str(cycle["dataset_path"]))
+                if cycle.get("dataset_path")
+                else ""
+            ),
+            "resume_training_run_id": resume_training_run_id,
+        }
 
     def promote(self, cycle_id: str, actor: str) -> dict[str, Any]:
         cycle = self.store.get_cycle(cycle_id)

@@ -49,6 +49,10 @@ on:
         description: Absolute batch path on the self-hosted runner
         required: false
         default: ""
+      resume_training_run_id:
+        description: Completed MLflow run ID; restores training artifacts and resumes at evaluation
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -121,7 +125,24 @@ jobs:
             echo "DUKE_V2_REPORT=${run_root}/evaluations/duke/metrics/evaluation_duke.json"
             echo "MARKET1501_V2_REPORT=${run_root}/evaluations/market1501/metrics/evaluation_market1501.json"
             echo "FORGETTING_REPORT=${run_root}/release/catastrophic_forgetting_report.json"
+            echo "DUKE_EVAL_CONFIG=configs/runtime/${{ inputs.cycle_id }}/duke-eval.yaml"
+            echo "MARKET1501_EVAL_CONFIG=configs/runtime/${{ inputs.cycle_id }}/market1501-eval.yaml"
           } >> "$GITHUB_ENV"
+
+      - name: Prepare version-neutral evaluation configs
+        run: |
+          python -m src.prepare_candidate_evaluation \
+            --template configs/duke_v2_eval.yaml \
+            --output "$DUKE_EVAL_CONFIG" \
+            --source-release '${{ inputs.source_release }}' \
+            --target-release '${{ inputs.target_release }}' \
+            --run-root "$V2_ROOT/evaluations/duke"
+          python -m src.prepare_candidate_evaluation \
+            --template configs/market1501_v2_eval.yaml \
+            --output "$MARKET1501_EVAL_CONFIG" \
+            --source-release '${{ inputs.source_release }}' \
+            --target-release '${{ inputs.target_release }}' \
+            --run-root "$V2_ROOT/evaluations/market1501"
 
       - name: Download exact pre-approval evidence
         uses: actions/download-artifact@v4
@@ -210,12 +231,41 @@ jobs:
             --target-epochs 50
 
       - name: Preflight next-version training
+        if: ${{ inputs.resume_training_run_id == '' }}
         env:
           DECISION_PATH: evidence/approved_decision.json
         run: ./scripts/train_duke_v2_local.sh --check
 
+      - name: Preflight every post-training contract before GPU training
+        run: |
+          python -m src.validate_post_training_contract \
+            --release-id "$RELEASE_ID" \
+            --duke-config "$DUKE_EVAL_CONFIG" \
+            --duke-report "$DUKE_V2_REPORT" \
+            --market-config "$MARKET1501_EVAL_CONFIG" \
+            --market-report "$MARKET1501_V2_REPORT" \
+            --forgetting-policy configs/catastrophic_forgetting.yaml \
+            --validation-policy configs/retraining_validation.yaml
+          bash -n scripts/evaluate_duke_v2.sh
+          bash -n scripts/evaluate_market1501_v2.sh
+          bash -n scripts/evaluate_v2_dual_domain.sh
+
+      - name: Restore completed training run from MLflow
+        id: restore
+        if: ${{ inputs.resume_training_run_id != '' }}
+        run: |
+          set -a
+          source .env.mlops
+          set +a
+          conda run --no-capture-output -n reid python -m src.materialize_training_run \
+            --run-id '${{ inputs.resume_training_run_id }}' \
+            --release-id "$RELEASE_ID" \
+            --run-root "$V2_ROOT" \
+            --tracking-uri "${MLFLOW_TRACKING_URI:-http://localhost:5000}"
+
       - name: Train next model version
         id: train
+        if: ${{ inputs.resume_training_run_id == '' }}
         env:
           DECISION_PATH: evidence/approved_decision.json
         run: |
@@ -230,24 +280,42 @@ jobs:
 
       - name: Mark training complete
         run: |
-          conda run --no-capture-output -n reid python -m src.validate_v2_training_completion \
-            --run-root "${V2_ROOT}" \
-            --output "${V2_ROOT}/logs/training_completion_report.json"
+          if [[ -z '${{ inputs.resume_training_run_id }}' ]]; then
+            conda run --no-capture-output -n reid python -m src.validate_v2_training_completion \
+              --run-root "${V2_ROOT}" \
+              --output "${V2_ROOT}/logs/training_completion_report.json"
+            completion_report="${V2_ROOT}/logs/training_completion_report.json"
+          else
+            completion_report="${V2_ROOT}/logs/training_restore_report.json"
+          fi
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 PASS \
-            --progress 1 --detail "Model v2 training completed and artifact gate passed" \
-            --metrics-file "${V2_ROOT}/logs/training_completion_report.json"
+            --progress 1 --detail "Completed training artifacts are ready; continuing without retraining" \
+            --metrics-file "${completion_report}"
 
       - name: Evaluate candidate on DukeMTMC-reID and Market-1501
         id: evaluate
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating the same v2 checkpoint on DukeMTMC-reID and Market-1501"
-          ./scripts/evaluate_v2_dual_domain.sh
+          set +e
+          ./scripts/evaluate_v2_dual_domain.sh 2>&1 | tee "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [[ "$status" -ne 0 ]]; then
+            tail -n 1 "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.log" \
+              > "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.error"
+            exit "$status"
+          fi
 
       - name: Report evaluation failure
         if: ${{ (failure() || cancelled()) && (steps.evaluate.outcome == 'failure' || steps.evaluate.outcome == 'cancelled') }}
-        run: >-
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL
-          --detail "Candidate evaluation failed; inspect the Duke and Market-1501 report paths in GitHub Actions"
+        run: |
+          detail="Candidate evaluation failed"
+          error_file="${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.error"
+          if [[ -s "$error_file" ]]; then
+            detail="$(cat "$error_file")"
+          fi
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL \
+            --detail "$detail"
 
       - name: Check improvement and catastrophic forgetting
         id: quality_gate
@@ -389,10 +457,16 @@ jobs:
           retention-days: 30
 
       - name: Report setup or preflight failure
-        if: ${{ (failure() || cancelled()) && steps.train.outcome == 'skipped' }}
+        if: ${{ (failure() || cancelled()) && inputs.resume_training_run_id == '' && steps.train.outcome == 'skipped' }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
           --detail "Retraining setup, lineage materialization or preflight failed before training started"
+
+      - name: Report post-training recovery failure
+        if: ${{ (failure() || cancelled()) && inputs.resume_training_run_id != '' && steps.restore.outcome != 'success' }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 FAIL
+          --detail "Could not restore the completed MLflow training run; GPU training was not restarted"
 
       - name: Remove temporary credential file
         if: ${{ always() }}
