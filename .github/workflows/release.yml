@@ -17,6 +17,7 @@ on:
         default: manual
 
 permissions:
+  actions: read
   contents: read
   packages: write
 
@@ -45,10 +46,34 @@ jobs:
           printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
           chmod 600 .env.mlops
 
+      - name: Locate immutable candidate artifact
+        if: ${{ inputs.cycle_id != 'manual' }}
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: duke-v2-retraining-reports-${{ inputs.cycle_id }}
+        run: |
+          run_id="$(python -m src.find_candidate_artifact \
+            --repository "$GITHUB_REPOSITORY" \
+            --artifact-name "$ARTIFACT_NAME")"
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Download immutable candidate lineage
+        if: ${{ inputs.cycle_id != 'manual' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: duke-v2-retraining-reports-${{ inputs.cycle_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.candidate.outputs.run_id }}
+          path: .candidate-release
+
       - name: Pull candidate artifacts from DVC
         env:
+          RELEASE_ID: ${{ inputs.release_id }}
           RELEASE_SLUG: ${{ inputs.release_slug }}
-        run: ./scripts/dvc_local.sh pull "artifacts/pipeline/${RELEASE_SLUG}"
+          CANDIDATE_REPORTS_ROOT: ${{ inputs.cycle_id != 'manual' && '.candidate-release' || '' }}
+        run: ./scripts/materialize_release_artifacts.sh
 
       - name: Enforce validation gate
         env:
@@ -124,10 +149,34 @@ jobs:
           printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
           chmod 600 .env.mlops
 
+      - name: Locate immutable candidate artifact
+        if: ${{ inputs.cycle_id != 'manual' }}
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: duke-v2-retraining-reports-${{ inputs.cycle_id }}
+        run: |
+          run_id="$(python -m src.find_candidate_artifact \
+            --repository "$GITHUB_REPOSITORY" \
+            --artifact-name "$ARTIFACT_NAME")"
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Download immutable candidate lineage
+        if: ${{ inputs.cycle_id != 'manual' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: duke-v2-retraining-reports-${{ inputs.cycle_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.candidate.outputs.run_id }}
+          path: .candidate-release
+
       - name: Pull deployment artifacts
         env:
+          RELEASE_ID: ${{ inputs.release_id }}
           RELEASE_SLUG: ${{ inputs.release_slug }}
-        run: ./scripts/dvc_local.sh pull "artifacts/pipeline/${RELEASE_SLUG}"
+          CANDIDATE_REPORTS_ROOT: ${{ inputs.cycle_id != 'manual' && '.candidate-release' || '' }}
+        run: ./scripts/materialize_release_artifacts.sh
 
       - name: Authenticate image pull
         env:
@@ -170,10 +219,34 @@ jobs:
           printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
           chmod 600 .env.mlops
 
+      - name: Locate immutable candidate artifact
+        if: ${{ inputs.cycle_id != 'manual' }}
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: duke-v2-retraining-reports-${{ inputs.cycle_id }}
+        run: |
+          run_id="$(python -m src.find_candidate_artifact \
+            --repository "$GITHUB_REPOSITORY" \
+            --artifact-name "$ARTIFACT_NAME")"
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Download immutable candidate lineage
+        if: ${{ inputs.cycle_id != 'manual' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: duke-v2-retraining-reports-${{ inputs.cycle_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.candidate.outputs.run_id }}
+          path: .candidate-release
+
       - name: Pull deployment artifacts
         env:
+          RELEASE_ID: ${{ inputs.release_id }}
           RELEASE_SLUG: ${{ inputs.release_slug }}
-        run: ./scripts/dvc_local.sh pull "artifacts/pipeline/${RELEASE_SLUG}"
+          CANDIDATE_REPORTS_ROOT: ${{ inputs.cycle_id != 'manual' && '.candidate-release' || '' }}
+        run: ./scripts/materialize_release_artifacts.sh
 
       - name: Authenticate image pull
         env:
@@ -209,3 +282,43 @@ jobs:
             --output "artifacts/deployments/production/registry_promotion.json"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" production_approval PASS \
             --progress 1 --detail "Production deployed; MLflow champion now points to $RELEASE_ID"
+
+  report-release-failure:
+    name: Report release failure to Control Center
+    needs: [validate-candidate, build-image, deploy-staging, deploy-production]
+    if: >-
+      ${{ always() && inputs.cycle_id != 'manual' &&
+      (needs.validate-candidate.result == 'failure' ||
+      needs.validate-candidate.result == 'cancelled' ||
+      needs.build-image.result == 'failure' ||
+      needs.build-image.result == 'cancelled' ||
+      needs.deploy-staging.result == 'failure' ||
+      needs.deploy-staging.result == 'cancelled' ||
+      needs.deploy-production.result == 'failure' ||
+      needs.deploy-production.result == 'cancelled') }}
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 10
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+
+      - name: Configure local MLOps credentials
+        env:
+          MLOPS_ENV_FILE: ${{ secrets.MLOPS_ENV_FILE }}
+        run: |
+          test -n "$MLOPS_ENV_FILE"
+          printf '%s\n' "$MLOPS_ENV_FILE" > .env.mlops
+          chmod 600 .env.mlops
+
+      - name: Mark production approval failed
+        env:
+          VALIDATE_RESULT: ${{ needs.validate-candidate.result }}
+          BUILD_RESULT: ${{ needs.build-image.result }}
+          STAGING_RESULT: ${{ needs.deploy-staging.result }}
+          PRODUCTION_RESULT: ${{ needs.deploy-production.result }}
+        run: |
+          set -a
+          source .env.mlops
+          set +a
+          detail="Release failed: validate=${VALIDATE_RESULT}, build=${BUILD_RESULT}, staging=${STAGING_RESULT}, production=${PRODUCTION_RESULT}"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" production_approval FAIL --detail "$detail"

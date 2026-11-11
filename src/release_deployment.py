@@ -138,11 +138,19 @@ def write_deployment_state(state_root: Path, environment: str, record: dict[str,
     directory.mkdir(parents=True, exist_ok=True)
     current = directory / "current.json"
     previous = directory / "previous.json"
+    current_lock = directory / "current.dvc.lock"
+    previous_lock = directory / "previous.dvc.lock"
     if current.is_file():
         shutil.copy2(current, previous)
+    if current_lock.is_file():
+        shutil.copy2(current_lock, previous_lock)
     temporary = directory / "current.json.tmp"
     temporary.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     temporary.replace(current)
+    repository_lock = ROOT / "dvc.lock"
+    if not repository_lock.is_file():
+        raise ReleaseError("The immutable candidate dvc.lock is missing.")
+    shutil.copy2(repository_lock, current_lock)
     (directory / "pending.json").unlink(missing_ok=True)
 
 
@@ -155,12 +163,16 @@ def write_pending_state(state_root: Path, environment: str, record: dict[str, An
     )
 
 
-def select_rollback_record(state_root: Path, environment: str) -> dict[str, Any]:
+def select_rollback_record(state_root: Path, environment: str) -> tuple[dict[str, Any], Path]:
     directory = state_root / environment
-    target = directory / ("current.json" if (directory / "pending.json").is_file() else "previous.json")
+    prefix = "current" if (directory / "pending.json").is_file() else "previous"
+    target = directory / f"{prefix}.json"
+    lock = directory / f"{prefix}.dvc.lock"
     if not target.is_file():
         raise ReleaseError(f"No rollback target recorded for {environment}")
-    return read_json(target)
+    if not lock.is_file():
+        raise ReleaseError(f"No immutable DVC lock recorded for {environment} rollback")
+    return read_json(target), lock
 
 
 def api_json(api_url: str, endpoint: str) -> dict[str, Any]:
@@ -196,6 +208,7 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
     triton_repository = Path(args.triton_model_repository).resolve()
     if not triton_repository.is_dir():
         raise ReleaseError(f"Triton model repository is missing: {triton_repository}")
+    release_root = manifest_path.parents[1]
     try:
         manifest_relative = manifest_path.relative_to(ROOT)
         triton_relative = triton_repository.relative_to(ROOT)
@@ -212,9 +225,17 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         "manifest": str(manifest_relative),
         "validation_report": str(report_path.relative_to(ROOT)),
         "triton_model_repository": str(triton_relative),
+        "dvc_stage": "package_triton",
         "deployed_at": datetime.now(timezone.utc).isoformat(),
         "rollback": is_rollback,
     }
+    publication_path = release_root / "release" / "dvc_publication.json"
+    if publication_path.is_file():
+        publication = read_json(publication_path)
+        stage = publication.get("dvc", {}).get("stage")
+        if not isinstance(stage, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", stage):
+            raise ReleaseError("DVC publication report has an invalid stage")
+        record["dvc_stage"] = stage
     state_root = Path(args.state_root)
     write_pending_state(state_root, args.environment, record)
 
@@ -250,10 +271,13 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
 
 
 def rollback(args: argparse.Namespace) -> dict[str, Any]:
-    previous = select_rollback_record(Path(args.state_root), args.environment)
-    release_root = Path(previous["manifest"]).parents[1]
+    previous, previous_lock = select_rollback_record(Path(args.state_root), args.environment)
+    stage = str(previous.get("dvc_stage", ""))
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", stage):
+        raise ReleaseError("Rollback state has an invalid DVC stage")
+    shutil.copy2(previous_lock, ROOT / "dvc.lock")
     subprocess.run(
-        [sys.executable, "-m", "dvc", "pull", str(release_root)],
+        [sys.executable, "-m", "dvc", "pull", "--with-deps", stage],
         check=True,
         cwd=ROOT,
     )
