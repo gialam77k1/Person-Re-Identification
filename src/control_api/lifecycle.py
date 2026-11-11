@@ -234,6 +234,48 @@ class LifecycleController:
         )
         return self.store.get_cycle(cycle_id)
 
+    def retry_production_release(self, cycle_id: str, actor: str) -> dict[str, Any]:
+        cycle = self.store.get_cycle(cycle_id)
+        if cycle["status"] != CycleStatus.FAIL.value:
+            raise InvalidTransitionError("Only a failed cycle can retry production release.")
+        if self._stage(cycle, "register_candidate")["status"] != StageStatus.PASS.value:
+            raise InvalidTransitionError(
+                "A validated MLflow candidate is required before retrying release."
+            )
+        if self._stage(cycle, "production_approval")["status"] != StageStatus.FAIL.value:
+            raise InvalidTransitionError("The production release did not fail.")
+
+        for name in ("deploy_staging", "staging_test"):
+            self.store.update_stage(
+                cycle_id,
+                name,
+                StageStatus.PENDING,
+                progress=0.0,
+                detail="Waiting for production release retry",
+            )
+        self.store.update_stage(
+            cycle_id,
+            "production_approval",
+            StageStatus.WAITING_APPROVAL,
+            progress=0.0,
+            detail=f"Release retry requested by {actor}; candidate remains validated",
+        )
+        payload = {
+            "resume_stage": "production_release",
+            "target_release": cycle["target_release"],
+        }
+        self.store.audit(cycle_id, "production.retry", actor, payload)
+        self.store.record_event(
+            cycle_id,
+            "production.retry_ready",
+            "Validated candidate is ready for another production release attempt",
+            payload,
+        )
+        self.store.update_cycle(
+            cycle_id, status=CycleStatus.WAITING_APPROVAL, error=""
+        )
+        return self.store.get_cycle(cycle_id)
+
     def retry_training_setup(self, cycle_id: str, actor: str) -> dict[str, Any]:
         cycle = self.store.get_cycle(cycle_id)
         if cycle["status"] != CycleStatus.FAIL.value:

@@ -221,6 +221,51 @@ class LifecycleControllerTest(unittest.TestCase):
         with self.assertRaisesRegex(InvalidTransitionError, "completed training"):
             self.lifecycle.retry_post_training(cycle["id"], "operator")
 
+    def test_failed_release_reopens_production_approval_without_dispatch(self) -> None:
+        cycle, _ = self.lifecycle.start(
+            dataset="dukemtmc-reid",
+            source_release="market1501-vit-bnneck:v1-dvc",
+            target_release="market1501-duke-vit-bnneck:v2",
+            idempotency_key="production-release-retry",
+            actor="tester",
+        )
+        for name in (
+            "train_v2",
+            "evaluate_v2",
+            "validate_release",
+            "export_onnx",
+            "publish_artifacts",
+            "register_candidate",
+        ):
+            self.store.update_stage(cycle["id"], name, StageStatus.PASS)
+        self.store.update_stage(
+            cycle["id"], "production_approval", StageStatus.FAIL
+        )
+        self.store.update_cycle(
+            cycle["id"], status=CycleStatus.FAIL, error="release failed"
+        )
+        dispatch_count = len(self.dispatcher.calls)
+
+        resumed = self.lifecycle.retry_production_release(cycle["id"], "operator")
+
+        self.assertEqual(resumed["status"], CycleStatus.WAITING_APPROVAL.value)
+        self.assertEqual(resumed["error"], "")
+        self.assertEqual(len(self.dispatcher.calls), dispatch_count)
+        self.assertEqual(
+            next(
+                stage
+                for stage in resumed["stages"]
+                if stage["name"] == "production_approval"
+            )["status"],
+            StageStatus.WAITING_APPROVAL.value,
+        )
+        self.assertEqual(
+            next(
+                stage for stage in resumed["stages"] if stage["name"] == "deploy_staging"
+            )["status"],
+            StageStatus.PENDING.value,
+        )
+
     def test_failed_preflight_retries_with_the_approved_evidence_commit(self) -> None:
         cycle, _ = self.lifecycle.start(
             dataset="dukemtmc-reid",
