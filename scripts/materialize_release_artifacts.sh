@@ -35,6 +35,16 @@ if [[ -n "${CANDIDATE_REPORTS_ROOT}" ]]; then
     "artifacts/pipeline/${RELEASE_SLUG}/release/dvc_publication.json"
 fi
 
+dependency_args=(
+  --manifest "artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
+  --repository-root "${ROOT_DIR}"
+)
+if [[ -n "${CANDIDATE_REPORTS_ROOT}" ]]; then
+  dependency_args+=(--candidate-root "${CANDIDATE_REPORTS_ROOT}")
+fi
+conda run --no-capture-output -n reid python -m src.materialize_release_dependencies \
+  "${dependency_args[@]}"
+
 test -s "artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json"
 test -s "artifacts/pipeline/${RELEASE_SLUG}/release/validation_report.json"
 test -d "artifacts/pipeline/${RELEASE_SLUG}/triton/model_repository"
