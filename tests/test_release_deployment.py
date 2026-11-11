@@ -9,6 +9,7 @@ from pathlib import Path
 from src.release_deployment import (
     ReleaseError,
     build_image_reference,
+    build_compose_environment,
     select_rollback_record,
     validate_candidate,
     validate_image_reference,
@@ -55,6 +56,20 @@ class ReleaseDeploymentTest(unittest.TestCase):
         validate_image_reference(image, "1ca60d8f00", "market1501-vit-bnneck:v1")
         with self.assertRaises(ReleaseError):
             validate_image_reference("reid-api:latest", "1ca60d8f00", "market1501-vit-bnneck:v1")
+
+    def test_compose_uses_absolute_host_path_for_triton_bind_mount(self) -> None:
+        repository = Path.cwd() / "artifacts/pipeline/release/triton/model_repository"
+        environment = build_compose_environment(
+            {"KEEP": "value"},
+            image="ghcr.io/example/reid-api:abc-model-v2",
+            manifest_relative=Path("artifacts/pipeline/release/release/model_manifest.json"),
+            triton_relative=Path("artifacts/pipeline/release/triton/model_repository"),
+            triton_repository=repository,
+        )
+
+        self.assertEqual(environment["KEEP"], "value")
+        self.assertEqual(environment["TRITON_MODEL_REPOSITORY"], str(repository.resolve()))
+        self.assertFalse(Path(environment["API_TRITON_MODEL_REPOSITORY"]).is_absolute())
 
     def test_validation_gate_accepts_only_matching_pass_candidate(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
