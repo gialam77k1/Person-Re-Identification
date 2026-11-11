@@ -79,6 +79,8 @@ class ReleaseDeploymentTest(unittest.TestCase):
             previous = json.loads((state_root / "staging/previous.json").read_text())
             self.assertEqual(current, second)
             self.assertEqual(previous, first)
+            self.assertTrue((state_root / "staging/current.dvc.lock").is_file())
+            self.assertTrue((state_root / "staging/previous.dvc.lock").is_file())
 
     def test_failed_deployment_rolls_back_to_current_release(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -87,7 +89,9 @@ class ReleaseDeploymentTest(unittest.TestCase):
             candidate = {"release_id": "model:v2", "image": "api:bbb-model-v2"}
             write_deployment_state(state_root, "production", current)
             write_pending_state(state_root, "production", candidate)
-            self.assertEqual(select_rollback_record(state_root, "production"), current)
+            selected, lock = select_rollback_record(state_root, "production")
+            self.assertEqual(selected, current)
+            self.assertEqual(lock, state_root / "production/current.dvc.lock")
 
 
 if __name__ == "__main__":
