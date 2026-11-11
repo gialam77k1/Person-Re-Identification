@@ -216,6 +216,12 @@ def create_app(
             lifecycle_service.retry_post_training, cycle_id, request.actor
         )
 
+    @api.post("/control/cycles/{cycle_id}/retry-production-release")
+    async def retry_production_release(cycle_id: str, request: ActorRequest) -> dict:
+        return _lifecycle_action(
+            lifecycle_service.retry_production_release, cycle_id, request.actor
+        )
+
     @api.post("/control/cycles/{cycle_id}/retry-training-setup")
     async def retry_training_setup(cycle_id: str, request: ActorRequest) -> dict:
         return _lifecycle_action(
