@@ -199,6 +199,30 @@ def wait_for_release(api_url: str, release_id: str, attempts: int = 30) -> None:
     raise ReleaseError(f"Deployment smoke test failed: {last_error}")
 
 
+def build_compose_environment(
+    base: dict[str, str],
+    *,
+    image: str,
+    manifest_relative: Path,
+    triton_relative: Path,
+    triton_repository: Path,
+) -> dict[str, str]:
+    environment = base.copy()
+    environment.update(
+        {
+            "API_IMAGE": image,
+            # These paths are resolved inside the inference image, where the
+            # repository artifacts directory is mounted at /app/artifacts.
+            "API_MODEL_MANIFEST_PATH": str(manifest_relative),
+            "API_TRITON_MODEL_REPOSITORY": str(triton_relative),
+            # Docker Compose resolves a relative host path without ./ as a
+            # named volume. Always pass the canonical host path for Triton.
+            "TRITON_MODEL_REPOSITORY": str(triton_repository.resolve()),
+        }
+    )
+    return environment
+
+
 def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, Any]:
     report_path = Path(args.validation_report).resolve()
     manifest_path = Path(args.manifest).resolve()
@@ -239,14 +263,12 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
     state_root = Path(args.state_root)
     write_pending_state(state_root, args.environment, record)
 
-    compose_environment = os.environ.copy()
-    compose_environment.update(
-        {
-            "API_IMAGE": args.image,
-            "API_MODEL_MANIFEST_PATH": str(manifest_relative),
-            "API_TRITON_MODEL_REPOSITORY": str(triton_relative),
-            "TRITON_MODEL_REPOSITORY": str(triton_relative),
-        }
+    compose_environment = build_compose_environment(
+        dict(os.environ),
+        image=args.image,
+        manifest_relative=manifest_relative,
+        triton_relative=triton_relative,
+        triton_repository=triton_repository,
     )
     compose = [
         "docker",
