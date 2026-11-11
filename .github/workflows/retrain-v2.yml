@@ -481,6 +481,7 @@ jobs:
             ${{ env.V2_PIPELINE_ROOT }}/parity/metrics/onnx_parity.json
             ${{ env.V2_PIPELINE_ROOT }}/reference/embeddings/reference_manifest.json
             ${{ env.V2_PIPELINE_ROOT }}/release/*.json
+            configs/model_validation_v2.yaml
             dvc.lock
           if-no-files-found: error
           retention-days: 30

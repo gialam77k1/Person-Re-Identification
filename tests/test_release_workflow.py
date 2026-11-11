@@ -42,6 +42,12 @@ class ReleaseWorkflowTest(unittest.TestCase):
             'dvc_local.sh pull "artifacts/pipeline/${RELEASE_SLUG}"', self.text
         )
 
+    def test_retraining_artifact_keeps_exact_validation_policy(self) -> None:
+        retraining = (ROOT / ".github/workflows/retrain-v2.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("configs/model_validation_v2.yaml", retraining)
+
     def test_release_failures_are_reported_to_control_center(self) -> None:
         job = self.workflow["jobs"]["report-release-failure"]
         self.assertEqual(job["runs-on"], ["self-hosted", "linux"])
