@@ -21,6 +21,9 @@ on:
       evidence_artifact:
         description: Exact pre-approval artifact name
         required: true
+      evidence_git_commit:
+        description: Git commit locked by the approved evidence
+        required: true
       drift_report:
         description: Drift report path inside the downloaded artifact
         required: true
@@ -76,6 +79,24 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # New GPU training executes the exact code that produced the
+          # approved evidence. Recovery may use newer post-training fixes.
+          ref: ${{ inputs.resume_training_run_id == '' && inputs.evidence_git_commit || github.sha }}
+          fetch-depth: 1
+
+      - name: Verify execution commit policy
+        env:
+          EVIDENCE_GIT_COMMIT: ${{ inputs.evidence_git_commit }}
+          RESUME_TRAINING_RUN_ID: ${{ inputs.resume_training_run_id }}
+        run: |
+          [[ "$EVIDENCE_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          execution_commit="$(git rev-parse HEAD)"
+          if [[ -z "$RESUME_TRAINING_RUN_ID" && "$execution_commit" != "$EVIDENCE_GIT_COMMIT" ]]; then
+            echo "Fresh training checkout ${execution_commit} does not match approved evidence ${EVIDENCE_GIT_COMMIT}" >&2
+            exit 2
+          fi
+          echo "EXECUTION_GIT_COMMIT=${execution_commit}" >> "$GITHUB_ENV"
 
       - name: Resolve runner runtime paths
         run: |
@@ -211,7 +232,7 @@ jobs:
             --cycle-id "${{ inputs.cycle_id }}"
             --release-id "${{ inputs.source_release }}"
             --dataset "${{ inputs.dataset }}"
-            --current-commit "${{ github.sha }}"
+            --current-commit "${EXECUTION_GIT_COMMIT}"
             --dataset-pointer "${DATASET_DVC_PATH}"
             --base-checkpoint "${BASE_CHECKPOINT}"
           )
@@ -374,7 +395,7 @@ jobs:
             --policy configs/retraining_validation.yaml \
             --base-checkpoint "${BASE_CHECKPOINT}" \
             --candidate-checkpoint "${V2_ROOT}/checkpoints/best_model.pth" \
-            --git-commit "${{ github.sha }}" \
+            --git-commit '${{ inputs.evidence_git_commit }}' \
             --output "${V2_ROOT}/release/validation_report.json" \
             --manifest-output "${V2_ROOT}/release/model_manifest.json"
 

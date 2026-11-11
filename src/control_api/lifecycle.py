@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -133,6 +134,7 @@ class LifecycleController:
                 cycle,
                 evidence=evidence,
                 decision_sha256=decision_sha256,
+                evidence_git_commit=self._decision_git_commit(decision),
                 resume_training_run_id="",
             ),
         )
@@ -200,6 +202,7 @@ class LifecycleController:
             cycle,
             evidence=evidence,
             decision_sha256=str(decision["sha256"]),
+            evidence_git_commit=self._decision_git_commit(decision["decision"]),
             resume_training_run_id=training_run_id,
         )
         dispatch = self.dispatcher.dispatch(
@@ -231,6 +234,68 @@ class LifecycleController:
         )
         return self.store.get_cycle(cycle_id)
 
+    def retry_training_setup(self, cycle_id: str, actor: str) -> dict[str, Any]:
+        cycle = self.store.get_cycle(cycle_id)
+        if cycle["status"] != CycleStatus.FAIL.value:
+            raise InvalidTransitionError("Only a failed cycle can retry training setup.")
+        train = self._stage(cycle, "train_v2")
+        if train["status"] != StageStatus.FAIL.value:
+            raise InvalidTransitionError("The training stage did not fail.")
+        if self._latest_training_run_id(cycle_id):
+            raise InvalidTransitionError(
+                "A training run already exists; use post-training recovery instead."
+            )
+        if self._stage(cycle, "retraining_approval")["status"] != StageStatus.PASS.value:
+            raise InvalidTransitionError("An approved retraining decision is required.")
+
+        evidence = self._preapproval_evidence(cycle_id)
+        decision = self.store.get_retraining_decision(cycle_id)
+        dispatch_inputs = self._retraining_inputs(
+            cycle,
+            evidence=evidence,
+            decision_sha256=str(decision["sha256"]),
+            evidence_git_commit=self._decision_git_commit(decision["decision"]),
+            resume_training_run_id="",
+        )
+        dispatch = self.dispatcher.dispatch(
+            self.settings.retraining_workflow, dispatch_inputs
+        )
+        self.store.update_stage(
+            cycle_id,
+            "train_v2",
+            StageStatus.RUNNING,
+            progress=0,
+            detail="Retrying pinned lineage and all pre-training contracts",
+        )
+        for name in (
+            "evaluate_v2",
+            "validate_release",
+            "export_onnx",
+            "publish_artifacts",
+            "register_candidate",
+        ):
+            self.store.update_stage(
+                cycle_id,
+                name,
+                StageStatus.PENDING,
+                progress=0,
+                detail="Waiting for the retried training setup",
+            )
+        self.store.update_cycle(cycle_id, status=CycleStatus.RUNNING, error="")
+        payload = {
+            "dispatch": dispatch,
+            "evidence_git_commit": dispatch_inputs["evidence_git_commit"],
+            "resume_stage": "train_v2",
+        }
+        self.store.audit(cycle_id, "training_setup.retry", actor, payload)
+        self.store.record_event(
+            cycle_id,
+            "workflow.dispatched",
+            "Training setup retried from the approved immutable evidence",
+            payload,
+        )
+        return self.store.get_cycle(cycle_id)
+
     def _preapproval_evidence(self, cycle_id: str) -> dict[str, Any]:
         for event in reversed(self.store.events(cycle_id)):
             if event["kind"] != "stage.metrics":
@@ -258,6 +323,7 @@ class LifecycleController:
         *,
         evidence: dict[str, Any],
         decision_sha256: str,
+        evidence_git_commit: str,
         resume_training_run_id: str,
     ) -> dict[str, str]:
         return {
@@ -267,6 +333,7 @@ class LifecycleController:
             "dataset": str(cycle["dataset"]),
             "evidence_run_id": str(evidence["workflow_run_id"]),
             "evidence_artifact": str(evidence["artifact_name"]),
+            "evidence_git_commit": evidence_git_commit,
             "drift_report": "evidence/drift_report.json",
             "evaluation_report": "evidence/evaluation_report.json",
             "decision": "evidence/approved_decision.json",
@@ -281,6 +348,15 @@ class LifecycleController:
             ),
             "resume_training_run_id": resume_training_run_id,
         }
+
+    @staticmethod
+    def _decision_git_commit(decision: dict[str, Any]) -> str:
+        commit = str(decision.get("evidence", {}).get("source_git_commit", ""))
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise InvalidTransitionError(
+                "Approved evidence is missing a full 40-character source Git commit."
+            )
+        return commit
 
     def promote(self, cycle_id: str, actor: str) -> dict[str, Any]:
         cycle = self.store.get_cycle(cycle_id)
