@@ -42,6 +42,27 @@ class ReleaseWorkflowTest(unittest.TestCase):
             'dvc_local.sh pull "artifacts/pipeline/${RELEASE_SLUG}"', self.text
         )
 
+    def test_release_failures_are_reported_to_control_center(self) -> None:
+        job = self.workflow["jobs"]["report-release-failure"]
+        self.assertEqual(job["runs-on"], ["self-hosted", "linux"])
+        self.assertEqual(
+            set(job["needs"]),
+            {
+                "validate-candidate",
+                "build-image",
+                "deploy-staging",
+                "deploy-production",
+            },
+        )
+        self.assertIn("always()", job["if"])
+        self.assertIn("cancelled", job["if"])
+        report_step = next(
+            step
+            for step in job["steps"]
+            if step["name"] == "Mark production approval failed"
+        )
+        self.assertIn("production_approval FAIL", report_step["run"])
+
 
 if __name__ == "__main__":
     unittest.main()
