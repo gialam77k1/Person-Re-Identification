@@ -39,6 +39,24 @@ class V2EvaluationReportTest(unittest.TestCase):
             )
         self.assertEqual(report["query_count"], 100)
 
+    def test_accepts_duke_alias_for_canonical_report_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "report.json"
+            path.write_text(json.dumps(self.report()), encoding="utf-8")
+            report = validate_report(
+                path, "market1501-duke-vit-bnneck:v2", "duke"
+            )
+        self.assertEqual(report["dataset"], "dukemtmc-reid")
+
+    def test_rejects_a_different_canonical_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "report.json"
+            path.write_text(json.dumps(self.report()), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "report='dukemtmc-reid'"):
+                validate_report(
+                    path, "market1501-duke-vit-bnneck:v2", "market1501"
+                )
+
     def test_rejects_missing_checkpoint_checksum(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "report.json"

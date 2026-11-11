@@ -6,12 +6,32 @@ import math
 from pathlib import Path
 
 
+DATASET_ALIASES = {
+    "duke": "dukemtmc-reid",
+    "dukemtmc": "dukemtmc-reid",
+    "dukemtmc-reid": "dukemtmc-reid",
+    "market": "market1501",
+    "market-1501": "market1501",
+    "market1501": "market1501",
+}
+
+
+def canonical_dataset_name(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-")
+    return DATASET_ALIASES.get(normalized, normalized)
+
+
 def validate_report(path: Path, release_id: str, dataset: str) -> dict:
     report = json.loads(path.read_text(encoding="utf-8"))
     if report.get("release_id") != release_id:
         raise ValueError("Evaluation release does not match the requested v2 release.")
-    if str(report.get("dataset", "")).lower() != dataset.lower():
-        raise ValueError("Evaluation dataset does not match the requested dataset.")
+    actual_dataset = canonical_dataset_name(str(report.get("dataset", "")))
+    expected_dataset = canonical_dataset_name(dataset)
+    if actual_dataset != expected_dataset:
+        raise ValueError(
+            "Evaluation dataset does not match the requested dataset: "
+            f"report={actual_dataset!r}, expected={expected_dataset!r}."
+        )
     for key in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP"):
         value = report.get(key)
         if not isinstance(value, (int, float)) or not math.isfinite(float(value)):

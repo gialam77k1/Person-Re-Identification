@@ -23,4 +23,4 @@ conda run --no-capture-output -n "${CONDA_ENV}" \
   python src/validate_v2_evaluation.py \
     --report "${REPORT}" \
     --release-id "${RELEASE_ID}" \
-    --dataset duke
+    --dataset dukemtmc-reid

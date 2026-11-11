@@ -156,6 +156,67 @@ class LifecycleControllerTest(unittest.TestCase):
             self.lifecycle.approve_retraining(cycle["id"], "reviewer")
         self.assertEqual(len(self.dispatcher.calls), 1)
 
+    def test_failed_evaluation_resumes_from_finished_mlflow_run_without_retraining(self) -> None:
+        cycle, _ = self.lifecycle.start(
+            dataset="dukemtmc-reid",
+            source_release="market1501-vit-bnneck:v1-dvc",
+            target_release="market1501-duke-vit-bnneck:v2",
+            idempotency_key="post-training-retry",
+            actor="tester",
+        )
+        self.store.update_cycle(cycle["id"], status=CycleStatus.WAITING_APPROVAL)
+        self.store.update_stage(
+            cycle["id"], "retraining_approval", StageStatus.WAITING_APPROVAL
+        )
+        self.store.record_event(
+            cycle["id"],
+            "stage.metrics",
+            "Evidence uploaded",
+            {
+                "stage": "evaluate_v1",
+                "metrics": {
+                    "workflow_run_id": "12345",
+                    "artifact_name": f"mlops-evidence-{cycle['id']}",
+                },
+            },
+        )
+        self.dispatcher.artifact = approval_artifact(cycle["id"])
+        self.lifecycle.approve_retraining(cycle["id"], "reviewer")
+        self.store.update_stage(cycle["id"], "train_v2", StageStatus.PASS)
+        self.store.record_event(
+            cycle["id"],
+            "stage.metrics",
+            "Training finished",
+            {"stage": "train_v2", "metrics": {"mlflow_run_id": "run-finished"}},
+        )
+        self.store.update_stage(cycle["id"], "evaluate_v2", StageStatus.FAIL)
+        self.store.update_cycle(cycle["id"], status=CycleStatus.FAIL, error="alias mismatch")
+
+        resumed = self.lifecycle.retry_post_training(cycle["id"], "operator")
+
+        self.assertEqual(resumed["status"], CycleStatus.RUNNING.value)
+        self.assertEqual(
+            self.dispatcher.calls[-1][1]["resume_training_run_id"], "run-finished"
+        )
+        self.assertEqual(
+            next(stage for stage in resumed["stages"] if stage["name"] == "train_v2")["status"],
+            StageStatus.PASS.value,
+        )
+        self.assertEqual(
+            next(stage for stage in resumed["stages"] if stage["name"] == "evaluate_v2")["status"],
+            StageStatus.RUNNING.value,
+        )
+
+    def test_post_training_retry_requires_completed_training_run(self) -> None:
+        cycle, _ = self.lifecycle.start(
+            dataset="dukemtmc-reid", source_release="v1", target_release="v2",
+            idempotency_key="post-training-no-checkpoint", actor="tester",
+        )
+        self.store.update_stage(cycle["id"], "evaluate_v2", StageStatus.FAIL)
+        self.store.update_cycle(cycle["id"], status=CycleStatus.FAIL)
+        with self.assertRaisesRegex(InvalidTransitionError, "completed training"):
+            self.lifecycle.retry_post_training(cycle["id"], "operator")
+
     def test_only_failed_cycle_can_be_abandoned_and_audit_is_preserved(self) -> None:
         cycle, _ = self.lifecycle.start(
             dataset="dukemtmc-reid", source_release="v1", target_release="v2",

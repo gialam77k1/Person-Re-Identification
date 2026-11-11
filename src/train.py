@@ -832,6 +832,10 @@ def run_training(config: dict) -> None:
                 str(Path(config["artifacts"]["checkpoints_dir"]) / "best_model.pth"),
                 artifact_path="checkpoints",
             )
+            mlflow.log_artifact(
+                str(Path(config["artifacts"]["checkpoints_dir"]) / "last_model.pth"),
+                artifact_path="checkpoints",
+            )
     except Exception:
         run_status = "FAILED"
         raise
