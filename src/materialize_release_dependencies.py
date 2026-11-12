@@ -43,18 +43,38 @@ def reconstruct_validation_policy(
     source_commit = str(manifest.get("source", {}).get("git_commit", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
         raise ReleaseDependencyError("Manifest source Git commit is invalid")
+    show_command = ["git", "show", f"{source_commit}:{repository_path}"]
     try:
         source = subprocess.run(
-            ["git", "show", f"{source_commit}:{repository_path}"],
+            show_command,
             cwd=source_repository_root,
             check=True,
             capture_output=True,
             text=True,
         ).stdout
-    except subprocess.CalledProcessError as exc:
-        raise ReleaseDependencyError(
-            f"Cannot restore {repository_path} from source commit {source_commit}"
-        ) from exc
+    except subprocess.CalledProcessError:
+        # Self-hosted release jobs may reuse a shallow checkout. Fetch only the
+        # immutable source commit recorded in the signed release manifest, then
+        # retry instead of depending on checkout depth.
+        try:
+            subprocess.run(
+                ["git", "fetch", "--no-tags", "--depth=1", "origin", source_commit],
+                cwd=source_repository_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            source = subprocess.run(
+                show_command,
+                cwd=source_repository_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+        except subprocess.CalledProcessError as exc:
+            raise ReleaseDependencyError(
+                f"Cannot restore {repository_path} from source commit {source_commit}"
+            ) from exc
     payload = yaml.safe_load(source)
     if not isinstance(payload, dict):
         raise ReleaseDependencyError("Validation policy must be a YAML mapping")

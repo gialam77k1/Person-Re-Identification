@@ -39,6 +39,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           clean: false
+          fetch-depth: 0
 
       - name: Configure local MLOps credentials
         env:
@@ -144,6 +145,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           clean: false
+          fetch-depth: 0
 
       - name: Configure local MLOps credentials
         env:
@@ -219,6 +221,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           clean: false
+          fetch-depth: 0
 
       - name: Configure local MLOps credentials
         env:
