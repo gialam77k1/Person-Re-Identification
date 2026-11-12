@@ -144,7 +144,7 @@ Xác nhận credential AWS trong `.env.mlops` khớp credential MinIO.
 
 ### Qdrant không thấy dữ liệu cũ
 
-Xác nhận `QDRANT_STORAGE_PATH` vẫn trỏ đến `./artifacts/qdrant/storage`. Không tạo collection mới nếu collection `reid_reference_v1` đã tồn tại.
+Xác nhận `QDRANT_STORAGE_PATH` trỏ đến thư mục bền vững ngoài repository, mặc định là `../person-reid-qdrant/storage`. Không đặt dữ liệu Qdrant trong Git checkout và không tạo collection mới nếu collection `reid_reference_v1` đã tồn tại.
 
 ### FastAPI trả `503` tại `/ready`
 

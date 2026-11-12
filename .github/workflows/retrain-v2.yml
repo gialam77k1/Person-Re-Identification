@@ -78,8 +78,9 @@ jobs:
       INBOX_CONFIG: configs/runtime/duke_v2_inbox_${{ inputs.cycle_id }}.yaml
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
+          clean: false
           # New GPU training executes the exact code that produced the
           # approved evidence. Recovery may use newer post-training fixes.
           ref: ${{ inputs.resume_training_run_id == '' && inputs.evidence_git_commit || github.sha }}
@@ -166,7 +167,7 @@ jobs:
             --run-root "$V2_ROOT/evaluations/market1501"
 
       - name: Download exact pre-approval evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: ${{ inputs.evidence_artifact }}
           run-id: ${{ inputs.evidence_run_id }}

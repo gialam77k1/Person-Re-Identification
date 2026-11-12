@@ -36,7 +36,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          clean: false
 
       - name: Configure local MLOps credentials
         env:
@@ -60,7 +62,7 @@ jobs:
 
       - name: Download immutable candidate lineage
         if: ${{ inputs.cycle_id != 'manual' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: duke-v2-retraining-reports-${{ inputs.cycle_id }}
           github-token: ${{ github.token }}
@@ -94,7 +96,7 @@ jobs:
       image: ${{ steps.image.outputs.reference }}
     steps:
       - name: Check out release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Create immutable image reference
         id: image
@@ -139,7 +141,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          clean: false
 
       - name: Configure local MLOps credentials
         env:
@@ -163,7 +167,7 @@ jobs:
 
       - name: Download immutable candidate lineage
         if: ${{ inputs.cycle_id != 'manual' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: duke-v2-retraining-reports-${{ inputs.cycle_id }}
           github-token: ${{ github.token }}
@@ -212,7 +216,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          clean: false
 
       - name: Configure local MLOps credentials
         env:
@@ -236,7 +242,7 @@ jobs:
 
       - name: Download immutable candidate lineage
         if: ${{ inputs.cycle_id != 'manual' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: duke-v2-retraining-reports-${{ inputs.cycle_id }}
           github-token: ${{ github.token }}
@@ -303,7 +309,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          clean: false
 
       - name: Configure local MLOps credentials
         env:

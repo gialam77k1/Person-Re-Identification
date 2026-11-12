@@ -27,7 +27,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          clean: false
 
       - name: Configure local MLOps credentials
         env:
@@ -42,4 +44,3 @@ jobs:
           RELEASE_ID: ${{ inputs.release_id || 'market1501-vit-bnneck:v1-dvc' }}
           RELEASE_SLUG: ${{ inputs.release_slug || 'market1501-vit-bnneck-v1-dvc' }}
         run: ./scripts/drift_report_local.sh "$RELEASE_ID" "$RELEASE_SLUG"
-
