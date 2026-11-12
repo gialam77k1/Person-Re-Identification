@@ -149,6 +149,28 @@ class DataInboxServiceTest(unittest.TestCase):
             [source["source_path"] for source in self.inbox.discover_sources()],
         )
 
+    def test_manifest_dataset_is_not_limited_by_legacy_allowlist(self) -> None:
+        batch_root = self.settings.dataset_root / "inbox" / "new-domain"
+        for index, (pid, camera) in enumerate(((10, 1), (10, 2), (11, 2))):
+            image(batch_root / "images" / f"sample-{index}.jpg", f"new-{index}".encode())
+        (batch_root / "manifest.json").write_text(
+            """{
+              "batch_id": "new-domain",
+              "dataset": "campus-reid",
+              "samples": [
+                {"image": "images/sample-0.jpg", "person_id": 10, "camera_id": 1},
+                {"image": "images/sample-1.jpg", "person_id": 10, "camera_id": 2},
+                {"image": "images/sample-2.jpg", "person_id": 11, "camera_id": 2}
+              ]
+            }""",
+            encoding="utf-8",
+        )
+        batch, created = self.inbox.import_batch(
+            source_path="inbox/new-domain", dataset="campus-reid", actor="operator"
+        )
+        self.assertTrue(created)
+        self.assertEqual(batch["dataset"], "campus-reid")
+
     def test_blocked_batch_can_retry_after_failed_target_is_abandoned(self) -> None:
         failed, _ = self.store.create_cycle(
             dataset="dukemtmc-reid",

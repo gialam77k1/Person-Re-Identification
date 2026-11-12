@@ -47,7 +47,7 @@ class RetrainingDecisionGateTest(unittest.TestCase):
         self.assertEqual(result["status"], "NO_RETRAIN")
 
     def test_smoke_evaluation_is_insufficient_evidence(self) -> None:
-        self.evaluation["num_query_samples"] = 100
+        self.evaluation["num_query_samples"] = 49
         result = build_retraining_decision(self.drift, self.evaluation, self.policy, approved_by="gialam77k1")
         self.assertEqual(result["status"], "INSUFFICIENT_EVIDENCE")
 

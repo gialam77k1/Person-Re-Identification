@@ -30,6 +30,7 @@ class CreateMSMT17DemoBatchTest(unittest.TestCase):
             self.assertEqual(manifest["summary"]["cameras"], 6)
             self.assertEqual(set(manifest["summary"]["images_per_camera"].values()), {2})
             self.assertEqual(manifest["source_dataset"], "MSMT17_V1")
+            self.assertEqual(manifest["dataset"], "msmt17-demo")
             self.assertTrue((output / "manifest.json").is_file())
             self.assertTrue(all((output / item["image"]).is_file() for item in manifest["samples"]))
 

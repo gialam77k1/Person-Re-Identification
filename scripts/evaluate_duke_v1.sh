@@ -10,6 +10,7 @@ MAX_QUERIES="${MAX_QUERIES:-0}"
 MAX_GALLERY="${MAX_GALLERY:-0}"
 OUTPUT="${OUTPUT:-artifacts/cross-domain/market1501-v1-on-duke/metrics/v1_on_duke.json}"
 DATASET_POINTER="${DATASET_POINTER:-datasets/dukemtmc-reid.dvc}"
+EVAL_CONFIG="${EVAL_CONFIG:-configs/duke_v1_evaluation.yaml}"
 
 cd "${PROJECT_ROOT}"
 curl --fail --silent --max-time 5 "${TRITON_URL}/v2/health/ready" >/dev/null
@@ -18,7 +19,7 @@ if [[ "${DATASET_POINTER}" == "datasets/dukemtmc-reid.dvc" ]]; then
 fi
 
 exec conda run --no-capture-output -n reid python src/evaluate_deployment_retrieval.py \
-  --config configs/duke_v1_evaluation.yaml \
+  --config "${EVAL_CONFIG}" \
   --server-url "${TRITON_URL}" \
   --release-id "${RELEASE_ID}" \
   --dataset-pointer "${DATASET_POINTER}" \

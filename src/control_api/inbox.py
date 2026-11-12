@@ -11,6 +11,10 @@ from src.control_api.lifecycle import LifecycleController
 from src.control_api.releases import ReleaseResolver
 from src.control_api.state import CycleStatus
 from src.control_api.store import CycleStore
+from src.prepare_inbox_dataset import (
+    DEFAULT_EVALUATION_HOLDOUT_IMAGES,
+    split_identity_disjoint,
+)
 
 
 REID_FILE = re.compile(
@@ -57,7 +61,7 @@ class DataInboxService:
             raise InvalidBatchError(
                 f"Manifest dataset {manifest_dataset!r} does not match {dataset!r}."
             )
-        if dataset not in self.settings.allowed_datasets:
+        if not manifest and dataset not in self.settings.allowed_datasets:
             raise InvalidBatchError(
                 f"Dataset must be one of: {', '.join(self.settings.allowed_datasets)}"
             )
@@ -80,6 +84,7 @@ class DataInboxService:
                     "manifest": "manifest.json" if (source / "manifest.json").is_file() else None,
                     "thresholds": self.policy(),
                     "validation_failures": failures,
+                    "evaluation_split": scan.get("evaluation_split", {}),
                 },
             }
         )
@@ -153,6 +158,7 @@ class DataInboxService:
             "min_valid_images": self.settings.inbox_min_valid_images,
             "min_identities": self.settings.inbox_min_identities,
             "min_cameras": self.settings.inbox_min_cameras,
+            "evaluation_holdout_images": DEFAULT_EVALUATION_HOLDOUT_IMAGES,
         }
 
     def discover_sources(self) -> list[dict[str, Any]]:
@@ -217,10 +223,17 @@ class DataInboxService:
     def _scan(self, source: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         candidates = self._manifest_samples(source, manifest) if manifest else self._legacy_samples(source)
         aggregate = hashlib.sha256()
+        aggregate.update(
+            (
+                "reid-inbox-split:v2\0"
+                f"holdout={DEFAULT_EVALUATION_HOLDOUT_IMAGES}\0seed=42\n"
+            ).encode()
+        )
         identities: set[int] = set()
         cameras: set[int] = set()
         content_hashes: set[str] = set()
         valid_images = rejected_images = duplicate_images = total_bytes = 0
+        valid_samples: list[tuple[Path, int, int]] = []
 
         for sample in candidates:
             path = sample["path"]
@@ -241,6 +254,7 @@ class DataInboxService:
             cameras.add(camera_id)
             total_bytes += size
             valid_images += 1
+            valid_samples.append((path, person_id, camera_id))
             relative = path.relative_to(source).as_posix()
             aggregate.update(
                 f"{relative}\0{person_id}\0{camera_id}\0{size}\0{content_sha}\n".encode()
@@ -248,6 +262,27 @@ class DataInboxService:
 
         if not candidates:
             raise InvalidBatchError(f"No image candidates found in {source}")
+        split_summary: dict[str, Any] = {}
+        if (
+            valid_images >= self.settings.inbox_min_valid_images
+            and self.settings.inbox_min_valid_images
+            >= 2 * DEFAULT_EVALUATION_HOLDOUT_IMAGES
+        ):
+            try:
+                splits = split_identity_disjoint(
+                    valid_samples,
+                    holdout_target=DEFAULT_EVALUATION_HOLDOUT_IMAGES,
+                    seed=42,
+                )
+            except ValueError as exc:
+                raise InvalidBatchError(str(exc)) from exc
+            split_summary = {
+                "train_images": len(splits["train"]),
+                "query_images": len(splits["query"]),
+                "gallery_images": len(splits["gallery"]),
+                "evaluation_identities": len({item[1] for item in splits["query"]}),
+                "identity_overlap": False,
+            }
         return {
             "fingerprint": aggregate.hexdigest(),
             "valid_images": valid_images,
@@ -256,6 +291,7 @@ class DataInboxService:
             "identities": len(identities),
             "cameras": len(cameras),
             "total_bytes": total_bytes,
+            "evaluation_split": split_summary,
         }
 
     @staticmethod

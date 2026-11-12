@@ -110,6 +110,7 @@ export function DataInbox() {
         </div>
         {policy && <dl className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-[#09111b] p-4"><dt className="text-xs text-slate-500">Minimum valid images</dt><dd className="mt-1 text-2xl font-black">{policy.min_valid_images}</dd></div>
+          <div className="rounded-xl bg-[#09111b] p-4"><dt className="text-xs text-slate-500">Reserved evaluation images</dt><dd className="mt-1 text-2xl font-black">≈{policy.evaluation_holdout_images}</dd></div>
           <div className="rounded-xl bg-[#09111b] p-4"><dt className="text-xs text-slate-500">Minimum identities</dt><dd className="mt-1 text-2xl font-black">{policy.min_identities}</dd></div>
           <div className="rounded-xl bg-[#09111b] p-4"><dt className="text-xs text-slate-500">Minimum cameras</dt><dd className="mt-1 text-2xl font-black">{policy.min_cameras}</dd></div>
         </dl>}

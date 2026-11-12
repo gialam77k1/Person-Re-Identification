@@ -9,8 +9,8 @@ candidate:
 
 evidence:
   require_drift_detected: true
-  minimum_query_samples: 2228
-  minimum_gallery_samples: 17661
+  minimum_query_samples: 50
+  minimum_gallery_samples: 100
   minimum_query_coverage: 0.99
   required_embedding_dim: 512
 

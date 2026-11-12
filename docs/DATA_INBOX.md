@@ -40,8 +40,9 @@ kích thước và checksum từng ảnh. Cùng một nội dung/manifest luôn 
 một cycle.
 
 Nếu cùng dataset đang có cycle `PENDING`, `RUNNING` hoặc `WAITING_APPROVAL`, import mới trả HTTP 409.
-Batch không bị trộn với query/gallery: runner tạo một dataset view tạm, dùng batch làm train split và
-giữ Duke `query`/`bounding_box_test` cố định để đánh giá công bằng.
+Runner tạo một dataset view tạm và tự dành riêng held-out query/gallery từ chính batch mới.
+Việc tách diễn ra theo person ID, vì vậy một identity không bao giờ xuất hiện đồng thời ở train và
+evaluation.
 
 ## Cấu hình runner
 
@@ -53,6 +54,13 @@ CONTROL_INBOX_MIN_VALID_IMAGES=1000
 CONTROL_INBOX_MIN_IDENTITIES=50
 CONTROL_INBOX_MIN_CAMERAS=2
 ```
+
+Every accepted batch is split deterministically before training. The control
+plane reserves approximately 200 images from identities observed by at least
+two cameras. Those identities are excluded completely from training; one image
+per identity is used as query and gallery images come from different cameras.
+This prevents person-identity leakage while keeping evaluation mandatory for
+promotion.
 
 Không commit dữ liệu hoặc `.env.mlops`. Sau khi chép batch vào `datasets/inbox`, mở **Data Inbox**,
 chọn batch và bấm **Import selected batch**. Batch hợp lệ tự chạy drift/evaluate source champion rồi
