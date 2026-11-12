@@ -52,6 +52,22 @@ class ProgressServiceTest(unittest.TestCase):
         self.assertEqual(failed["status"], CycleStatus.FAIL.value)
         self.assertEqual(failed["error"], "parity failed")
 
+    def test_successful_retry_clears_previous_cycle_error(self) -> None:
+        failed = self.progress.update(
+            self.cycle["id"],
+            "production_approval",
+            StageStatus.FAIL,
+            detail="previous release failed",
+        )
+        self.assertEqual(failed["error"], "previous release failed")
+
+        recovered = self.progress.update(
+            self.cycle["id"], "production_approval", StageStatus.PASS, progress=1.0
+        )
+
+        self.assertEqual(recovered["status"], CycleStatus.PASS.value)
+        self.assertEqual(recovered["error"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

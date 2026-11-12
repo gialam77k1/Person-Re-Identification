@@ -52,7 +52,9 @@ class ProgressService:
                 StageStatus.WAITING_APPROVAL,
                 detail="Review drift and evaluation evidence",
             )
-            return self.store.update_cycle(cycle_id, status=CycleStatus.WAITING_APPROVAL)
+            return self.store.update_cycle(
+                cycle_id, status=CycleStatus.WAITING_APPROVAL, error=""
+            )
         if stage == "staging_test" and status == StageStatus.PASS:
             self.store.update_stage(
                 cycle_id,
@@ -60,7 +62,9 @@ class ProgressService:
                 StageStatus.WAITING_APPROVAL,
                 detail="Staging passed; production approval required",
             )
-            return self.store.update_cycle(cycle_id, status=CycleStatus.WAITING_APPROVAL)
+            return self.store.update_cycle(
+                cycle_id, status=CycleStatus.WAITING_APPROVAL, error=""
+            )
         if stage == "register_candidate" and status == StageStatus.PASS:
             self.store.update_stage(
                 cycle_id,
@@ -68,9 +72,15 @@ class ProgressService:
                 StageStatus.WAITING_APPROVAL,
                 detail="Validated candidate is ready for staging and production approval",
             )
-            return self.store.update_cycle(cycle_id, status=CycleStatus.WAITING_APPROVAL)
+            return self.store.update_cycle(
+                cycle_id, status=CycleStatus.WAITING_APPROVAL, error=""
+            )
         if stage == "production_approval" and status == StageStatus.PASS:
-            return self.store.update_cycle(cycle_id, status=CycleStatus.PASS)
+            return self.store.update_cycle(
+                cycle_id, status=CycleStatus.PASS, error=""
+            )
         if status == StageStatus.RUNNING:
-            return self.store.update_cycle(cycle_id, status=CycleStatus.RUNNING)
+            return self.store.update_cycle(
+                cycle_id, status=CycleStatus.RUNNING, error=""
+            )
         return cycle
