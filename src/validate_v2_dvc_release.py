@@ -201,7 +201,7 @@ def build_release(
             "duke": {key: duke.get(key) for key in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")},
             "market1501": {key: market1501.get(key) for key in ("rank1", "rank5", "rank10", "rank20", "mAP", "mINP")},
         },
-        "contract": {"input_name": contract.get("input_name"), "input_shape": expected_input_shape, "output_name": contract.get("output_name"), "output_shape": ["batch_size", expected_dim], "preprocessing_path": repository_path(preprocessing_output_path), "reference_embeddings_l2_normalized": True},
+        "contract": {"input_name": contract.get("input_name"), "input_shape": expected_input_shape, "output_name": contract.get("output_name"), "output_shape": ["batch_size", expected_dim], "embedding_dim": expected_dim, "preprocessing_path": repository_path(preprocessing_output_path), "reference_embeddings_l2_normalized": True},
         "reference": {"num_samples": len(embeddings), "embedding_dim": expected_dim, "norm_max_abs_error": norm_error},
         "policy": {"path": repository_path(policy_path), "sha256": sha256_file(policy_path)},
         "files": files,

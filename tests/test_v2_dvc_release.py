@@ -59,6 +59,7 @@ class V2DVCReleaseTest(unittest.TestCase):
             self.assertEqual(manifest["source"]["config_sha256"], "c" * 64)
             self.assertEqual(manifest["release"]["status"], "validated")
             self.assertEqual(manifest["reference"]["embedding_dim"], 512)
+            self.assertEqual(manifest["contract"]["embedding_dim"], 512)
             self.assertTrue(any(check["name"] == "onnx_parity_cosine" for check in report["checks"]))
 
 

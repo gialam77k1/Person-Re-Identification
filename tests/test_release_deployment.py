@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,7 @@ from src.release_deployment import (
     ReleaseError,
     build_image_reference,
     build_compose_environment,
+    materialize_serving_bundle,
     select_rollback_record,
     validate_candidate,
     validate_image_reference,
@@ -65,11 +67,46 @@ class ReleaseDeploymentTest(unittest.TestCase):
             manifest_relative=Path("artifacts/pipeline/release/release/model_manifest.json"),
             triton_relative=Path("artifacts/pipeline/release/triton/model_repository"),
             triton_repository=repository,
+            serving_artifacts_root=Path.cwd() / "runtime/artifacts",
+            model_name="reid_embedding",
+            model_version="2",
         )
 
         self.assertEqual(environment["KEEP"], "value")
         self.assertEqual(environment["TRITON_MODEL_REPOSITORY"], str(repository.resolve()))
+        self.assertEqual(
+            environment["SERVING_ARTIFACTS_ROOT"],
+            str((Path.cwd() / "runtime/artifacts").resolve()),
+        )
         self.assertFalse(Path(environment["API_TRITON_MODEL_REPOSITORY"]).is_absolute())
+        self.assertEqual(environment["TRITON_MODEL_NAME"], "reid_embedding")
+        self.assertEqual(environment["TRITON_MODEL_VERSION"], "2")
+
+    def test_serving_bundle_survives_source_checkout_cleanup(self) -> None:
+        artifacts_root = Path.cwd() / "artifacts"
+        with tempfile.TemporaryDirectory(dir=artifacts_root) as source_directory:
+            source = Path(source_directory)
+            release_root = source / "pipeline" / "release-v2"
+            triton = release_root / "triton" / "model_repository"
+            manifest = release_root / "release" / "model_manifest.json"
+            triton.mkdir(parents=True)
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('{"release": "v2"}\n', encoding="utf-8")
+            (triton / "config.pbtxt").write_text("name: 'reid_embedding'\n", encoding="utf-8")
+
+            with tempfile.TemporaryDirectory() as state_directory:
+                persistent_artifacts, persistent_triton = materialize_serving_bundle(
+                    Path(state_directory), release_root, manifest, triton
+                )
+                shutil.rmtree(release_root)
+                self.assertTrue((persistent_triton / "config.pbtxt").is_file())
+                self.assertTrue(
+                    (
+                        persistent_artifacts
+                        / source.relative_to(artifacts_root)
+                        / "pipeline/release-v2/release/model_manifest.json"
+                    ).is_file()
+                )
 
     def test_validation_gate_accepts_only_matching_pass_candidate(self) -> None:
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:

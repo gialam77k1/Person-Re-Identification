@@ -60,7 +60,9 @@ jobs:
       INBOX_DATASET_HOST_PATH: ${{ inputs.dataset_host_path }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          clean: false
 
       - name: Resolve runner runtime paths
         run: |

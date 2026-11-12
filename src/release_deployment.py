@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -16,6 +17,10 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.api.config import ReleaseContract, verify_serving_model_artifacts
 
 
 class ReleaseError(RuntimeError):
@@ -199,6 +204,115 @@ def wait_for_release(api_url: str, release_id: str, attempts: int = 30) -> None:
     raise ReleaseError(f"Deployment smoke test failed: {last_error}")
 
 
+def preflight_serving_release(
+    manifest_path: Path,
+    triton_repository: Path,
+    expected_release_id: str,
+) -> tuple[str, str]:
+    try:
+        triton_manifest = read_json(triton_repository / "triton_model_manifest.json")
+        model_name = str(triton_manifest.get("model_name") or "")
+        model_version = str(triton_manifest.get("model_version") or "")
+        if not model_name or not re.fullmatch(r"[A-Za-z0-9_.-]+", model_version):
+            raise ValueError("Triton model manifest has an invalid model name or version.")
+        contract = ReleaseContract.load(manifest_path)
+        if contract.release_id != expected_release_id:
+            raise ValueError("Serving contract release_id does not match the deployment request.")
+        verify_serving_model_artifacts(
+            contract,
+            triton_repository,
+            model_name,
+            model_version,
+        )
+    except (OSError, ValueError) as exc:
+        raise ReleaseError(f"Serving preflight failed: {exc}") from exc
+    return model_name, model_version
+
+
+def require_healthy_qdrant(container_name: str = "reid-qdrant") -> None:
+    result = subprocess.run(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            "{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+            container_name,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    status = result.stdout.strip()
+    if result.returncode != 0 or status != "running/healthy":
+        detail = result.stderr.strip() or status or "container not found"
+        raise ReleaseError(f"Qdrant must be running and healthy before deployment: {detail}")
+
+
+def materialize_serving_bundle(
+    state_root: Path,
+    release_root: Path,
+    manifest_path: Path,
+    triton_repository: Path,
+) -> tuple[Path, Path]:
+    """Copy a validated release outside the ephemeral Actions checkout.
+
+    The API and Triton must not bind-mount files that actions/checkout can
+    remove after the deployment job. The manifest digest makes the bundle
+    immutable and allows staging and production to reuse the exact bytes.
+    """
+    artifacts_root = (ROOT / "artifacts").resolve()
+    try:
+        release_relative = release_root.resolve().relative_to(artifacts_root)
+        triton_relative = triton_repository.resolve().relative_to(artifacts_root)
+    except ValueError as exc:
+        raise ReleaseError("Serving release must be located under repository artifacts/") from exc
+
+    digest = sha256_file(manifest_path)
+    serving_root = state_root.resolve() / "serving"
+    bundle_root = serving_root / digest[:16]
+    persistent_artifacts = bundle_root / "artifacts"
+    persistent_release = persistent_artifacts / release_relative
+    persistent_triton = persistent_artifacts / triton_relative
+    marker = bundle_root / "bundle.json"
+
+    if bundle_root.exists():
+        metadata = read_json(marker) if marker.is_file() else {}
+        if (
+            metadata.get("manifest_sha256") != digest
+            or not persistent_release.is_dir()
+            or not persistent_triton.is_dir()
+        ):
+            raise ReleaseError(f"Existing serving bundle is incomplete: {bundle_root}")
+        return persistent_artifacts, persistent_triton
+
+    serving_root.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{digest[:12]}-", dir=serving_root))
+    try:
+        temporary_artifacts = temporary / "artifacts"
+        destination = temporary_artifacts / release_relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(release_root, destination)
+        temporary_marker = temporary / "bundle.json"
+        temporary_marker.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "manifest_sha256": digest,
+                    "release_path": str(release_relative),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(bundle_root)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return persistent_artifacts, persistent_triton
+
+
 def build_compose_environment(
     base: dict[str, str],
     *,
@@ -206,6 +320,9 @@ def build_compose_environment(
     manifest_relative: Path,
     triton_relative: Path,
     triton_repository: Path,
+    serving_artifacts_root: Path,
+    model_name: str,
+    model_version: str,
 ) -> dict[str, str]:
     environment = base.copy()
     environment.update(
@@ -215,6 +332,9 @@ def build_compose_environment(
             # repository artifacts directory is mounted at /app/artifacts.
             "API_MODEL_MANIFEST_PATH": str(manifest_relative),
             "API_TRITON_MODEL_REPOSITORY": str(triton_relative),
+            "SERVING_ARTIFACTS_ROOT": str(serving_artifacts_root.resolve()),
+            "TRITON_MODEL_NAME": model_name,
+            "TRITON_MODEL_VERSION": model_version,
             # Docker Compose resolves a relative host path without ./ as a
             # named volume. Always pass the canonical host path for Triton.
             "TRITON_MODEL_REPOSITORY": str(triton_repository.resolve()),
@@ -232,6 +352,10 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
     triton_repository = Path(args.triton_model_repository).resolve()
     if not triton_repository.is_dir():
         raise ReleaseError(f"Triton model repository is missing: {triton_repository}")
+    model_name, model_version = preflight_serving_release(
+        manifest_path, triton_repository, args.release_id
+    )
+    require_healthy_qdrant(os.environ.get("QDRANT_CONTAINER_NAME", "reid-qdrant"))
     release_root = manifest_path.parents[1]
     try:
         manifest_relative = manifest_path.relative_to(ROOT)
@@ -252,6 +376,8 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         "dvc_stage": "package_triton",
         "deployed_at": datetime.now(timezone.utc).isoformat(),
         "rollback": is_rollback,
+        "triton_model_name": model_name,
+        "triton_model_version": model_version,
     }
     publication_path = release_root / "release" / "dvc_publication.json"
     if publication_path.is_file():
@@ -260,7 +386,15 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         if not isinstance(stage, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", stage):
             raise ReleaseError("DVC publication report has an invalid stage")
         record["dvc_stage"] = stage
-    state_root = Path(args.state_root)
+    state_root = Path(args.state_root).resolve()
+    serving_artifacts_root, persistent_triton_repository = materialize_serving_bundle(
+        state_root,
+        release_root,
+        manifest_path,
+        triton_repository,
+    )
+    record["serving_artifacts_root"] = str(serving_artifacts_root)
+    record["persistent_triton_model_repository"] = str(persistent_triton_repository)
     write_pending_state(state_root, args.environment, record)
 
     compose_environment = build_compose_environment(
@@ -268,7 +402,10 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         image=args.image,
         manifest_relative=manifest_relative,
         triton_relative=triton_relative,
-        triton_repository=triton_repository,
+        triton_repository=persistent_triton_repository,
+        serving_artifacts_root=serving_artifacts_root,
+        model_name=model_name,
+        model_version=model_version,
     )
     compose = [
         "docker",
@@ -281,12 +418,31 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
     if not args.skip_pull:
         subprocess.run(["docker", "pull", args.image], check=True, cwd=ROOT)
     subprocess.run(
-        compose + ["up", "-d", "--no-build", "--force-recreate", "triton-server", "inference-api"],
+        compose
+        + [
+            "up",
+            "-d",
+            "--no-build",
+            "--no-deps",
+            "--force-recreate",
+            "triton-server",
+            "inference-api",
+        ],
         check=True,
         cwd=ROOT,
         env=compose_environment,
     )
-    wait_for_release(args.api_url, args.release_id)
+    try:
+        wait_for_release(args.api_url, args.release_id, attempts=90)
+    except ReleaseError:
+        subprocess.run(compose + ["ps"], cwd=ROOT, env=compose_environment, check=False)
+        subprocess.run(
+            compose + ["logs", "--no-color", "--tail", "200", "triton-server", "inference-api"],
+            cwd=ROOT,
+            env=compose_environment,
+            check=False,
+        )
+        raise
 
     write_deployment_state(state_root, args.environment, record)
     return record

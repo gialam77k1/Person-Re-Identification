@@ -123,6 +123,7 @@ class ReleaseContract:
         release = manifest.get("release", {})
         source = manifest.get("source", {})
         contract = manifest.get("contract", {})
+        model = manifest.get("model", {})
         validation = manifest.get("validation", {})
         release_id = release.get("release_id")
         git_commit = source.get("git_commit")
@@ -133,6 +134,17 @@ class ReleaseContract:
             raise ValueError("Model manifest has not passed the validation gate.")
         if not isinstance(input_shape, list) or len(input_shape) != 4:
             raise ValueError("Model manifest input_shape must contain four dimensions.")
+        contract_embedding_dim = int(contract.get("embedding_dim") or 0)
+        model_embedding_dim = int(model.get("embedding_dim") or 0)
+        if (
+            contract_embedding_dim > 0
+            and model_embedding_dim > 0
+            and contract_embedding_dim != model_embedding_dim
+        ):
+            raise ValueError("Model and serving contract embedding dimensions do not match.")
+        embedding_dim = contract_embedding_dim or model_embedding_dim
+        if embedding_dim <= 0:
+            raise ValueError("Model manifest has no valid embedding dimension.")
 
         preprocessing_value = contract.get("preprocessing_path")
         if not preprocessing_value:
@@ -164,7 +176,10 @@ class ReleaseContract:
             input_name=str(contract.get("input_name", "images")),
             output_name=str(contract.get("output_name", "embeddings")),
             input_shape=tuple(int(value) for value in input_shape),
-            embedding_dim=int(contract.get("embedding_dim", 0)),
+            # Release manifests produced before schema v2.1 stored this value
+            # only under model.embedding_dim. Keep those already-approved,
+            # checksum-pinned candidates deployable without weakening checks.
+            embedding_dim=embedding_dim,
             preprocessing_path=preprocessing_path,
             preprocessing_version=preprocessing_version,
             preprocessing_sha256=preprocessing_actual,

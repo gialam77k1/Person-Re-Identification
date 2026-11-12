@@ -11,6 +11,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SelfHostedRunnerSmokeTest(unittest.TestCase):
+    def test_all_self_hosted_checkouts_preserve_runtime_state(self) -> None:
+        workflow_root = ROOT / ".github/workflows"
+        for path in workflow_root.glob("*.yml"):
+            workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+            for job_name, job in workflow.get("jobs", {}).items():
+                runs_on = job.get("runs-on", [])
+                labels = [runs_on] if isinstance(runs_on, str) else runs_on
+                if "self-hosted" not in labels:
+                    continue
+                checkout = next(
+                    (
+                        step
+                        for step in job.get("steps", [])
+                        if str(step.get("uses", "")).startswith("actions/checkout@")
+                    ),
+                    None,
+                )
+                self.assertIsNotNone(checkout, f"{path.name}:{job_name} has no checkout")
+                self.assertEqual(checkout["uses"], "actions/checkout@v5")
+                self.assertIs(checkout.get("with", {}).get("clean"), False)
+
     def test_smoke_script_has_valid_shell_syntax(self) -> None:
         for script_name in (
             "self_hosted_runner_smoke.sh",
