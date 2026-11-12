@@ -5,12 +5,14 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
 from src.materialize_release_dependencies import (
     ReleaseDependencyError,
     materialize_validation_policy,
+    reconstruct_validation_policy,
 )
 
 
@@ -72,6 +74,34 @@ class MaterializeReleaseDependenciesTest(unittest.TestCase):
                 source_repository_root=ROOT,
             )
             self.assertEqual(destination.read_bytes(), expected)
+
+    def test_fetches_manifest_source_commit_when_checkout_is_shallow(self) -> None:
+        source_commit = "a" * 40
+        policy = "release_id: legacy:v1\nquality: {}\n"
+        missing_commit = subprocess.CalledProcessError(128, ["git", "show"])
+        completed_fetch = subprocess.CompletedProcess(
+            ["git", "fetch"], 0, stdout="", stderr=""
+        )
+        completed_show = subprocess.CompletedProcess(
+            ["git", "show"], 0, stdout=policy, stderr=""
+        )
+
+        with patch(
+            "src.materialize_release_dependencies.subprocess.run",
+            side_effect=[missing_commit, completed_fetch, completed_show],
+        ) as run:
+            restored = reconstruct_validation_policy(
+                manifest=self.manifest("0" * 64, source_commit),
+                repository_path="configs/model_validation_v2.yaml",
+                source_repository_root=ROOT,
+            )
+
+        payload = yaml.safe_load(restored)
+        self.assertEqual(payload["release_id"], "market1501-duke-vit-bnneck:v2")
+        self.assertEqual(
+            run.call_args_list[1].args[0],
+            ["git", "fetch", "--no-tags", "--depth=1", "origin", source_commit],
+        )
 
     def test_rejects_tampered_candidate_policy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
