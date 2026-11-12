@@ -90,7 +90,7 @@ def create_batch(
     count: int = 2000,
     cameras: tuple[int, ...] = DEFAULT_CAMERAS,
     seed: int = 20261110,
-    dataset_label: str = "dukemtmc-reid",
+    dataset_label: str = "msmt17-demo",
 ) -> dict[str, Any]:
     source_root = source_root.resolve()
     output_root = output_root.resolve()
@@ -130,11 +130,9 @@ def create_batch(
         manifest = {
             "schema_version": 1,
             "batch_id": output_root.name,
-            # The current lifecycle evaluates against the fixed Duke protocol.
-            # Source provenance remains explicit and is never inferred from this label.
             "dataset": dataset_label,
             "source_dataset": "MSMT17_V1",
-            "purpose": "held-out 6-camera Data Inbox batch for iterative v3 demo",
+            "purpose": "six-camera Data Inbox batch with automatic identity-disjoint evaluation split",
             "seed": seed,
             "selected_cameras": list(cameras),
             "selection_policy": {
@@ -170,7 +168,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--count", type=int, default=2000)
     parser.add_argument("--cameras", default=",".join(map(str, DEFAULT_CAMERAS)))
     parser.add_argument("--seed", type=int, default=20261110)
-    parser.add_argument("--dataset-label", default="dukemtmc-reid")
+    parser.add_argument("--dataset-label", default="msmt17-demo")
     return parser.parse_args()
 
 

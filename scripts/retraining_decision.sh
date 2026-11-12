@@ -14,6 +14,8 @@ arguments=(
   --config configs/retraining_decision.yaml
   --approved-by "${APPROVED_BY}"
   --output "${OUTPUT}"
+  --base-release "${RELEASE_ID:-market1501-vit-bnneck:v1-dvc}"
+  --target-dataset "${TARGET_DATASET:-dukemtmc-reid}"
 )
 if [[ "${REQUIRE_APPROVED:-0}" == "1" ]]; then
   arguments+=(--require-approved)

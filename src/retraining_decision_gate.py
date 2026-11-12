@@ -135,6 +135,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--approved-by", default="")
     parser.add_argument("--output", required=True)
     parser.add_argument("--require-approved", action="store_true")
+    parser.add_argument("--base-release")
+    parser.add_argument("--target-dataset")
     return parser.parse_args()
 
 
@@ -144,6 +146,11 @@ def main() -> int:
         drift_report = json.loads(Path(args.drift_report).read_text(encoding="utf-8"))
         evaluation_report = json.loads(Path(args.evaluation_report).read_text(encoding="utf-8"))
         policy = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+        if args.base_release:
+            policy["candidate"]["base_release_id"] = args.base_release
+        if args.target_dataset:
+            policy["candidate"]["target_dataset"] = args.target_dataset
+            policy["candidate"]["target_dataset_version"] = args.target_dataset
         result = build_retraining_decision(drift_report, evaluation_report, policy, args.approved_by)
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)

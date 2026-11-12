@@ -56,7 +56,8 @@ if [[ -n "${INBOX_DATASET_PATH:-}" ]]; then
     --output-root "${INBOX_RUNTIME}/dataset" \
     --output-config "${CAPTURE_CONFIG}" \
     --output-pointer "${DATASET_POINTER}" \
-    --revision "${INBOX_DATASET_REVISION}"
+    --revision "${INBOX_DATASET_REVISION}" \
+    --dataset-name "${INBOX_DATASET_NAME:-dukemtmc-reid}"
 fi
 mkdir -p "${MONITORING_ROOT}/textfile" "${MONITORING_ROOT}/reports"
 

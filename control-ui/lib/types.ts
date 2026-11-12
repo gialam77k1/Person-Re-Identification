@@ -138,6 +138,13 @@ export type InboxBatch = {
     source_path?: string;
     thresholds?: Record<string, number>;
     validation_failures?: string[];
+    evaluation_split?: {
+      train_images?: number;
+      query_images?: number;
+      gallery_images?: number;
+      evaluation_identities?: number;
+      identity_overlap?: boolean;
+    };
   };
 };
 
@@ -146,6 +153,7 @@ export type InboxPolicy = {
   min_valid_images: number;
   min_identities: number;
   min_cameras: number;
+  evaluation_holdout_images: number;
 };
 
 export type InboxSource = {

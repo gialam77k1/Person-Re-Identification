@@ -60,13 +60,14 @@ def main() -> int:
     parser.add_argument("--market-report", required=True)
     parser.add_argument("--forgetting-policy", required=True)
     parser.add_argument("--validation-policy", required=True)
+    parser.add_argument("--target-dataset", default="dukemtmc-reid")
     args = parser.parse_args()
     try:
         checks = [
             validate_config(
                 Path(args.duke_config),
                 release_id=args.release_id,
-                dataset="dukemtmc-reid",
+                dataset=args.target_dataset,
                 report=Path(args.duke_report),
             ),
             validate_config(

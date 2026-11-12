@@ -76,6 +76,7 @@ jobs:
       # Reduce CUDA allocator fragmentation on the long-lived self-hosted runner.
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True,max_split_size_mb:128
       INBOX_CONFIG: configs/runtime/duke_v2_inbox_${{ inputs.cycle_id }}.yaml
+      TARGET_DATASET: ${{ inputs.dataset }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -223,7 +224,19 @@ jobs:
             --source-release '${{ inputs.source_release }}' \
             --target-release '${{ inputs.target_release }}' \
             --base-checkpoint "$BASE_CHECKPOINT" \
-            --run-root "$V2_ROOT"
+            --run-root "$V2_ROOT" \
+            --dataset-name '${{ inputs.dataset }}'
+
+      - name: Bind candidate evaluation to the held-out inbox split
+        if: ${{ inputs.dataset_path != '' }}
+        run: |
+          python -m src.prepare_candidate_evaluation \
+            --template configs/duke_v2_eval.yaml \
+            --data-config "$INBOX_CONFIG" \
+            --output "$DUKE_EVAL_CONFIG" \
+            --source-release '${{ inputs.source_release }}' \
+            --target-release '${{ inputs.target_release }}' \
+            --run-root "$V2_ROOT/evaluations/duke"
 
       - name: Verify Git, DVC, dataset and checkpoint lineage
         id: evidence_lineage
@@ -275,7 +288,8 @@ jobs:
             --market-config "$MARKET1501_EVAL_CONFIG" \
             --market-report "$MARKET1501_V2_REPORT" \
             --forgetting-policy configs/catastrophic_forgetting.yaml \
-            --validation-policy configs/retraining_validation.yaml
+            --validation-policy configs/retraining_validation.yaml \
+            --target-dataset '${{ inputs.dataset }}'
           bash -n scripts/evaluate_duke_v2.sh
           bash -n scripts/evaluate_market1501_v2.sh
           bash -n scripts/evaluate_v2_dual_domain.sh

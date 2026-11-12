@@ -5,6 +5,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from src.release_deployment import (
@@ -12,6 +13,7 @@ from src.release_deployment import (
     build_image_reference,
     build_compose_environment,
     materialize_serving_bundle,
+    runtime_snapshot_record,
     select_rollback_record,
     validate_candidate,
     validate_image_reference,
@@ -144,6 +146,39 @@ class ReleaseDeploymentTest(unittest.TestCase):
             selected, lock = select_rollback_record(state_root, "production")
             self.assertEqual(selected, current)
             self.assertEqual(lock, state_root / "production/current.dvc.lock")
+
+    def test_runtime_snapshot_accepts_validated_local_bootstrap_image(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release_dir = root / "artifacts/pipeline/model-v1/release"
+            release_dir.mkdir(parents=True)
+            report, manifest = self.make_candidate(release_dir)
+            report.rename(release_dir / "validation_report.json")
+            manifest.rename(release_dir / "model_manifest.json")
+            triton = root / "artifacts/pipeline/model-v1/triton/model_repository"
+            triton.mkdir(parents=True)
+            model_info = {
+                "release_id": "market1501-vit-bnneck:v1",
+                "git_commit": "a" * 40,
+                "model_name": "reid_embedding",
+                "model_version": "1",
+            }
+            inspected = {
+                "Config": {
+                    "Image": "person-reid/inference-api:bootstrap-v1",
+                    "Env": [
+                        "MODEL_MANIFEST_PATH=artifacts/pipeline/model-v1/release/model_manifest.json",
+                        "API_TRITON_MODEL_REPOSITORY=artifacts/pipeline/model-v1/triton/model_repository",
+                    ],
+                }
+            }
+            with patch("src.release_deployment.ROOT", root):
+                record = runtime_snapshot_record("production", model_info, inspected)
+
+            self.assertEqual(record["release_id"], "market1501-vit-bnneck:v1")
+            self.assertEqual(record["dvc_stage"], "package_triton")
+            self.assertTrue(record["runtime_snapshot"])
+            self.assertTrue(record["local_image"])
 
 
 if __name__ == "__main__":

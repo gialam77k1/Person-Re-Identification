@@ -83,14 +83,20 @@ def create_app(
 
     @api.get("/control/inbox")
     async def get_inbox(limit: int = Query(default=25, ge=1, le=100)) -> dict:
+        sources = inbox_service.discover_sources()
+        discovered_datasets = {
+            str(source.get("dataset", "")).strip()
+            for source in sources
+            if str(source.get("dataset", "")).strip()
+        }
         return {
             "batches": cycle_store.list_inbox_batches(limit),
-            "sources": inbox_service.discover_sources(),
+            "sources": sources,
             "policy": {
-                "allowed_datasets": list(configured.allowed_datasets),
-                "min_valid_images": configured.inbox_min_valid_images,
-                "min_identities": configured.inbox_min_identities,
-                "min_cameras": configured.inbox_min_cameras,
+                "allowed_datasets": sorted(
+                    set(configured.allowed_datasets) | discovered_datasets
+                ),
+                **inbox_service.policy(),
             },
         }
 

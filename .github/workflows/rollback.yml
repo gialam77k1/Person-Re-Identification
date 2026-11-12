@@ -54,3 +54,17 @@ jobs:
         run: >-
           ./scripts/deploy_local.sh rollback
           --environment "$TARGET_ENVIRONMENT"
+
+      - name: Report successful rollback
+        if: ${{ success() && inputs.cycle_id != 'manual' }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}"
+          production_approval PASS --progress 1
+          --detail "Rollback completed and the previous release is healthy"
+
+      - name: Report rollback failure
+        if: ${{ failure() && inputs.cycle_id != 'manual' }}
+        run: >-
+          python scripts/control_callback.py "${{ inputs.cycle_id }}"
+          production_approval FAIL
+          --detail "Rollback failed; production release was not changed"

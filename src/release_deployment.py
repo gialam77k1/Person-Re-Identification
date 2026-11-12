@@ -180,6 +180,103 @@ def select_rollback_record(state_root: Path, environment: str) -> tuple[dict[str
     return read_json(target), lock
 
 
+def runtime_snapshot_record(
+    environment: str,
+    model_info: dict[str, Any],
+    inspect_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a rollback record from the service that is currently running."""
+    config = inspect_payload.get("Config")
+    if not isinstance(config, dict):
+        raise ReleaseError("Inference container inspection has no Config section")
+    environment_items = config.get("Env")
+    if not isinstance(environment_items, list):
+        raise ReleaseError("Inference container inspection has no environment")
+    runtime_environment = {
+        key: value
+        for item in environment_items
+        if isinstance(item, str) and "=" in item
+        for key, value in [item.split("=", 1)]
+    }
+    manifest_value = runtime_environment.get("MODEL_MANIFEST_PATH")
+    triton_value = runtime_environment.get("API_TRITON_MODEL_REPOSITORY")
+    if not manifest_value or not triton_value:
+        raise ReleaseError("Running inference service does not expose its release paths")
+    manifest_path = resolve_repository_path(manifest_value)
+    triton_path = resolve_repository_path(triton_value)
+    validation_path = manifest_path.with_name("validation_report.json")
+    release_id = str(model_info.get("release_id") or "")
+    if not release_id:
+        raise ReleaseError("Running inference service did not report a release_id")
+    _, manifest = validate_candidate(validation_path, manifest_path, release_id)
+    image = str(config.get("Image") or "")
+    if not image:
+        raise ReleaseError("Running inference service did not report its image")
+    image_git_commit = str(model_info.get("git_commit") or manifest["source"]["git_commit"])
+    local_image = False
+    try:
+        validate_image_reference(image, image_git_commit, release_id)
+    except ReleaseError:
+        local_image = True
+    publication_path = manifest_path.parent / "dvc_publication.json"
+    stage = "package_triton"
+    if publication_path.is_file():
+        publication = read_json(publication_path)
+        candidate = publication.get("dvc", {}).get("stage")
+        if isinstance(candidate, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", candidate):
+            stage = candidate
+    return {
+        "schema_version": 1,
+        "environment": environment,
+        "image": image,
+        "image_git_commit": image_git_commit,
+        "release_id": release_id,
+        "model_git_commit": manifest["source"]["git_commit"],
+        "manifest": str(manifest_path.relative_to(ROOT)),
+        "validation_report": str(validation_path.relative_to(ROOT)),
+        "triton_model_repository": str(triton_path.relative_to(ROOT)),
+        "dvc_stage": stage,
+        "deployed_at": datetime.now(timezone.utc).isoformat(),
+        "rollback": False,
+        "runtime_snapshot": True,
+        "local_image": local_image,
+        "triton_model_name": str(model_info.get("model_name") or "reid_embedding"),
+        "triton_model_version": str(model_info.get("model_version") or ""),
+    }
+
+
+def snapshot_running_deployment(
+    state_root: Path,
+    environment: str,
+    api_url: str,
+    *,
+    container_name: str = "reid-inference-api",
+) -> dict[str, Any]:
+    current = state_root / environment / "current.json"
+    if current.is_file():
+        return read_json(current)
+    model_info = api_json(api_url, "/model-info")
+    result = subprocess.run(
+        ["docker", "inspect", container_name],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ReleaseError(
+            f"Cannot inspect running inference service: {result.stderr.strip() or 'unknown error'}"
+        )
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ReleaseError("Docker returned invalid inference container metadata") from exc
+    if not isinstance(payload, list) or not payload or not isinstance(payload[0], dict):
+        raise ReleaseError("Docker returned no inference container metadata")
+    record = runtime_snapshot_record(environment, model_info, payload[0])
+    write_deployment_state(state_root, environment, record)
+    return record
+
+
 def api_json(api_url: str, endpoint: str) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(f"{api_url.rstrip('/')}{endpoint}", timeout=5) as response:
@@ -347,7 +444,8 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
     report_path = Path(args.validation_report).resolve()
     manifest_path = Path(args.manifest).resolve()
     _, manifest = validate_candidate(report_path, manifest_path, args.release_id)
-    validate_image_reference(args.image, args.image_git_commit, args.release_id)
+    if not getattr(args, "allow_local_image", False):
+        validate_image_reference(args.image, args.image_git_commit, args.release_id)
 
     triton_repository = Path(args.triton_model_repository).resolve()
     if not triton_repository.is_dir():
@@ -465,6 +563,9 @@ def rollback(args: argparse.Namespace) -> dict[str, Any]:
     args.manifest = previous["manifest"]
     args.validation_report = previous["validation_report"]
     args.triton_model_repository = previous["triton_model_repository"]
+    if previous.get("local_image") is True:
+        args.skip_pull = True
+        args.allow_local_image = True
     return deploy(args, is_rollback=True)
 
 
@@ -498,6 +599,22 @@ def parse_args() -> argparse.Namespace:
     deploy_parser = subparsers.add_parser("deploy", help="Deploy a validated release.")
     add_shared_deploy_arguments(deploy_parser, required=True)
 
+    snapshot_parser = subparsers.add_parser(
+        "snapshot", help="Record the currently running release as a rollback baseline."
+    )
+    snapshot_parser.add_argument(
+        "--environment", choices=("staging", "production"), required=True
+    )
+    snapshot_parser.add_argument("--api-url", default="http://localhost:8080")
+    snapshot_parser.add_argument(
+        "--state-root",
+        default=os.environ.get("DEPLOYMENT_STATE_ROOT", "../person-reid-deployments"),
+    )
+    snapshot_parser.add_argument(
+        "--container-name",
+        default=os.environ.get("INFERENCE_CONTAINER_NAME", "reid-inference-api"),
+    )
+
     rollback_parser = subparsers.add_parser("rollback", help="Restore the previous recorded release.")
     add_shared_deploy_arguments(rollback_parser, required=False)
     return parser.parse_args()
@@ -513,6 +630,15 @@ def main() -> int:
                 args.release_id,
             )
             print(f"Candidate validation: PASS ({args.release_id})")
+            return 0
+        if args.command == "snapshot":
+            record = snapshot_running_deployment(
+                Path(args.state_root).resolve(),
+                args.environment,
+                args.api_url,
+                container_name=args.container_name,
+            )
+            print(json.dumps(record, indent=2))
             return 0
         record = deploy(args) if args.command == "deploy" else rollback(args)
         print(json.dumps(record, indent=2))

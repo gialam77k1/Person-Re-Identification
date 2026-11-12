@@ -58,6 +58,7 @@ jobs:
       INBOX_DATASET_REVISION: ${{ inputs.dataset_revision }}
       INBOX_DATASET_PATH: ${{ inputs.dataset_path }}
       INBOX_DATASET_HOST_PATH: ${{ inputs.dataset_host_path }}
+      INBOX_DATASET_NAME: ${{ inputs.dataset }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -74,9 +75,8 @@ jobs:
 
       - name: Mark data validation running
         run: >-
-          test "${{ inputs.dataset }}" = "dukemtmc-reid" &&
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_data RUNNING
-          --detail "Checking DukeMTMC-reID, source champion and serving stack"
+          --detail "Checking ${{ inputs.dataset }}, source champion and serving stack"
 
       - name: Configure local MLOps credentials
         env:
@@ -137,13 +137,15 @@ jobs:
       - name: Evaluate source champion on DukeMTMC-reID
         env:
           RELEASE_ID: ${{ inputs.release_id }}
+          TARGET_DATASET: ${{ inputs.dataset }}
         run: |
           if [[ -n "${{ inputs.dataset_path }}" ]]; then
             export DATASET_POINTER="${RUNNER_TEMP}/reid-inbox-${{ inputs.cycle_id }}/inbox_dataset.dvc"
+            export EVAL_CONFIG="configs/runtime/duke_v1_inbox_${{ inputs.cycle_id }}.yaml"
           else
             export DATASET_POINTER=datasets/dukemtmc-reid.dvc
           fi
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Evaluating source champion ${{ inputs.release_id }} on DukeMTMC-reID"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v1 RUNNING --detail "Evaluating source champion ${{ inputs.release_id }} on held-out ${{ inputs.dataset }}"
           ./scripts/evaluate_duke_v1.sh
           ./scripts/retraining_decision.sh
 

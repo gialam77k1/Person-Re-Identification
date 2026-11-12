@@ -189,6 +189,11 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
+      - name: Snapshot current release for rollback
+        run: |
+          ./scripts/deploy_local.sh snapshot --environment staging
+          ./scripts/deploy_local.sh snapshot --environment production
+
       - name: Deploy staging
         env:
           IMAGE: ${{ needs.build-image.outputs.image }}

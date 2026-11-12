@@ -62,11 +62,13 @@ def build_forgetting_gate(
     market_v1 = market1501_v1_manifest.get("quality_metrics", {}).get(protocol, {})
     check("release_duke", duke_v2.get("release_id") == release_id, duke_v2.get("release_id"), release_id)
     check("release_market1501", market1501_v2.get("release_id") == release_id, market1501_v2.get("release_id"), release_id)
+    expected_target_dataset = duke_v1.get("dataset") or duke_v2.get("dataset")
     check(
         "dataset_duke",
-        str(duke_v2.get("dataset", "")).lower() == "dukemtmc-reid",
+        str(duke_v2.get("dataset", "")).lower()
+        == str(expected_target_dataset or "").lower(),
         duke_v2.get("dataset"),
-        "dukemtmc-reid",
+        expected_target_dataset,
     )
     check("dataset_market1501", str(market1501_v2.get("dataset", "")).lower() == "market1501", market1501_v2.get("dataset"), "market1501")
     check("finite_duke_v1", _finite_metrics(duke_v1), {key: duke_v1.get(key) for key in METRICS}, "all finite")

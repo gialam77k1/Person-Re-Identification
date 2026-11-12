@@ -64,7 +64,10 @@ class ImageFolderReIDDataset(Dataset):
             pid = int(image_path.name.split("_")[0])
             if pid == -1:
                 continue
-            camid = int(image_path.name.split("_")[1][1]) - 1
+            camera_token = image_path.name.split("_")[1]
+            if not camera_token.startswith("c") or not camera_token[1:].isdigit():
+                raise ValueError(f"Invalid ReID camera token in filename: {image_path.name}")
+            camid = int(camera_token[1:]) - 1
             mapped_pid = self.pid2label[pid] if relabel else pid
             self.samples.append(
                 {
@@ -215,9 +218,9 @@ def build_dataset(
         )
 
     dataset_name = config["data"]["dataset"]["name"]
-    dataset_class = get_dataset_class(dataset_name)
     dataset_key = dataset_name.strip().lower()
     if dataset_key == "msmt17":
+        dataset_class = MSMT17Dataset
         location = config["data"].get("location", {})
         list_files = location.get("list_files", {})
         list_file = list_files.get(split) if isinstance(list_files, dict) else None
@@ -229,6 +232,9 @@ def build_dataset(
             list_file=list_file,
         )
 
+    dataset_class = IMAGE_FOLDER_DATASET_REGISTRY.get(
+        dataset_key, ImageFolderReIDDataset
+    )
     split_to_dir = {
         "train": config["data"]["train_dir"],
         "query": config["data"]["query_dir"],
