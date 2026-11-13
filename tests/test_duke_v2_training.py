@@ -235,6 +235,33 @@ class DukeV2TrainingTest(unittest.TestCase):
             expected_dataset_revision=revision,
         )
 
+    def test_preflight_accepts_v2_to_v3_release_lineage(self) -> None:
+        config = yaml.safe_load(
+            (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8")
+        )
+        revision = "a" * 64
+        config["release"] = {
+            "id": "market1501-duke-vit-bnneck:v3",
+            "base_release_id": "market1501-duke-vit-bnneck:v2",
+        }
+        config["data"]["dataset"]["version"] = revision
+        config["transfer"]["expected_checkpoint_epoch"] = None
+        decision = {
+            "status": "RETRAIN_APPROVED",
+            "base_release_id": "market1501-duke-vit-bnneck:v2",
+            "target_release_id": "market1501-duke-vit-bnneck:v3",
+            "target_dataset": "dukemtmc-reid",
+            "target_dataset_version": revision,
+            "target_epochs": 50,
+        }
+        from src.validate_duke_v2_training import validate_training_contract
+
+        validate_training_contract(
+            config,
+            decision,
+            expected_dataset_revision=revision,
+        )
+
     def test_preflight_rejects_changed_inbox_revision(self) -> None:
         config = yaml.safe_load(
             (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8")
