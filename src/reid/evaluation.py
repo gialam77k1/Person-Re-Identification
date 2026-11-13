@@ -1,8 +1,35 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import io
 from pathlib import Path
 
 import numpy as np
+
+
+def _embedded_preview_asset(value: str, *, max_size: tuple[int, int] = (192, 384)) -> dict[str, str]:
+    """Return a small, content-addressed JPEG that survives an ephemeral runner.
+
+    Inbox evaluation views are symlinks below ``RUNNER_TEMP``.  Persisting only
+    their paths makes the Control UI lose every preview as soon as the workflow
+    exits.  The thumbnail is intentionally stored with the evaluation evidence
+    so the report is portable across runners, datasets and future model versions.
+    """
+    from PIL import Image, ImageOps
+
+    source = Path(value)
+    with Image.open(source) as image:
+        image = ImageOps.exif_transpose(image).convert("RGB")
+        image.thumbnail(max_size)
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=78, optimize=True)
+    content = output.getvalue()
+    return {
+        "asset_id": hashlib.sha256(content).hexdigest(),
+        "asset_mime": "image/jpeg",
+        "asset_data": base64.b64encode(content).decode("ascii"),
+    }
 
 
 def extract_features(model, loader, device, flip_test: bool = False):
@@ -66,6 +93,7 @@ def build_retrieval_preview(
     dataset_root: str | Path | None = None,
     topk: int = 5,
     limit_queries: int = 6,
+    embed_images: bool = False,
 ) -> list[dict]:
     """Build deterministic, auditable query-to-gallery examples for the UI.
 
@@ -101,6 +129,11 @@ def build_retrieval_preview(
                     "distance": distance,
                     "similarity": float(1.0 - distance),
                     "correct": gallery_pid == query_pid,
+                    **(
+                        _embedded_preview_asset(gallery_paths[gallery_index])
+                        if embed_images
+                        else {}
+                    ),
                 }
             )
             if len(predictions) >= topk:
@@ -113,6 +146,11 @@ def build_retrieval_preview(
                     ),
                     "person_id": query_pid,
                     "camera_id": query_camid,
+                    **(
+                        _embedded_preview_asset(query_paths[query_index])
+                        if embed_images
+                        else {}
+                    ),
                 },
                 "predictions": predictions,
                 "top1_correct": bool(predictions and predictions[0]["correct"]),

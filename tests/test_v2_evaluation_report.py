@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import tempfile
 import unittest
@@ -13,6 +15,15 @@ from src.validate_v2_evaluation import validate_report
 
 class V2EvaluationReportTest(unittest.TestCase):
     def report(self) -> dict:
+        image = b"\xff\xd8\xffportable-preview"
+        asset = {
+            "image_path": "query/0001_c1.jpg",
+            "person_id": 1,
+            "camera_id": 1,
+            "asset_id": hashlib.sha256(image).hexdigest(),
+            "asset_mime": "image/jpeg",
+            "asset_data": base64.b64encode(image).decode("ascii"),
+        }
         return {
             "release_id": "market1501-duke-vit-bnneck:v2",
             "dataset": "dukemtmc-reid",
@@ -28,6 +39,9 @@ class V2EvaluationReportTest(unittest.TestCase):
             "checkpoint_sha256": "a" * 64,
             "git_commit": "b" * 40,
             "dataset_dvc_revision": "c.dir",
+            "retrieval_preview": [
+                {"query": asset, "predictions": [], "top1_correct": False}
+            ],
         }
 
     def test_accepts_complete_lineage_and_metrics(self) -> None:
@@ -64,6 +78,15 @@ class V2EvaluationReportTest(unittest.TestCase):
             report.pop("checkpoint_sha256")
             path.write_text(json.dumps(report), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "checkpoint_sha256"):
+                validate_report(path, "market1501-duke-vit-bnneck:v2", "dukemtmc-reid")
+
+    def test_rejects_preview_without_immutable_image_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "report.json"
+            report = self.report()
+            report["retrieval_preview"][0]["query"].pop("asset_data")
+            path.write_text(json.dumps(report), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "asset_data"):
                 validate_report(path, "market1501-duke-vit-bnneck:v2", "dukemtmc-reid")
 
     def test_evaluation_loader_only_skips_incompatible_task_head(self) -> None:

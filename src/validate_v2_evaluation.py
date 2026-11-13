@@ -5,6 +5,8 @@ import json
 import math
 from pathlib import Path
 
+from src.evaluation_assets import validate_preview_assets
+
 
 DATASET_ALIASES = {
     "duke": "dukemtmc-reid",
@@ -44,6 +46,7 @@ def validate_report(path: Path, release_id: str, dataset: str) -> dict:
     for key in ("checkpoint_sha256", "git_commit", "dataset_dvc_revision"):
         if not str(report.get(key, "")).strip():
             raise ValueError(f"Evaluation lineage field {key} is missing.")
+    validate_preview_assets(report)
     return report
 
 

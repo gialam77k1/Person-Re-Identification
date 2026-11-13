@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import tempfile
 import unittest
 from dataclasses import replace
@@ -226,6 +228,8 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             json={"dataset": "dukemtmc-reid", "idempotency_key": "evaluation-ui", "actor": "tester"},
         )
         cycle_id = created.json()["cycle"]["id"]
+        embedded_content = b"\xff\xd8\xffembedded-evaluation-thumbnail"
+        embedded_asset_id = hashlib.sha256(embedded_content).hexdigest()
         report = {
             "release_id": "market1501-vit-bnneck:v1-dvc",
             "dataset": "dukemtmc-reid",
@@ -237,7 +241,14 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             "mINP": 0.21,
             "retrieval_preview": [
                 {
-                    "query": {"image_path": "query/0001_c2_sample.jpg", "person_id": 1, "camera_id": 2},
+                    "query": {
+                        "image_path": "query/0001_c2_sample.jpg",
+                        "person_id": 1,
+                        "camera_id": 2,
+                        "asset_id": embedded_asset_id,
+                        "asset_mime": "image/jpeg",
+                        "asset_data": base64.b64encode(embedded_content).decode("ascii"),
+                    },
                     "predictions": [],
                     "top1_correct": False,
                 }
@@ -262,6 +273,17 @@ class ControlApiTest(unittest.IsolatedAsyncioTestCase):
             [image["camera_id"] for image in payload["identity_camera_groups"][0]["images"]],
             [2, 3],
         )
+        query = payload["versions"][0]["retrieval_preview"][0]["query"]
+        self.assertNotIn("asset_data", query)
+        self.assertEqual(
+            query["asset_url"],
+            f"/evaluation-asset/{cycle_id}/{embedded_asset_id}",
+        )
+        embedded = await self.request(
+            "GET", f"/control/evaluation-assets/{cycle_id}/{embedded_asset_id}"
+        )
+        self.assertEqual(embedded.status_code, 200)
+        self.assertEqual(embedded.content, embedded_content)
         image = await self.request(
             "GET", "/control/evaluation-images/dukemtmc-reid/query/0001_c2_sample.jpg"
         )

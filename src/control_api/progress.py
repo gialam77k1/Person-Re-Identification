@@ -4,6 +4,7 @@ from typing import Any
 
 from src.control_api.state import CycleStatus, StageStatus
 from src.control_api.store import CycleStore
+from src.evaluation_assets import validate_preview_assets
 
 
 class ProgressService:
@@ -20,6 +21,8 @@ class ProgressService:
         detail: str | None = None,
         metrics: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if stage in {"evaluate_v1", "evaluate_v2"} and status == StageStatus.PASS:
+            self._validate_evaluation_evidence(stage, metrics)
         cycle = self.store.update_stage(
             cycle_id, stage, status, progress=progress, detail=detail
         )
@@ -84,3 +87,15 @@ class ProgressService:
                 cycle_id, status=CycleStatus.RUNNING, error=""
             )
         return cycle
+
+    @staticmethod
+    def _validate_evaluation_evidence(
+        stage: str, metrics: dict[str, Any] | None
+    ) -> None:
+        payload = metrics or {}
+        names = ("evaluation",) if stage == "evaluate_v1" else ("duke", "market1501")
+        for name in names:
+            report = payload.get(name)
+            if not isinstance(report, dict):
+                raise ValueError(f"{stage} PASS requires the {name} evaluation report.")
+            validate_preview_assets(report)

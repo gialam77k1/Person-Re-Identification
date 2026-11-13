@@ -51,6 +51,8 @@ export type CycleEvent = {
 
 export type EvaluationImage = {
   image_path: string;
+  asset_id?: string | null;
+  asset_url?: string | null;
   person_id?: number | null;
   camera_id?: number | null;
 };

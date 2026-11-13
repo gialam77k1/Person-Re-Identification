@@ -217,7 +217,7 @@ def main() -> None:
         pointer_path = (ROOT / args.dataset_pointer).resolve()
 
         results = {
-            "schema_version": 3,
+            "schema_version": 4,
             "release_id": args.release_id,
             "git_commit": git_commit(),
             "dataset_dvc_revision": dvc_revision(pointer_path),
@@ -256,7 +256,9 @@ def main() -> None:
                 gallery_camids=gallery_camids,
                 gallery_paths=gallery_paths,
                 dataset_root=config["data"]["location"]["root"],
+                embed_images=True,
             ),
+            "preview_asset_format": "embedded-content-addressed-v1",
         }
 
         if args.save_embeddings:

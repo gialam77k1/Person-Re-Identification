@@ -132,6 +132,18 @@ def create_app(
             headers={"Cache-Control": "public, max-age=3600"},
         )
 
+    @api.get("/control/evaluation-assets/{cycle_id}/{asset_id}")
+    async def get_evaluation_asset(cycle_id: str, asset_id: str) -> Response:
+        try:
+            content, media_type = evaluation_service.embedded_asset(cycle_id, asset_id)
+        except (KeyError, ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Evaluation asset not found") from exc
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
     @api.get("/control/cycles")
     async def list_cycles(limit: int = Query(default=25, ge=1, le=100)) -> dict:
         return {"cycles": cycle_store.list_cycles(limit=limit)}

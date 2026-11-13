@@ -7,6 +7,7 @@ from typing import Any
 
 from src.control_api.config import ControlSettings
 from src.control_api.store import CycleStore
+from src.evaluation_assets import find_preview_asset
 
 
 SPLITS = ("query", "bounding_box_test", "bounding_box_train")
@@ -198,9 +199,26 @@ class EvaluationService:
                 "git_commit": report.get("git_commit"),
                 "dataset_dvc_revision": report.get("dataset_dvc_revision"),
                 "generated_at": report.get("generated_at"),
-                "retrieval_preview": self._normalize_preview(preview),
+                "retrieval_preview": self._normalize_preview(preview, cycle_id=cycle_id),
             }
         )
+
+    def embedded_asset(self, cycle_id: str, asset_id: str) -> tuple[bytes, str]:
+        if len(asset_id) != 64 or any(char not in "0123456789abcdef" for char in asset_id):
+            raise ValueError("Invalid evaluation asset id")
+        self.store.get_cycle(cycle_id)
+        for stage in ("evaluate_v2", "evaluate_v1"):
+            event = self.store.latest_cycle_stage_metrics(cycle_id, stage)
+            if not event:
+                continue
+            metrics = event.get("payload", {}).get("metrics", {})
+            if not isinstance(metrics, dict):
+                continue
+            for report in metrics.values():
+                found = find_preview_asset(report, asset_id)
+                if found is not None:
+                    return found
+        raise FileNotFoundError(asset_id)
 
     @staticmethod
     def _protocol_metrics(report: dict[str, Any], suffix: str) -> dict[str, Any]:
@@ -267,7 +285,9 @@ class EvaluationService:
                 return Path(*path.parts[path.parts.index(split) :]).as_posix()
         return path.name
 
-    def _normalize_preview(self, preview: Any) -> list[dict[str, Any]]:
+    def _normalize_preview(
+        self, preview: Any, *, cycle_id: str | None
+    ) -> list[dict[str, Any]]:
         if not isinstance(preview, list):
             return []
         normalized = []
@@ -276,12 +296,18 @@ class EvaluationService:
                 continue
             query = dict(item["query"])
             query["image_path"] = self._portable_path(query.get("image_path", ""))
+            query.pop("asset_data", None)
+            if cycle_id and query.get("asset_id"):
+                query["asset_url"] = f"/evaluation-asset/{cycle_id}/{query['asset_id']}"
             predictions = []
             for prediction in item.get("predictions", [])[:10]:
                 if not isinstance(prediction, dict):
                     continue
                 value = dict(prediction)
                 value["image_path"] = self._portable_path(value.get("image_path", ""))
+                value.pop("asset_data", None)
+                if cycle_id and value.get("asset_id"):
+                    value["asset_url"] = f"/evaluation-asset/{cycle_id}/{value['asset_id']}"
                 predictions.append(value)
             normalized.append({**item, "query": query, "predictions": predictions})
         return normalized

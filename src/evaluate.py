@@ -163,6 +163,7 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
     )
 
     results = {
+        "schema_version": 4,
         "run_slug": config["runtime"]["run_slug"],
         "run_root": config["runtime"]["run_root"],
         "dataset": config["data"]["dataset"]["name"],
@@ -198,7 +199,9 @@ def run_evaluation_command(config: dict, checkpoint_path: str) -> None:
             gallery_pids=gallery_pid,
             gallery_camids=gallery_cam,
             dataset_root=config["data"]["location"]["root"],
+            embed_images=True,
         ),
+        "preview_asset_format": "embedded-content-addressed-v1",
     }
 
     if config["evaluation"].get("use_rerank", False):
