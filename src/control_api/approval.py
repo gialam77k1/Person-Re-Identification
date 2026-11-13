@@ -39,6 +39,7 @@ def create_approved_decision(
     source_release: str,
     target_release: str,
     dataset: str,
+    dataset_revision: str = "",
     evidence_run_id: str,
     evidence_artifact: str,
 ) -> dict[str, Any]:
@@ -74,6 +75,8 @@ def create_approved_decision(
             f"Decision gate returned {decision.get('status')}, retraining remains blocked."
         )
     approved_at = datetime.now(timezone.utc).isoformat()
+    if dataset_revision:
+        decision["target_dataset_version"] = dataset_revision
     decision.update(
         {
             "cycle_id": cycle_id,

@@ -46,12 +46,13 @@ class ControlApprovalTest(unittest.TestCase):
     def test_backend_creates_approved_decision_with_auditable_evidence(self) -> None:
         decision = create_approved_decision(
             files=self.files(), policy=self.policy, cycle_id="cycle-1", actor="reviewer",
-        source_release=self.release, target_release="market1501-duke-vit-bnneck:v2", dataset="dukemtmc-reid", evidence_run_id="123",
+        source_release=self.release, target_release="market1501-duke-vit-bnneck:v2", dataset="dukemtmc-reid", dataset_revision="f" * 64, evidence_run_id="123",
             evidence_artifact="mlops-evidence-cycle-1",
         )
         self.assertEqual(decision["status"], "RETRAIN_APPROVED")
         self.assertEqual(decision["approved_by"], "reviewer")
         self.assertEqual(decision["target_epochs"], 50)
+        self.assertEqual(decision["target_dataset_version"], "f" * 64)
         self.assertEqual(len(decision["evidence"]["manifest_sha256"]), 64)
 
     def test_backend_rejects_tampered_evidence(self) -> None:

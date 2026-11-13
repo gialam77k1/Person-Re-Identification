@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from src.validate_duke_v2_training import (
-    EXPECTED_DATASET,
-    EXPECTED_DATASET_VERSION,
     EXPECTED_EPOCHS,
     validate_training_contract,
 )
@@ -64,11 +62,12 @@ def validate_training_completion(run_root: Path, *, train_log: Path | None = Non
 
     effective_config = _load_json(run_root / "logs/effective_config.json")
     release_config = effective_config.get("release", {})
+    dataset_config = effective_config.get("data", {}).get("dataset", {})
     approved_contract = {
         "base_release_id": release_config.get("base_release_id"),
         "target_release_id": release_config.get("id"),
-        "target_dataset": EXPECTED_DATASET,
-        "target_dataset_version": EXPECTED_DATASET_VERSION,
+        "target_dataset": dataset_config.get("name"),
+        "target_dataset_version": dataset_config.get("version"),
         "target_epochs": EXPECTED_EPOCHS,
     }
     validate_training_contract(effective_config, approved_contract)

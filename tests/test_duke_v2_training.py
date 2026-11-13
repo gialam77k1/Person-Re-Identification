@@ -213,6 +213,48 @@ class DukeV2TrainingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "freeze_lower_blocks"):
             validate_training_contract(config, decision)
 
+    def test_preflight_accepts_immutable_inbox_revision_separate_from_dataset_name(self) -> None:
+        config = yaml.safe_load(
+            (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8")
+        )
+        revision = "9" * 64
+        config["data"]["dataset"]["version"] = revision
+        decision = {
+            "status": "RETRAIN_APPROVED",
+            "base_release_id": "market1501-vit-bnneck:v1-dvc",
+            "target_dataset": "dukemtmc-reid",
+            # Existing decisions use the logical dataset name here.
+            "target_dataset_version": "dukemtmc-reid",
+            "target_epochs": 50,
+        }
+        from src.validate_duke_v2_training import validate_training_contract
+
+        validate_training_contract(
+            config,
+            decision,
+            expected_dataset_revision=revision,
+        )
+
+    def test_preflight_rejects_changed_inbox_revision(self) -> None:
+        config = yaml.safe_load(
+            (ROOT / "configs/duke_v2_train.yaml").read_text(encoding="utf-8")
+        )
+        config["data"]["dataset"]["version"] = "a" * 64
+        decision = {
+            "base_release_id": "market1501-vit-bnneck:v1-dvc",
+            "target_dataset": "dukemtmc-reid",
+            "target_dataset_version": "dukemtmc-reid",
+            "target_epochs": 50,
+        }
+        from src.validate_duke_v2_training import validate_training_contract
+
+        with self.assertRaisesRegex(ValueError, "immutable revision"):
+            validate_training_contract(
+                config,
+                decision,
+                expected_dataset_revision="b" * 64,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

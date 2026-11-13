@@ -15,7 +15,6 @@ MINIMUM_FREE_BYTES = 12 * 1024**3
 EXPECTED_RELEASE_ID = "market1501-duke-vit-bnneck:v2"
 EXPECTED_BASE_RELEASE_ID = "market1501-vit-bnneck:v1-dvc"
 EXPECTED_DATASET = "dukemtmc-reid"
-EXPECTED_DATASET_VERSION = "dukemtmc-reid"
 EXPECTED_CHECKPOINT_EPOCH = 48
 EXPECTED_EPOCHS = 50
 EXPECTED_TRAIN_BATCH_SIZE = 16
@@ -24,7 +23,12 @@ EXPECTED_QUERY_BATCH_SIZE = 64
 DUKE_FILENAME = re.compile(r"^(?P<pid>-?\d+)_c(?P<camera>\d+)_")
 
 
-def validate_training_contract(config: dict, decision: dict) -> None:
+def validate_training_contract(
+    config: dict,
+    decision: dict,
+    *,
+    expected_dataset_revision: str | None = None,
+) -> None:
     release = config.get("release", {})
     data = config.get("data", {})
     dataset = data.get("dataset", {})
@@ -35,14 +39,18 @@ def validate_training_contract(config: dict, decision: dict) -> None:
 
     expected_release = decision.get("target_release_id", EXPECTED_RELEASE_ID)
     expected_base = decision.get("base_release_id", EXPECTED_BASE_RELEASE_ID)
+    expected_dataset = str(
+        decision.get("target_dataset") or EXPECTED_DATASET
+    ).strip().lower()
+    actual_dataset = str(dataset.get("name", "")).strip().lower()
+    actual_dataset_revision = str(dataset.get("version", "")).strip()
     expected_values = {
         "release.id": (release.get("id"), expected_release),
         "release.base_release_id": (
             release.get("base_release_id"),
             expected_base,
         ),
-        "data.dataset.name": (str(dataset.get("name", "")).lower(), EXPECTED_DATASET),
-        "data.dataset.version": (dataset.get("version"), EXPECTED_DATASET_VERSION),
+        "data.dataset.name": (actual_dataset, expected_dataset),
         "data.batch_size": (data.get("batch_size"), EXPECTED_TRAIN_BATCH_SIZE),
         "data.eval_batch_size": (
             data.get("eval_batch_size"),
@@ -78,6 +86,28 @@ def validate_training_contract(config: dict, decision: dict) -> None:
                 f"Training contract mismatch for {field}: expected {expected!r}, received {actual!r}"
             )
 
+    if not actual_dataset_revision:
+        raise ValueError("Training contract requires a non-empty data.dataset.version")
+    if expected_dataset_revision and actual_dataset_revision != expected_dataset_revision:
+        raise ValueError(
+            "Training contract mismatch for data.dataset.version: "
+            f"expected immutable revision {expected_dataset_revision!r}, "
+            f"received {actual_dataset_revision!r}"
+        )
+
+    # Older approval records used target_dataset_version for the logical dataset
+    # name. New inbox configs correctly use this field for the immutable batch
+    # fingerprint. Accept the legacy name, but reject every unrelated value.
+    approved_dataset_version = str(
+        decision.get("target_dataset_version") or expected_dataset
+    ).strip()
+    if approved_dataset_version not in {expected_dataset, actual_dataset_revision}:
+        raise ValueError(
+            "Approved decision mismatch for target_dataset_version: "
+            f"expected {expected_dataset!r} or {actual_dataset_revision!r}, "
+            f"received {approved_dataset_version!r}"
+        )
+
     required_flags = {
         "transfer.enabled": transfer.get("enabled"),
         "transfer.reset_classifier_heads": transfer.get("reset_classifier_heads"),
@@ -95,8 +125,7 @@ def validate_training_contract(config: dict, decision: dict) -> None:
 
     decision_values = {
         "base_release_id": expected_base,
-        "target_dataset": EXPECTED_DATASET,
-        "target_dataset_version": EXPECTED_DATASET_VERSION,
+        "target_dataset": expected_dataset,
         "target_epochs": EXPECTED_EPOCHS,
     }
     for field, expected in decision_values.items():
@@ -115,6 +144,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--config", required=True)
+    parser.add_argument(
+        "--dataset-revision",
+        default="",
+        help="Immutable Data Inbox fingerprint expected in data.dataset.version",
+    )
     parser.add_argument("--workspace", default=".")
     return parser.parse_args()
 
@@ -127,6 +161,7 @@ def validate_inputs(
     config_path: Path,
     *,
     require_cuda: bool = True,
+    expected_dataset_revision: str | None = None,
 ) -> dict[str, object]:
     if not decision_path.is_file():
         raise FileNotFoundError(f"Missing retraining decision: {decision_path}")
@@ -137,7 +172,11 @@ def validate_inputs(
     if not config_path.is_file():
         raise FileNotFoundError(f"Missing iterative training config: {config_path}")
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    validate_training_contract(config, decision)
+    validate_training_contract(
+        config,
+        decision,
+        expected_dataset_revision=expected_dataset_revision,
+    )
     configured_epochs = int(config.get("train", {}).get("epochs", 0))
     approved_epochs = int(decision.get("target_epochs", 0))
     if configured_epochs != approved_epochs:
@@ -220,6 +259,7 @@ def main() -> None:
         Path(args.dataset),
         Path(args.workspace),
         Path(args.config),
+        expected_dataset_revision=args.dataset_revision or None,
     )
     print("GPU:", result["gpu"])
     print(

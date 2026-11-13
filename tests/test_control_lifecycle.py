@@ -148,6 +148,7 @@ class LifecycleControllerTest(unittest.TestCase):
         self.assertEqual(len(dispatched["decision_sha256"]), 64)
         stored = self.store.get_retraining_decision(cycle["id"])
         self.assertEqual(stored["decision"]["status"], "RETRAIN_APPROVED")
+        self.assertEqual(stored["decision"]["target_dataset_version"], "dukemtmc-reid")
 
     def test_approval_rejects_cycle_without_uploaded_evidence(self) -> None:
         cycle, _ = self.lifecycle.start(
@@ -308,6 +309,7 @@ class LifecycleControllerTest(unittest.TestCase):
             "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
         )
         self.assertEqual(self.dispatcher.calls[-1][1]["resume_training_run_id"], "")
+        self.assertEqual(self.dispatcher.calls[-1][1]["repair_retry"], "true")
         train = next(stage for stage in retried["stages"] if stage["name"] == "train_v2")
         self.assertEqual(train["status"], StageStatus.RUNNING.value)
 

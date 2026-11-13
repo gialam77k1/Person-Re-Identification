@@ -31,12 +31,17 @@ if ! command -v conda >/dev/null 2>&1; then
   exit 1
 fi
 
-conda run -n "${CONDA_ENV}" python src/validate_duke_v2_training.py \
-  --decision "${DECISION_PATH}" \
-  --checkpoint "${CHECKPOINT_PATH}" \
-  --dataset "${DATASET_PATH}" \
-  --config "${CONFIG_PATH}" \
+validation_args=(
+  --decision "${DECISION_PATH}"
+  --checkpoint "${CHECKPOINT_PATH}"
+  --dataset "${DATASET_PATH}"
+  --config "${CONFIG_PATH}"
   --workspace .
+)
+if [[ -n "${DATASET_REVISION:-}" ]]; then
+  validation_args+=(--dataset-revision "${DATASET_REVISION}")
+fi
+conda run -n "${CONDA_ENV}" python src/validate_duke_v2_training.py "${validation_args[@]}"
 
 if [[ ! -f .env.mlops ]]; then
   echo "Thiếu .env.mlops để kiểm tra MLflow và DVC remote." >&2
