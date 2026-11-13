@@ -17,13 +17,13 @@ if [[ "${DUKE_EVAL_CONFIG}" == "configs/duke_v2_eval.yaml" ]]; then
   ./scripts/dvc_local.sh pull datasets/dukemtmc-reid.dvc
 fi
 conda run --no-capture-output -n "${CONDA_ENV}" \
-  python src/evaluate.py --config "${DUKE_EVAL_CONFIG}" --checkpoint "${CHECKPOINT}"
+  python -m src.evaluate --config "${DUKE_EVAL_CONFIG}" --checkpoint "${CHECKPOINT}"
 test -s "${REPORT}" || {
   echo "ERROR: Duke evaluation did not create the required report: ${REPORT}" >&2
   exit 1
 }
 conda run --no-capture-output -n "${CONDA_ENV}" \
-  python src/validate_v2_evaluation.py \
+  python -m src.validate_v2_evaluation \
     --report "${REPORT}" \
     --release-id "${RELEASE_ID}" \
     --dataset "${TARGET_DATASET}"

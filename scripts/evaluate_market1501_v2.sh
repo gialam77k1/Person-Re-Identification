@@ -14,13 +14,13 @@ test -f "${CHECKPOINT}"
 test -f "${MARKET1501_EVAL_CONFIG}"
 ./scripts/dvc_local.sh pull datasets/Market-1501-v15.09.15.dvc
 conda run --no-capture-output -n "${CONDA_ENV}" \
-  python src/evaluate.py --config "${MARKET1501_EVAL_CONFIG}" --checkpoint "${CHECKPOINT}"
+  python -m src.evaluate --config "${MARKET1501_EVAL_CONFIG}" --checkpoint "${CHECKPOINT}"
 test -s "${REPORT}" || {
   echo "ERROR: Market-1501 evaluation did not create the required report: ${REPORT}" >&2
   exit 1
 }
 conda run --no-capture-output -n "${CONDA_ENV}" \
-  python src/validate_v2_evaluation.py \
+  python -m src.validate_v2_evaluation \
     --report "${REPORT}" \
     --release-id "${RELEASE_ID}" \
     --dataset market1501

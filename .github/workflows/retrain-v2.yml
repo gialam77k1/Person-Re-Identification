@@ -159,6 +159,15 @@ jobs:
             echo "MARKET1501_EVAL_CONFIG=configs/runtime/${{ inputs.cycle_id }}/market1501-eval.yaml"
           } >> "$GITHUB_ENV"
 
+      - name: Reset stale candidate workspace for fresh training
+        if: ${{ inputs.resume_training_run_id == '' }}
+        run: >-
+          python -m src.reset_candidate_workspace
+          --workspace .
+          --release-id "$RELEASE_ID"
+          --run-root "$V2_ROOT"
+          --pipeline-root "$V2_PIPELINE_ROOT"
+
       - name: Prepare version-neutral evaluation configs
         run: |
           python -m src.prepare_candidate_evaluation \
