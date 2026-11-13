@@ -56,9 +56,10 @@ CONTROL_INBOX_MIN_CAMERAS=2
 ```
 
 Every accepted batch is split deterministically before training. The control
-plane reserves approximately 200 images from identities observed by at least
-two cameras. Those identities are excluded completely from training; one image
-per identity is used as query and gallery images come from different cameras.
+plane reserves exactly 400 images from identities observed by at least two
+cameras: 100 query images and 300 gallery images. Those identities are excluded
+completely from training; one image per identity is used as query and gallery
+images come from different cameras.
 This prevents person-identity leakage while keeping evaluation mandatory for
 promotion.
 
