@@ -185,6 +185,7 @@ jobs:
       - name: Materialize versioned dataset
         run: |
           ./scripts/dvc_local.sh pull datasets/dukemtmc-reid.dvc
+          ./scripts/dvc_local.sh pull datasets/Market-1501-v15.09.15.dvc
 
       - name: Materialize source champion checkpoint
         run: |
@@ -288,7 +289,7 @@ jobs:
 
       - name: Preflight every post-training contract before GPU training
         run: |
-          python -m src.validate_post_training_contract \
+          conda run --no-capture-output -n reid python -m src.validate_post_training_contract \
             --release-id "$RELEASE_ID" \
             --duke-config "$DUKE_EVAL_CONFIG" \
             --duke-report "$DUKE_V2_REPORT" \
@@ -352,8 +353,9 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
           if [[ "$status" -ne 0 ]]; then
-            tail -n 1 "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.log" \
-              > "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.error"
+            python -m src.pipeline_failure \
+              --log "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.log" \
+              --output "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.error"
             exit "$status"
           fi
 

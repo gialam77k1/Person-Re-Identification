@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, Sampler
 from torchvision import transforms
 
 from src.common.utils import resolve_path
+from src.data.reid_filename import parse_image_folder_reid_filename
 
 
 class ResizeWithPadding:
@@ -53,7 +54,7 @@ class ImageFolderReIDDataset(Dataset):
 
         pid_container = set()
         for image_path in sorted(self.folder.glob("*.jpg")):
-            pid = int(image_path.name.split("_")[0])
+            pid, _ = parse_image_folder_reid_filename(image_path)
             if pid == -1:
                 continue
             pid_container.add(pid)
@@ -61,13 +62,9 @@ class ImageFolderReIDDataset(Dataset):
         self.pid2label = {pid: idx for idx, pid in enumerate(sorted(pid_container))}
 
         for image_path in sorted(self.folder.glob("*.jpg")):
-            pid = int(image_path.name.split("_")[0])
+            pid, camid = parse_image_folder_reid_filename(image_path)
             if pid == -1:
                 continue
-            camera_token = image_path.name.split("_")[1]
-            if not camera_token.startswith("c") or not camera_token[1:].isdigit():
-                raise ValueError(f"Invalid ReID camera token in filename: {image_path.name}")
-            camid = int(camera_token[1:]) - 1
             mapped_pid = self.pid2label[pid] if relabel else pid
             self.samples.append(
                 {
