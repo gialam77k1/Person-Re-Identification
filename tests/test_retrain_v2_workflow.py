@@ -61,6 +61,8 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         contract = self.text.index("src.validate_post_training_contract")
         training = self.text.index("./scripts/train_duke_v2_local.sh\n")
         self.assertLess(contract, training)
+        self.assertIn("datasets/Market-1501-v15.09.15.dvc", self.text)
+        self.assertIn("src.pipeline_failure", self.text)
 
     def test_can_resume_a_finished_mlflow_run_without_retraining(self) -> None:
         self.assertIn("resume_training_run_id", self.text)

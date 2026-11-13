@@ -6,7 +6,79 @@ from pathlib import Path
 
 import yaml
 
+from src.common.utils import resolve_path
+from src.data.reid_filename import parse_image_folder_reid_filename
 from src.validate_v2_evaluation import canonical_dataset_name
+
+
+def _resolve_split(root: Path, value: str) -> Path:
+    split = Path(value)
+    return split if split.is_absolute() else root / split
+
+
+def validate_image_folder_dataset(payload: dict, *, config_path: Path) -> dict:
+    """Scan evaluation inputs before GPU training starts.
+
+    This deliberately validates the files with the same filename contract used
+    by the runtime loader.  It catches malformed future inbox/evaluation views
+    and also verifies that query identities can actually be retrieved from a
+    different camera in the gallery.
+    """
+
+    data = payload.get("data", {})
+    if str(data.get("source_type", "image_folder")) != "image_folder":
+        raise ValueError(f"Unsupported evaluation source type in {config_path}")
+
+    location = data.get("location", {})
+    root_value = location.get("root") or data.get("root")
+    splits = location.get("splits") or data.get("splits")
+    if not root_value or not isinstance(splits, dict):
+        raise ValueError(f"Evaluation dataset location is incomplete in {config_path}")
+
+    root = resolve_path(str(root_value))
+    split_defaults = {
+        "train": "bounding_box_train",
+        "query": "query",
+        "gallery": "bounding_box_test",
+    }
+    parsed: dict[str, list[tuple[int, int]]] = {}
+    for split_name, default in split_defaults.items():
+        split_dir = _resolve_split(root, str(splits.get(split_name, default)))
+        if not split_dir.is_dir():
+            raise ValueError(f"Evaluation split does not exist: {split_dir}")
+        images = sorted(split_dir.glob("*.jpg"))
+        if not images:
+            raise ValueError(f"Evaluation split contains no JPG images: {split_dir}")
+        parsed[split_name] = [
+            parsed_name
+            for image in images
+            if (parsed_name := parse_image_folder_reid_filename(image))[0] != -1
+        ]
+        if not parsed[split_name]:
+            raise ValueError(f"Evaluation split contains no valid identities: {split_dir}")
+
+    gallery_cameras: dict[int, set[int]] = {}
+    for pid, camid in parsed["gallery"]:
+        gallery_cameras.setdefault(pid, set()).add(camid)
+    valid_queries = sum(
+        1
+        for pid, camid in parsed["query"]
+        if any(gallery_cam != camid for gallery_cam in gallery_cameras.get(pid, set()))
+    )
+    if valid_queries == 0:
+        raise ValueError(
+            f"Evaluation dataset in {config_path} has no query identity visible "
+            "from a different gallery camera"
+        )
+
+    return {
+        "root": str(root),
+        "train_images": len(parsed["train"]),
+        "query_images": len(parsed["query"]),
+        "gallery_images": len(parsed["gallery"]),
+        "train_identities": len({pid for pid, _ in parsed["train"]}),
+        "valid_queries": valid_queries,
+    }
 
 
 def validate_config(
@@ -15,6 +87,7 @@ def validate_config(
     release_id: str,
     dataset: str,
     report: Path,
+    scan_dataset: bool = False,
 ) -> dict:
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -42,11 +115,14 @@ def validate_config(
             f"Evaluation report path mismatch in {path}: "
             f"{configured_report} != {report}"
         )
-    return {
+    result = {
         "config": str(path),
         "dataset": actual_dataset,
         "report": str(report),
     }
+    if scan_dataset:
+        result["dataset_contract"] = validate_image_folder_dataset(payload, config_path=path)
+    return result
 
 
 def main() -> int:
@@ -69,12 +145,14 @@ def main() -> int:
                 release_id=args.release_id,
                 dataset=args.target_dataset,
                 report=Path(args.duke_report),
+                scan_dataset=True,
             ),
             validate_config(
                 Path(args.market_config),
                 release_id=args.release_id,
                 dataset="market1501",
                 report=Path(args.market_report),
+                scan_dataset=True,
             ),
         ]
         for policy in (Path(args.forgetting_policy), Path(args.validation_policy)):
