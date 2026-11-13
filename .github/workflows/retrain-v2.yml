@@ -327,7 +327,7 @@ jobs:
         if: ${{ (failure() || cancelled()) && (steps.train.outcome == 'failure' || steps.train.outcome == 'cancelled') }}
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}" train_v2 FAIL
-          --detail "Model v2 training failed or was cancelled; inspect runner RAM and MLflow logs"
+          --detail "Candidate $RELEASE_ID training failed or was cancelled; inspect runner RAM and MLflow logs"
 
       - name: Mark training complete
         run: |
@@ -346,7 +346,7 @@ jobs:
       - name: Evaluate candidate on DukeMTMC-reID and Market-1501
         id: evaluate
         run: |
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating the same v2 checkpoint on DukeMTMC-reID and Market-1501"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" evaluate_v2 RUNNING --detail "Evaluating the same $RELEASE_ID checkpoint on DukeMTMC-reID and Market-1501"
           set +e
           ./scripts/evaluate_v2_dual_domain.sh 2>&1 | tee "${RUNNER_TEMP}/evaluate-v2-${{ inputs.cycle_id }}.log"
           status=${PIPESTATUS[0]}
@@ -436,13 +436,13 @@ jobs:
           python scripts/control_callback.py "${{ inputs.cycle_id }}" export_onnx RUNNING \
             --detail "Exporting ONNX external weights, checking parity and extracting reference embeddings"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release RUNNING \
-            --detail "Running immutable v2 quality, contract, lineage and checksum policy"
+            --detail "Running immutable $RELEASE_ID quality, contract, lineage and checksum policy"
           ./scripts/dvc_local.sh repro v2_package_triton
           python scripts/control_callback.py "${{ inputs.cycle_id }}" export_onnx PASS \
             --progress 1 --detail "ONNX export, parity and reference extraction passed" \
             --metrics-file "${V2_PIPELINE_ROOT}/parity/metrics/onnx_parity.json"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" validate_release PASS \
-            --progress 1 --detail "Full v2 release validation gate PASS" \
+            --progress 1 --detail "Full $RELEASE_ID release validation gate PASS" \
             --metrics-file "${V2_PIPELINE_ROOT}/release/validation_report.json"
 
       - name: Report release validation failure
@@ -455,7 +455,7 @@ jobs:
         id: publish
         run: |
           python scripts/control_callback.py "${{ inputs.cycle_id }}" publish_artifacts RUNNING \
-            --detail "Publishing the complete v2 release graph to DVC / MinIO"
+            --detail "Publishing the complete $RELEASE_ID release graph to DVC / MinIO"
           ./scripts/publish_v2_artifacts.sh
           python scripts/control_callback.py "${{ inputs.cycle_id }}" publish_artifacts PASS \
             --progress 1 --detail "DVC remote is clean and publication evidence is versioned" \

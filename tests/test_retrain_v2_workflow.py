@@ -79,6 +79,13 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("DUKE_EVAL_CONFIG=configs/runtime/", self.text)
         self.assertIn("MARKET1501_EVAL_CONFIG=configs/runtime/", self.text)
 
+    def test_v3_uses_registry_champion_and_dynamic_release_paths(self) -> None:
+        self.assertIn("src.materialize_registry_checkpoint", self.text)
+        self.assertIn("--release-id '${{ inputs.source_release }}'", self.text)
+        self.assertIn('version="${BASH_REMATCH[1]}"', self.text)
+        self.assertIn('slug="${target//:/-}"', self.text)
+        self.assertIn("--model-version ${v2_pipeline.model_version}", (ROOT / "dvc.yaml").read_text(encoding="utf-8"))
+
     def test_evaluation_wrappers_ignore_training_config_environment(self) -> None:
         duke = (ROOT / "scripts/evaluate_duke_v2.sh").read_text(encoding="utf-8")
         market = (ROOT / "scripts/evaluate_market1501_v2.sh").read_text(encoding="utf-8")
