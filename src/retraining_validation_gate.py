@@ -81,7 +81,7 @@ def build_gate(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Gate an approved DukeMTMC-reID v2 retraining candidate.")
+    parser = argparse.ArgumentParser(description="Gate an approved versioned ReID retraining candidate.")
     for name in ("evidence", "decision", "training-metrics", "evaluation-metrics", "baseline-evaluation", "mlflow-run", "config", "policy", "base-checkpoint", "candidate-checkpoint", "output", "manifest-output"):
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--git-commit")

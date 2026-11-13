@@ -30,7 +30,7 @@ def validate_candidate_inputs(report: dict, manifest: dict, alias: str) -> tuple
     if report.get("status") != "PASS" or report.get("passed") is not True:
         raise ValueError("Only a PASS validation report can be registered as candidate.")
     if manifest.get("release", {}).get("status") != "validated" or manifest.get("validation", {}).get("status") != "PASS":
-        raise ValueError("The v2 release manifest has not passed validation.")
+        raise ValueError("The candidate release manifest has not passed validation.")
     if report.get("release_id") != release_id:
         raise ValueError("Validation report and release manifest do not match.")
     run_id = manifest.get("source", {}).get("mlflow_run_id")
