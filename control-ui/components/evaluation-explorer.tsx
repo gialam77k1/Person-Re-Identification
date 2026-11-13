@@ -25,12 +25,17 @@ function percentage(value?: number | null) {
 }
 
 function DatasetImage({ dataset, image, className = "" }: { dataset: string; image: EvaluationImage; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <div className={`flex items-center justify-center bg-slate-950 p-2 text-center text-[10px] text-amber-300 ${className}`}>Preview cũ chưa có ảnh evidence</div>;
+  }
   return (
     <img
-      src={imageUrl(dataset, image.image_path)}
+      src={image.asset_url ?? imageUrl(dataset, image.image_path)}
       alt={`Person ${image.person_id ?? "unknown"}, camera ${image.camera_id ?? "unknown"}`}
       loading="lazy"
       className={`bg-slate-950 object-cover ${className}`}
+      onError={() => setFailed(true)}
     />
   );
 }

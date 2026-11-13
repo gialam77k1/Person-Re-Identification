@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -26,11 +28,22 @@ class ProgressServiceTest(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_evaluation_pass_waits_for_retraining_approval(self) -> None:
+        content = b"\xff\xd8\xffpreview"
+        report = {
+            "retrieval_preview": [{
+                "query": {
+                    "asset_id": hashlib.sha256(content).hexdigest(),
+                    "asset_mime": "image/jpeg",
+                    "asset_data": base64.b64encode(content).decode("ascii"),
+                },
+                "predictions": [],
+            }]
+        }
         cycle = self.progress.update(
             self.cycle["id"],
             "evaluate_v1",
             StageStatus.PASS,
-            metrics={"rank1": 0.18, "mAP": 0.07},
+            metrics={"evaluation": report},
         )
         approval = next(
             stage for stage in cycle["stages"] if stage["name"] == "retraining_approval"
@@ -39,6 +52,40 @@ class ProgressServiceTest(unittest.TestCase):
         self.assertEqual(approval["status"], StageStatus.WAITING_APPROVAL.value)
         events = self.store.events(cycle["id"])
         self.assertIn("stage.metrics", [event["kind"] for event in events])
+
+    def test_evaluation_pass_rejects_missing_preview_assets(self) -> None:
+        with self.assertRaisesRegex(ValueError, "retrieval_preview"):
+            self.progress.update(
+                self.cycle["id"],
+                "evaluate_v1",
+                StageStatus.PASS,
+                metrics={"evaluation": {"rank1": 0.5}},
+            )
+        stage = next(
+            item for item in self.store.get_cycle(self.cycle["id"])["stages"]
+            if item["name"] == "evaluate_v1"
+        )
+        self.assertEqual(stage["status"], StageStatus.PENDING.value)
+
+    def test_candidate_evaluation_requires_preview_evidence_for_every_domain(self) -> None:
+        content = b"\xff\xd8\xffcandidate-preview"
+        report = {
+            "retrieval_preview": [{
+                "query": {
+                    "asset_id": hashlib.sha256(content).hexdigest(),
+                    "asset_mime": "image/jpeg",
+                    "asset_data": base64.b64encode(content).decode("ascii"),
+                },
+                "predictions": [],
+            }]
+        }
+        with self.assertRaisesRegex(ValueError, "market1501"):
+            self.progress.update(
+                self.cycle["id"],
+                "evaluate_v2",
+                StageStatus.PASS,
+                metrics={"duke": report},
+            )
 
     def test_staging_pass_waits_for_production_and_failure_stops_cycle(self) -> None:
         waiting = self.progress.update(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import tempfile
 import unittest
@@ -10,12 +12,21 @@ from src.validate_v2_evaluation import validate_report
 
 class V2EvaluationTest(unittest.TestCase):
     def lineage(self) -> dict:
+        content = b"\xff\xd8\xffpreview"
         return {
             "query_count": 10,
             "gallery_count": 20,
             "checkpoint_sha256": "a" * 64,
             "git_commit": "b" * 40,
             "dataset_dvc_revision": "c.dir",
+            "retrieval_preview": [{
+                "query": {
+                    "asset_id": hashlib.sha256(content).hexdigest(),
+                    "asset_mime": "image/jpeg",
+                    "asset_data": base64.b64encode(content).decode("ascii"),
+                },
+                "predictions": [],
+            }],
         }
 
     def test_accepts_finite_metrics_for_requested_release(self) -> None:
