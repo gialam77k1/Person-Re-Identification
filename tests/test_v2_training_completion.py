@@ -71,6 +71,16 @@ class V2TrainingCompletionTest(unittest.TestCase):
         self.assertTrue(report["stopped_early"])
         self.assertEqual(report["completed_epochs"], 8)
 
+    def test_accepts_finished_inbox_run_with_fingerprinted_dataset_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run_root = self.create_run(Path(directory))
+            config_path = run_root / "logs/effective_config.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config["data"]["dataset"]["version"] = "c" * 64
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            report = validate_training_completion(run_root)
+        self.assertEqual(report["status"], "PASS")
+
     def test_rejects_non_finite_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             run_root = self.create_run(Path(directory))

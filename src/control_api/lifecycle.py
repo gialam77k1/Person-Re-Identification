@@ -118,6 +118,7 @@ class LifecycleController:
                 source_release=cycle["source_release"],
                 target_release=cycle["target_release"],
                 dataset=cycle["dataset"],
+                dataset_revision=str(cycle.get("dataset_revision") or ""),
                 evidence_run_id=str(evidence["workflow_run_id"]),
                 evidence_artifact=str(evidence["artifact_name"]),
             )
@@ -136,6 +137,7 @@ class LifecycleController:
                 decision_sha256=decision_sha256,
                 evidence_git_commit=self._decision_git_commit(decision),
                 resume_training_run_id="",
+                repair_retry=False,
             ),
         )
         self.store.audit(
@@ -204,6 +206,7 @@ class LifecycleController:
             decision_sha256=str(decision["sha256"]),
             evidence_git_commit=self._decision_git_commit(decision["decision"]),
             resume_training_run_id=training_run_id,
+            repair_retry=False,
         )
         dispatch = self.dispatcher.dispatch(
             self.settings.retraining_workflow, dispatch_inputs
@@ -298,6 +301,7 @@ class LifecycleController:
             decision_sha256=str(decision["sha256"]),
             evidence_git_commit=self._decision_git_commit(decision["decision"]),
             resume_training_run_id="",
+            repair_retry=True,
         )
         dispatch = self.dispatcher.dispatch(
             self.settings.retraining_workflow, dispatch_inputs
@@ -307,7 +311,7 @@ class LifecycleController:
             "train_v2",
             StageStatus.RUNNING,
             progress=0,
-            detail="Retrying pinned lineage and all pre-training contracts",
+            detail="Retrying repaired preflight with pinned data and approval evidence",
         )
         for name in (
             "evaluate_v2",
@@ -367,6 +371,7 @@ class LifecycleController:
         decision_sha256: str,
         evidence_git_commit: str,
         resume_training_run_id: str,
+        repair_retry: bool,
     ) -> dict[str, str]:
         return {
             "cycle_id": str(cycle["id"]),
@@ -389,6 +394,7 @@ class LifecycleController:
                 else ""
             ),
             "resume_training_run_id": resume_training_run_id,
+            "repair_retry": "true" if repair_retry else "false",
         }
 
     @staticmethod

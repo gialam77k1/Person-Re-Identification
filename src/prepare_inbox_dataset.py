@@ -13,7 +13,7 @@ import yaml
 
 
 REID_FILE = re.compile(r"^(?P<pid>-?\d+)_c(?P<cam>\d+)_")
-DEFAULT_EVALUATION_HOLDOUT_IMAGES = 200
+DEFAULT_EVALUATION_HOLDOUT_IMAGES = 400
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,7 +63,7 @@ def validate_samples(
     source: Path,
     samples: list[tuple[Path, int, int]],
     *,
-    holdout_target: int = 200,
+    holdout_target: int = DEFAULT_EVALUATION_HOLDOUT_IMAGES,
     split_seed: int = 42,
 ) -> tuple[list[tuple[Path, int, int]], str]:
     accepted: list[tuple[Path, int, int]] = []
@@ -92,7 +92,7 @@ def validate_samples(
 def split_identity_disjoint(
     samples: list[tuple[Path, int, int]],
     *,
-    holdout_target: int = 200,
+    holdout_target: int = DEFAULT_EVALUATION_HOLDOUT_IMAGES,
     seed: int = 42,
 ) -> dict[str, list[tuple[Path, int, int]]]:
     """Build deterministic ReID splits without sharing identities with train."""
@@ -175,7 +175,13 @@ def build_view(args: argparse.Namespace) -> dict[str, object]:
     source = Path(args.source).resolve()
     output_root = Path(args.output_root).resolve()
     output_root.mkdir(parents=True, exist_ok=True)
-    holdout_target = int(getattr(args, "evaluation_holdout_images", 200))
+    holdout_target = int(
+        getattr(
+            args,
+            "evaluation_holdout_images",
+            DEFAULT_EVALUATION_HOLDOUT_IMAGES,
+        )
+    )
     split_seed = int(getattr(args, "split_seed", 42))
     samples, actual_revision = validate_samples(
         source,

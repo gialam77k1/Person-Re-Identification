@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from src.prepare_inbox_dataset import (
+    DEFAULT_EVALUATION_HOLDOUT_IMAGES,
     build_view,
     load_samples,
     split_identity_disjoint,
@@ -17,6 +18,9 @@ from src.prepare_inbox_dataset import (
 
 
 class PrepareInboxDatasetTest(unittest.TestCase):
+    def test_default_evaluation_holdout_is_400_images(self) -> None:
+        self.assertEqual(DEFAULT_EVALUATION_HOLDOUT_IMAGES, 400)
+
     def test_manifest_images_become_canonical_train_view_with_fixed_test(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

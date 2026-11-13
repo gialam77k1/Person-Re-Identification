@@ -56,6 +56,10 @@ on:
         description: Completed MLflow run ID; restores training artifacts and resumes at evaluation
         required: false
         default: ""
+      repair_retry:
+        description: Retry preflight with current workflow code while keeping approved data and decision pinned
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -77,24 +81,27 @@ jobs:
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True,max_split_size_mb:128
       INBOX_CONFIG: configs/runtime/duke_v2_inbox_${{ inputs.cycle_id }}.yaml
       TARGET_DATASET: ${{ inputs.dataset }}
+      DATASET_REVISION: ${{ inputs.dataset_revision }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
         with:
           clean: false
-          # New GPU training executes the exact code that produced the
-          # approved evidence. Recovery may use newer post-training fixes.
-          ref: ${{ inputs.resume_training_run_id == '' && inputs.evidence_git_commit || github.sha }}
+          # Fresh GPU training normally executes the exact approved commit.
+          # Explicit repair/recovery retries may use reviewed workflow fixes,
+          # while immutable evidence, decision and dataset checks stay pinned.
+          ref: ${{ (inputs.resume_training_run_id != '' || inputs.repair_retry == 'true') && github.sha || inputs.evidence_git_commit }}
           fetch-depth: 1
 
       - name: Verify execution commit policy
         env:
           EVIDENCE_GIT_COMMIT: ${{ inputs.evidence_git_commit }}
           RESUME_TRAINING_RUN_ID: ${{ inputs.resume_training_run_id }}
+          REPAIR_RETRY: ${{ inputs.repair_retry }}
         run: |
           [[ "$EVIDENCE_GIT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           execution_commit="$(git rev-parse HEAD)"
-          if [[ -z "$RESUME_TRAINING_RUN_ID" && "$execution_commit" != "$EVIDENCE_GIT_COMMIT" ]]; then
+          if [[ -z "$RESUME_TRAINING_RUN_ID" && "$REPAIR_RETRY" != "true" && "$execution_commit" != "$EVIDENCE_GIT_COMMIT" ]]; then
             echo "Fresh training checkout ${execution_commit} does not match approved evidence ${EVIDENCE_GIT_COMMIT}" >&2
             exit 2
           fi
@@ -250,9 +257,9 @@ jobs:
             --dataset-pointer "${DATASET_DVC_PATH}"
             --base-checkpoint "${BASE_CHECKPOINT}"
           )
-          if [[ -n '${{ inputs.resume_training_run_id }}' ]]; then
-            # Training is already FINISHED and immutable in MLflow. A recovery
-            # checkout may intentionally contain a newer evaluation-only fix.
+          if [[ -n '${{ inputs.resume_training_run_id }}' || '${{ inputs.repair_retry }}' == 'true' ]]; then
+            # Recovery and explicit preflight repair may intentionally use a
+            # newer reviewed commit; all non-Git lineage remains immutable.
             lineage_args+=(--allow-source-commit-mismatch)
           fi
           python -m src.retraining_evidence verify "${lineage_args[@]}"

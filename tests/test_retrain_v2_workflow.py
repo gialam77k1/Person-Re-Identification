@@ -29,12 +29,19 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         self.assertIn("evidence_git_commit", inputs)
         self.assertEqual(inputs["evidence_git_commit"]["required"], "true")
         self.assertIn(
-            "inputs.resume_training_run_id == '' && inputs.evidence_git_commit || github.sha",
+            "inputs.repair_retry == 'true') && github.sha || inputs.evidence_git_commit",
             self.text,
         )
         self.assertIn('EXECUTION_GIT_COMMIT=${execution_commit}', self.text)
         self.assertIn('--current-commit "${EXECUTION_GIT_COMMIT}"', self.text)
         self.assertIn("--git-commit '${{ inputs.evidence_git_commit }}'", self.text)
+
+    def test_preflight_repair_retry_uses_current_code_but_keeps_approved_data_pinned(self) -> None:
+        inputs = self.workflow["on"]["workflow_dispatch"]["inputs"]
+        self.assertIn("repair_retry", inputs)
+        self.assertIn("DATASET_REVISION: ${{ inputs.dataset_revision }}", self.text)
+        self.assertIn("inputs.repair_retry == 'true'", self.text)
+        self.assertIn("--allow-source-commit-mismatch", self.text)
 
     def test_workflow_preflights_trains_evaluates_and_gates(self) -> None:
         for command in (
