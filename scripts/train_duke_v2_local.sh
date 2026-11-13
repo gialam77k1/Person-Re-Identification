@@ -74,14 +74,8 @@ if [[ "${CHECK_ONLY}" == true ]]; then
 fi
 
 if [[ -e "${RUN_ROOT}" ]]; then
-  if conda run -n "${CONDA_ENV}" python -m src.validate_v2_training_completion \
-    --run-root "${RUN_ROOT}" \
-    --output "${RUN_ROOT}/logs/training_completion_report.json" >/dev/null 2>&1; then
-    echo "Run v2 hoàn chỉnh đã tồn tại; tái sử dụng artifact thay vì ghi đè."
-    exit 0
-  fi
   echo "Run root đã tồn tại: ${RUN_ROOT}" >&2
-  echo "Không ghi đè artifact v2; hãy lưu hoặc đổi tên run hiện tại trước." >&2
+  echo "Fresh training không được tái sử dụng artifact cũ; workflow phải reset workspace hoặc dùng resume_training_run_id rõ ràng." >&2
   exit 1
 fi
 

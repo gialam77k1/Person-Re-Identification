@@ -57,6 +57,23 @@ class RetrainV2WorkflowTest(unittest.TestCase):
         ):
             self.assertIn(command, self.text)
 
+    def test_fresh_training_resets_stale_candidate_workspace(self) -> None:
+        reset = next(
+            step
+            for step in self.workflow["jobs"]["retrain"]["steps"]
+            if step.get("name") == "Reset stale candidate workspace for fresh training"
+        )
+        self.assertEqual(reset["if"], "${{ inputs.resume_training_run_id == '' }}")
+        self.assertIn("python -m src.reset_candidate_workspace", reset["run"])
+        self.assertIn('--release-id "$RELEASE_ID"', reset["run"])
+
+    def test_evaluation_entrypoints_use_package_mode(self) -> None:
+        for script in ("evaluate_duke_v2.sh", "evaluate_market1501_v2.sh"):
+            text = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+            self.assertIn("python -m src.evaluate", text)
+            self.assertIn("python -m src.validate_v2_evaluation", text)
+            self.assertNotIn("python src/validate_v2_evaluation.py", text)
+
     def test_post_training_contract_is_checked_before_gpu_training(self) -> None:
         contract = self.text.index("src.validate_post_training_contract")
         training = self.text.index("./scripts/train_duke_v2_local.sh\n")
