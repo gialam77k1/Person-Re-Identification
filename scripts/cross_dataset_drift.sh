@@ -23,7 +23,11 @@ if [[ -f "${PROJECT_ROOT}/.env.mlops" ]]; then
   source "${PROJECT_ROOT}/.env.mlops"
   set +a
 fi
-MONITORING_ROOT="${MONITORING_STORAGE_PATH:-../person-reid-monitoring}"
+MONITORING_ROOT="$(
+  "${PROJECT_ROOT}/scripts/resolve_monitoring_storage.sh" \
+    "${MONITORING_STORAGE_PATH:-../person-reid-monitoring}"
+)"
+"${PROJECT_ROOT}/scripts/prepare_monitoring_storage.sh" "${MONITORING_ROOT}"
 PROMETHEUS_OUTPUT="${MONITORING_ROOT}/textfile/reid_cross_dataset_drift.prom"
 MONITORING_REPORT="${MONITORING_ROOT}/reports/duke_drift_latest.json"
 

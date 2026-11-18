@@ -37,6 +37,39 @@ def load_embeddings(path: Path, release_id: str | None = None) -> np.ndarray:
     return values.astype(np.float64)
 
 
+def load_current_embeddings(
+    path: Path, release_id: str, embedding_dim: int
+) -> np.ndarray:
+    """Load runtime samples without treating a missing/empty window as a fault."""
+    if not path.is_file() and not path.with_suffix(f"{path.suffix}.previous").is_file():
+        return np.empty((0, embedding_dim), dtype=np.float64)
+    rows: list[list[float]] = []
+    paths = [path]
+    rotated = path.with_suffix(f"{path.suffix}.previous")
+    if rotated.is_file():
+        paths.insert(0, rotated)
+    for source in paths:
+        if not source.is_file():
+            continue
+        with source.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if record.get("release_id") == release_id:
+                    rows.append(record["embedding"])
+    if not rows:
+        return np.empty((0, embedding_dim), dtype=np.float64)
+    values = np.asarray(rows, dtype=np.float64)
+    if values.ndim != 2 or values.shape[1] != embedding_dim:
+        raise ValueError(
+            f"Current embeddings in {path} do not have dimension {embedding_dim}."
+        )
+    if not np.all(np.isfinite(values)):
+        raise ValueError(f"NaN or Inf found in {path}.")
+    return values
+
+
 def row_normalize(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     norms = np.linalg.norm(values, axis=1)
     if np.any(norms <= 0):
@@ -155,6 +188,38 @@ def build_drift_report(
     return report
 
 
+def build_insufficient_data_report(
+    reference: np.ndarray,
+    current: np.ndarray,
+    release_id: str,
+    policy: dict[str, Any],
+    *,
+    reference_sha256: str | None = None,
+    current_sha256: str | None = None,
+) -> dict[str, Any]:
+    minimum = int(policy["minimum_current_samples"])
+    return {
+        "schema_version": 1,
+        "release_id": release_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "status": "INSUFFICIENT_DATA",
+        "drift_detected": None,
+        "reference_samples": int(reference.shape[0]),
+        "current_samples": int(current.shape[0]),
+        "embedding_dim": int(reference.shape[1]),
+        "minimum_current_samples": minimum,
+        "samples_remaining": max(minimum - int(current.shape[0]), 0),
+        "thresholds": {
+            key: float(value) for key, value in policy["thresholds"].items()
+        },
+        "checks": {},
+        "inputs": {
+            "reference_embeddings_sha256": reference_sha256,
+            "current_embeddings_sha256": current_sha256,
+        },
+    }
+
+
 def prometheus_text(report: dict[str, Any]) -> str:
     release = str(report["release_id"]).replace('"', '\\"')
     provenance = report.get("provenance", {})
@@ -162,15 +227,26 @@ def prometheus_text(report: dict[str, Any]) -> str:
     labels = f'release_id="{release}",dataset="{dataset}"'
     timestamp = datetime.fromisoformat(report["generated_at"]).timestamp()
     lines = [
+        "# HELP reid_embedding_drift_state Latest drift monitoring state for the active release.",
+        "# TYPE reid_embedding_drift_state gauge",
+        f'reid_embedding_drift_state{{{labels},state="{report["status"]}"}} 1',
+        "# HELP reid_embedding_drift_ready Whether enough runtime samples exist to evaluate drift.",
+        "# TYPE reid_embedding_drift_ready gauge",
+        f"reid_embedding_drift_ready{{{labels}}} {int(report['status'] != 'INSUFFICIENT_DATA')}",
         "# HELP reid_embedding_drift_detected Whether the latest drift report failed its policy.",
         "# TYPE reid_embedding_drift_detected gauge",
-        f"reid_embedding_drift_detected{{{labels}}} {int(report['drift_detected'])}",
         "# HELP reid_embedding_drift_last_run_timestamp_seconds Unix time of the latest drift report.",
         "# TYPE reid_embedding_drift_last_run_timestamp_seconds gauge",
         f"reid_embedding_drift_last_run_timestamp_seconds{{{labels}}} {timestamp:.0f}",
         f"reid_embedding_drift_current_samples{{{labels}}} {report['current_samples']}",
         f"reid_embedding_drift_reference_samples{{{labels}}} {report['reference_samples']}",
+        f"reid_embedding_drift_minimum_samples{{{labels}}} {report['minimum_current_samples']}",
     ]
+    if report["drift_detected"] is not None:
+        lines.insert(
+            8,
+            f"reid_embedding_drift_detected{{{labels}}} {int(report['drift_detected'])}",
+        )
     seed = provenance.get("sample_seed")
     if isinstance(seed, int):
         lines.append(f"reid_embedding_drift_sample_seed{{{labels}}} {seed}")
@@ -218,16 +294,32 @@ def main() -> int:
             if args.model_manifest
             else None
         )
-        report = build_drift_report(
-            load_embeddings(reference_path),
-            load_embeddings(current_path, release_id=args.release_id),
-            args.release_id,
-            policy,
-            metadata=metadata,
-            model=model,
-            reference_sha256=sha256_file(reference_path),
-            current_sha256=sha256_file(current_path),
+        reference = load_embeddings(reference_path)
+        current = load_current_embeddings(
+            current_path, args.release_id, int(reference.shape[1])
         )
+        reference_sha256 = sha256_file(reference_path)
+        current_sha256 = sha256_file(current_path) if current_path.is_file() else None
+        if current.shape[0] < int(policy["minimum_current_samples"]):
+            report = build_insufficient_data_report(
+                reference,
+                current,
+                args.release_id,
+                policy,
+                reference_sha256=reference_sha256,
+                current_sha256=current_sha256,
+            )
+        else:
+            report = build_drift_report(
+                reference,
+                current,
+                args.release_id,
+                policy,
+                metadata=metadata,
+                model=model,
+                reference_sha256=reference_sha256,
+                current_sha256=current_sha256,
+            )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -236,7 +328,10 @@ def main() -> int:
         temporary = metrics.with_suffix(f"{metrics.suffix}.tmp")
         temporary.write_text(prometheus_text(report), encoding="utf-8")
         temporary.replace(metrics)
-        print(f"Embedding drift: {report['status']} ({report['current_samples']} samples)")
+        print(
+            f"Embedding drift: {report['status']} "
+            f"({report['current_samples']}/{report['minimum_current_samples']} samples)"
+        )
         return 2 if args.fail_on_drift and report["drift_detected"] else 0
     except (OSError, ValueError, KeyError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

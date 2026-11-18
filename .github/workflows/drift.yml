@@ -6,13 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       release_id:
-        description: Model release ID
-        required: true
-        default: market1501-vit-bnneck:v1-dvc
+        description: Optional release override; scheduled runs auto-detect the serving release
+        required: false
+        default: ""
       release_slug:
-        description: DVC pipeline release directory
-        required: true
-        default: market1501-vit-bnneck-v1-dvc
+        description: Optional matching DVC pipeline slug
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -41,6 +41,6 @@ jobs:
 
       - name: Generate drift report and Prometheus metrics
         env:
-          RELEASE_ID: ${{ inputs.release_id || 'market1501-vit-bnneck:v1-dvc' }}
-          RELEASE_SLUG: ${{ inputs.release_slug || 'market1501-vit-bnneck-v1-dvc' }}
+          RELEASE_ID: ${{ inputs.release_id || '' }}
+          RELEASE_SLUG: ${{ inputs.release_slug || '' }}
         run: ./scripts/drift_report_local.sh "$RELEASE_ID" "$RELEASE_SLUG"

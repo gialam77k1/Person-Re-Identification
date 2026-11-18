@@ -445,6 +445,7 @@ def build_compose_environment(
     model_name: str,
     model_version: str,
     qdrant_collection: str,
+    monitoring_storage_path: Path | None = None,
 ) -> dict[str, str]:
     environment = base.copy()
     environment.update(
@@ -463,7 +464,39 @@ def build_compose_environment(
             "TRITON_MODEL_REPOSITORY": str(triton_repository.resolve()),
         }
     )
+    if monitoring_storage_path is not None:
+        environment["MONITORING_STORAGE_PATH"] = str(monitoring_storage_path.resolve())
     return environment
+
+
+def resolve_monitoring_storage_path(
+    configured: str,
+    *,
+    node_exporter_container: str = "reid-node-exporter",
+) -> Path:
+    """Use the textfile collector mount as the canonical cross-checkout storage."""
+    result = subprocess.run(
+        ["docker", "inspect", node_exporter_container],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise ReleaseError("Docker returned invalid node exporter metadata") from exc
+        if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+            mounts = payload[0].get("Mounts", [])
+            for mount in mounts if isinstance(mounts, list) else []:
+                if (
+                    isinstance(mount, dict)
+                    and mount.get("Destination") == "/textfile"
+                    and isinstance(mount.get("Source"), str)
+                ):
+                    return Path(mount["Source"]).resolve().parent
+    candidate = Path(configured)
+    return candidate.resolve() if candidate.is_absolute() else (ROOT / candidate).resolve()
 
 
 def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, Any]:
@@ -544,6 +577,9 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         # Bind the API to the immutable physical collection. The stable alias
         # is switched only after this exact model/index pair passes readiness.
         qdrant_collection=qdrant_collection,
+        monitoring_storage_path=resolve_monitoring_storage_path(
+            os.environ.get("MONITORING_STORAGE_PATH", "../person-reid-monitoring")
+        ),
     )
     compose = [
         "docker",

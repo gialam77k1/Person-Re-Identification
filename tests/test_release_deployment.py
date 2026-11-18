@@ -13,6 +13,7 @@ from src.release_deployment import (
     build_image_reference,
     build_compose_environment,
     materialize_serving_bundle,
+    resolve_monitoring_storage_path,
     runtime_snapshot_record,
     select_rollback_record,
     validate_candidate,
@@ -73,6 +74,7 @@ class ReleaseDeploymentTest(unittest.TestCase):
             model_name="reid_embedding",
             model_version="2",
             qdrant_collection="reid_reference_active",
+            monitoring_storage_path=Path.cwd() / "runtime/monitoring",
         )
 
         self.assertEqual(environment["KEEP"], "value")
@@ -85,6 +87,30 @@ class ReleaseDeploymentTest(unittest.TestCase):
         self.assertEqual(environment["TRITON_MODEL_NAME"], "reid_embedding")
         self.assertEqual(environment["TRITON_MODEL_VERSION"], "2")
         self.assertEqual(environment["QDRANT_COLLECTION"], "reid_reference_active")
+        self.assertEqual(
+            environment["MONITORING_STORAGE_PATH"],
+            str((Path.cwd() / "runtime/monitoring").resolve()),
+        )
+
+    def test_node_exporter_mount_is_canonical_monitoring_storage(self) -> None:
+        inspected = json.dumps(
+            [
+                {
+                    "Mounts": [
+                        {
+                            "Destination": "/textfile",
+                            "Source": "/persistent/reid-monitoring/textfile",
+                        }
+                    ]
+                }
+            ]
+        )
+        with patch("src.release_deployment.subprocess.run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = inspected
+            resolved = resolve_monitoring_storage_path("../ephemeral")
+
+        self.assertEqual(resolved, Path("/persistent/reid-monitoring"))
 
     def test_serving_bundle_survives_source_checkout_cleanup(self) -> None:
         artifacts_root = Path.cwd() / "artifacts"

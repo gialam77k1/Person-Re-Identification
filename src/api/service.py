@@ -40,6 +40,7 @@ class InferenceService:
             settings.drift_sample_path,
             settings.drift_sample_rate,
             settings.drift_max_samples,
+            self.contract.release_id,
         )
         if self.contract.embedding_dim <= 0:
             raise ValueError("Model manifest has an invalid embedding dimension.")
