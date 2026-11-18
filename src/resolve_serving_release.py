@@ -29,38 +29,56 @@ def resolve(api_url: str) -> tuple[str, str]:
 
 
 def resolve_reference(
-    deployment_state: Path | None, release_id: str, slug: str
+    deployment_state: Path | None,
+    release_id: str,
+    slug: str,
+    serving_artifacts_root: Path | None = None,
 ) -> Path | None:
-    if deployment_state is None or not deployment_state.is_file():
+    roots: list[Path] = []
+    if deployment_state is not None and deployment_state.is_file():
+        try:
+            state = json.loads(deployment_state.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"Cannot read deployment state {deployment_state}: {exc}"
+            ) from exc
+        if state.get("release_id") != release_id:
+            raise ValueError(
+                "Deployment state release does not match the inference API: "
+                f"{state.get('release_id')!r} != {release_id!r}"
+            )
+        root_value = state.get("serving_artifacts_root")
+        if isinstance(root_value, str) and root_value:
+            roots.append(Path(root_value).resolve())
+    if serving_artifacts_root is not None:
+        active_root = serving_artifacts_root.resolve()
+        if active_root not in roots:
+            roots.append(active_root)
+    if not roots:
         return None
-    try:
-        state = json.loads(deployment_state.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Cannot read deployment state {deployment_state}: {exc}") from exc
-    if state.get("release_id") != release_id:
-        raise ValueError(
-            "Deployment state release does not match the inference API: "
-            f"{state.get('release_id')!r} != {release_id!r}"
-        )
-    root_value = state.get("serving_artifacts_root")
-    if not isinstance(root_value, str) or not root_value:
-        return None
-    root = Path(root_value).resolve()
-    reference = (
-        root
-        / "pipeline"
-        / slug
-        / "reference"
-        / "embeddings"
-        / "reference_embeddings.npy"
-    ).resolve()
-    try:
-        reference.relative_to(root)
-    except ValueError as exc:
-        raise ValueError("Resolved reference artifact escapes the serving bundle") from exc
-    if not reference.is_file():
-        raise ValueError(f"Active serving reference artifact is missing: {reference}")
-    return reference
+    attempted: list[Path] = []
+    for root in roots:
+        reference = (
+            root
+            / "pipeline"
+            / slug
+            / "reference"
+            / "embeddings"
+            / "reference_embeddings.npy"
+        ).resolve()
+        try:
+            reference.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                "Resolved reference artifact escapes the serving bundle"
+            ) from exc
+        attempted.append(reference)
+        if reference.is_file():
+            return reference
+    raise ValueError(
+        "Active serving reference artifact is missing; checked: "
+        + ", ".join(str(path) for path in attempted)
+    )
 
 
 def main() -> int:
@@ -69,6 +87,10 @@ def main() -> int:
     )
     parser.add_argument("--api-url", default="http://localhost:8080")
     parser.add_argument("--deployment-state")
+    parser.add_argument(
+        "--serving-artifacts-root",
+        help="Active inference container's host mount for /app/artifacts",
+    )
     args = parser.parse_args()
     try:
         release_id, slug = resolve(args.api_url)
@@ -76,6 +98,7 @@ def main() -> int:
             Path(args.deployment_state) if args.deployment_state else None,
             release_id,
             slug,
+            Path(args.serving_artifacts_root) if args.serving_artifacts_root else None,
         )
         print(f"{release_id}\t{slug}\t{reference or ''}")
         return 0
