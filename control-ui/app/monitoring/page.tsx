@@ -8,15 +8,22 @@ export default async function MonitoringPage() {
   const [overview, services] = await Promise.all([getOverview(), getServices()]);
   const grafana = services.find((service) => service.name === "Grafana");
   const driftStatus = overview.drift?.status ?? "NO_DATA";
-  const driftValue = driftStatus === "NO_DATA" ? "CHƯA ĐO" : driftStatus;
-  const driftDetail = driftStatus === "NO_DATA"
-    ? "Chưa nhận evidence drift; chạy lifecycle để tạo phép đo đầu tiên"
-    : "Prometheus reid_embedding_drift_detected";
+  const waitingForSamples = driftStatus === "INSUFFICIENT_DATA";
+  const driftValue = driftStatus === "NO_DATA"
+    ? "CHƯA ĐO"
+    : waitingForSamples ? "ĐANG THU MẪU" : driftStatus;
+  const currentSamples = overview.drift?.current_samples ?? 0;
+  const minimumSamples = overview.drift?.minimum_samples ?? 100;
+  const driftDetail = waitingForSamples
+    ? `${currentSamples}/${minimumSamples} embedding runtime; chưa kết luận drift`
+    : driftStatus === "NO_DATA"
+      ? "Chưa có lần kiểm tra drift nào"
+      : "Prometheus drift report của release đang phục vụ";
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader eyebrow="Observability" title="Monitoring" description="Tóm tắt tín hiệu drift và trạng thái phục vụ; Grafana giữ dashboard chuyên sâu." />
       <section className="mt-7 grid gap-4 sm:grid-cols-3">
-        <MetricCard label="Drift state" value={driftValue} detail={driftDetail} />
+        <MetricCard label="Drift state" value={driftValue} detail={driftDetail} accent={driftStatus === "STABLE"} />
         <MetricCard label="Ready services" value={`${overview.services?.ready ?? 0}/${overview.services?.checked ?? 0}`} detail="MLflow, Prometheus, Qdrant, Triton, API" />
         <MetricCard label="Collection points" value={String(overview.collection?.points_count ?? 0)} detail="Qdrant active reference collection" />
       </section>

@@ -30,6 +30,20 @@ class FakeHttpClient:
         }
 
 
+class InsufficientDataHttpClient(FakeHttpClient):
+    def prometheus_query(self, base_url: str, query: str) -> dict:
+        if query == "reid_embedding_drift_state":
+            metric = {"release_id": "model:v3", "state": "INSUFFICIENT_DATA"}
+            value = "1"
+        elif query == "reid_embedding_drift_current_samples":
+            metric, value = {"release_id": "model:v3"}, "27"
+        elif query == "reid_embedding_drift_minimum_samples":
+            metric, value = {"release_id": "model:v3"}, "100"
+        else:
+            return {"data": {"result": []}}
+        return {"data": {"result": [{"metric": metric, "value": [123.0, value]}]}}
+
+
 class OverviewServiceTest(unittest.TestCase):
     def test_aggregates_service_model_collection_and_drift_status(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -59,6 +73,18 @@ class OverviewServiceTest(unittest.TestCase):
         )
         self.assertNotIn("triton-server", by_name["Triton"]["url"])
         self.assertNotIn("inference-api", by_name["Inference API"]["url"])
+
+    def test_insufficient_runtime_samples_are_not_reported_as_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            settings = replace(
+                ControlSettings.from_env(), database_path=Path(temporary) / "db"
+            )
+            overview = OverviewService(settings, InsufficientDataHttpClient()).overview()
+
+        self.assertEqual(overview["drift"]["status"], "INSUFFICIENT_DATA")
+        self.assertIsNone(overview["drift"]["detected"])
+        self.assertEqual(overview["drift"]["current_samples"], 27)
+        self.assertEqual(overview["drift"]["minimum_samples"], 100)
 
 
 if __name__ == "__main__":

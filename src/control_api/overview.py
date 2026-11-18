@@ -76,6 +76,32 @@ class OverviewService:
 
     def _drift(self) -> dict[str, Any]:
         try:
+            state_response = self.client.prometheus_query(
+                self.settings.prometheus_url, "reid_embedding_drift_state"
+            )
+            state_results = state_response.get("data", {}).get("result", [])
+            if state_results:
+                sample = state_results[0]
+                labels = sample.get("metric", {})
+                raw_state = str(labels.get("state", "")).upper()
+                if raw_state in {"PASS", "DRIFT", "INSUFFICIENT_DATA"}:
+                    current = self._prometheus_value(
+                        "reid_embedding_drift_current_samples"
+                    )
+                    minimum = self._prometheus_value(
+                        "reid_embedding_drift_minimum_samples"
+                    )
+                    return {
+                        "status": "STABLE" if raw_state == "PASS" else raw_state,
+                        "detected": (
+                            True
+                            if raw_state == "DRIFT"
+                            else False if raw_state == "PASS" else None
+                        ),
+                        "labels": labels,
+                        "current_samples": int(current) if current is not None else None,
+                        "minimum_samples": int(minimum) if minimum is not None else None,
+                    }
             response = self.client.prometheus_query(
                 self.settings.prometheus_url, "reid_embedding_drift_detected"
             )
@@ -91,6 +117,14 @@ class OverviewService:
             }
         except (ControlUpstreamError, TypeError, ValueError, IndexError):
             return {"status": "UNAVAILABLE", "detected": None}
+
+    def _prometheus_value(self, query: str) -> float | None:
+        response = self.client.prometheus_query(self.settings.prometheus_url, query)
+        results = response.get("data", {}).get("result", [])
+        if not results:
+            return None
+        value = results[0].get("value", [None, None])
+        return float(value[1])
 
     def _safe_json(self, url: str) -> dict[str, Any]:
         try:

@@ -94,15 +94,17 @@ API lấy mẫu embedding đã normalize vào:
 ${MONITORING_STORAGE_PATH}/samples/current_embeddings.jsonl
 ```
 
-Thư mục mặc định `../person-reid-monitoring` nằm ngoài Git checkout để không bị `actions/checkout` xóa. File có permission `0600`, xoay vòng khi đạt số mẫu tối đa và không chứa ảnh hay person ID. Embedding vẫn là dữ liệu nhạy cảm; cần giới hạn quyền truy cập và chính sách retention phù hợp.
+Thư mục mặc định `../person-reid-monitoring` nằm ngoài Git checkout để không bị `actions/checkout` xóa. Runtime tự dùng mount textfile của Node Exporter làm storage chuẩn, nhờ đó checkout local và checkout của self-hosted runner không tạo hai bộ monitoring khác nhau. Trong thời gian chuyển đổi, report vẫn đọc mount `/app/monitoring-samples` thực tế của inference container cũ; lần deploy kế tiếp sẽ tự đưa cả hai về cùng storage chuẩn. File mẫu có permission `0600` và không chứa ảnh hay person ID. Embedding vẫn là dữ liệu nhạy cảm; cần giới hạn quyền truy cập và chính sách retention phù hợp.
+
+Mỗi lần inference service chuyển release, sampler ghi `.active_release.json`, chuyển cửa sổ mẫu cũ vào `samples/archive/<release>/` và bắt đầu cửa sổ mới. Vì vậy embedding v2, v3, v4 không bị trộn. Việc restart cùng một release không làm mất cửa sổ hiện tại.
 
 Chạy report thủ công:
 
 ```bash
-./scripts/drift_report_local.sh \
-  market1501-vit-bnneck:v1-dvc \
-  market1501-vit-bnneck-v1-dvc
+./scripts/drift_report_local.sh
 ```
+
+Script tự đọc `/model-info`, kiểm tra deployment state và dùng reference embedding từ immutable serving bundle của đúng release đang phục vụ. Hai tham số `release_id` và `release_slug` chỉ dành cho override thủ công và phải được truyền cùng nhau.
 
 Policy nằm tại `configs/drift_detection.yaml`. Report so sánh reference và current theo:
 
@@ -120,6 +122,12 @@ Output:
 
 Node exporter đọc textfile thứ hai để Prometheus scrape. Workflow `.github/workflows/drift.yml` chạy hằng ngày lúc 02:15 UTC; self-hosted runner cần secret `MLOPS_ENV_FILE` như release workflow.
 
+Report có ba trạng thái:
+
+- `PASS`: đủ mẫu và không vượt threshold.
+- `DRIFT`: đủ mẫu nhưng ít nhất một phép đo vượt threshold.
+- `INSUFFICIENT_DATA`: chưa đủ `minimum_current_samples` (mặc định 100). Đây là trạng thái chờ hợp lệ, workflow kết thúc thành công và xuất `reid_embedding_drift_current_samples`, `reid_embedding_drift_minimum_samples`, `reid_embedding_drift_ready` để UI/Grafana hiển thị tiến độ. Trạng thái này không được diễn giải là “không có drift”.
+
 Không nên promote hoặc rollback model chỉ dựa vào drift tự động. Drift là tín hiệu cần điều tra cùng traffic mix, camera mới, ánh sáng và dữ liệu có nhãn.
 
 ## Kiểm tra cấu hình
@@ -132,4 +140,3 @@ docker run --rm \
   --entrypoint promtool prom/prometheus:v3.5.0 \
   check config /etc/prometheus/prometheus.yml
 ```
-

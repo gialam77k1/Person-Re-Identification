@@ -33,7 +33,13 @@ export type Overview = {
   services?: { ready: number; checked: number; items?: ServiceStatus[] };
   model?: Record<string, unknown>;
   collection?: Record<string, unknown>;
-  drift?: { status?: string; detected?: boolean | null; labels?: Record<string, string> };
+  drift?: {
+    status?: string;
+    detected?: boolean | null;
+    labels?: Record<string, string>;
+    current_samples?: number | null;
+    minimum_samples?: number | null;
+  };
   latest_cycle?: Cycle | null;
   allowed_datasets?: string[];
   unavailable?: boolean;
