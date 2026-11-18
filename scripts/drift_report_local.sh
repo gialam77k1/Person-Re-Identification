@@ -45,10 +45,20 @@ if [[ -n "${RELEASE_ID}" && -z "${RELEASE_SLUG}" ]] || \
 fi
 if [[ -z "${RELEASE_ID}" ]]; then
   DEPLOYMENT_STATE="${DEPLOYMENT_STATE_ROOT:-../person-reid-deployments}/production/current.json"
+  SERVING_ARTIFACTS_ROOT="$(
+    docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/artifacts"}}{{.Source}}{{end}}{{end}}' \
+      "${INFERENCE_CONTAINER_NAME:-reid-inference-api}" 2>/dev/null || true
+  )"
+  RESOLVE_ARGS=(
+    --api-url "${INFERENCE_API_URL:-http://localhost:8080}"
+    --deployment-state "${DEPLOYMENT_STATE}"
+  )
+  if [[ -n "${SERVING_ARTIFACTS_ROOT}" ]]; then
+    RESOLVE_ARGS+=(--serving-artifacts-root "${SERVING_ARTIFACTS_ROOT}")
+  fi
   ACTIVE_RELEASE="$(
     conda run --no-capture-output -n reid python src/resolve_serving_release.py \
-      --api-url "${INFERENCE_API_URL:-http://localhost:8080}" \
-      --deployment-state "${DEPLOYMENT_STATE}"
+      "${RESOLVE_ARGS[@]}"
   )"
   IFS=$'\t' read -r RELEASE_ID RELEASE_SLUG REFERENCE_PATH <<< "${ACTIVE_RELEASE}"
 fi

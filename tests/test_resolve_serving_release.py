@@ -66,7 +66,58 @@ class ResolveServingReleaseTest(unittest.TestCase):
                 state, "model-family:v3", "model-family-v3"
             )
 
-        self.assertEqual(resolved, reference)
+            self.assertEqual(resolved, reference)
+
+    def test_reference_falls_back_to_active_container_artifact_mount(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "serving" / "digest" / "artifacts"
+            reference = (
+                root
+                / "pipeline/model-family-v4/reference/embeddings/reference_embeddings.npy"
+            )
+            reference.parent.mkdir(parents=True)
+            reference.write_bytes(b"reference")
+
+            resolved = resolve_reference(
+                Path(directory) / "missing-production-state.json",
+                "model-family:v4",
+                "model-family-v4",
+                root,
+            )
+
+            self.assertEqual(resolved, reference)
+
+    def test_reference_falls_back_when_state_root_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "active-serving" / "artifacts"
+            reference = (
+                root
+                / "pipeline/model-family-v5/reference/embeddings/reference_embeddings.npy"
+            )
+            reference.parent.mkdir(parents=True)
+            reference.write_bytes(b"reference")
+            state = Path(directory) / "production/current.json"
+            state.parent.mkdir(parents=True)
+            state.write_text(
+                json.dumps(
+                    {
+                        "release_id": "model-family:v5",
+                        "serving_artifacts_root": str(
+                            Path(directory) / "retired-serving" / "artifacts"
+                        ),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            resolved = resolve_reference(
+                state,
+                "model-family:v5",
+                "model-family-v5",
+                root,
+            )
+
+            self.assertEqual(resolved, reference)
 
     def test_scheduled_workflow_does_not_pin_a_model_version(self) -> None:
         workflow = (
