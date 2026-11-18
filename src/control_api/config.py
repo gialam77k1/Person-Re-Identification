@@ -86,7 +86,9 @@ class ControlSettings:
             mlflow_url=_url("CONTROL_MLFLOW_URL", "http://mlflow:5000"),
             prometheus_url=_url("CONTROL_PROMETHEUS_URL", "http://prometheus:9090"),
             qdrant_url=_url("CONTROL_QDRANT_URL", "http://qdrant:6333"),
-            qdrant_collection=os.getenv("CONTROL_QDRANT_COLLECTION", "reid_reference_v1"),
+            qdrant_collection=os.getenv(
+                "CONTROL_QDRANT_COLLECTION", "reid_reference_active"
+            ),
             triton_url=_url("CONTROL_TRITON_URL", "http://triton-server:8000"),
             triton_model=os.getenv("CONTROL_TRITON_MODEL", "reid_embedding"),
             inference_api_url=_url("CONTROL_INFERENCE_API_URL", "http://inference-api:8080"),

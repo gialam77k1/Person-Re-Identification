@@ -72,6 +72,7 @@ class ReleaseDeploymentTest(unittest.TestCase):
             serving_artifacts_root=Path.cwd() / "runtime/artifacts",
             model_name="reid_embedding",
             model_version="2",
+            qdrant_collection="reid_reference_active",
         )
 
         self.assertEqual(environment["KEEP"], "value")
@@ -83,6 +84,7 @@ class ReleaseDeploymentTest(unittest.TestCase):
         self.assertFalse(Path(environment["API_TRITON_MODEL_REPOSITORY"]).is_absolute())
         self.assertEqual(environment["TRITON_MODEL_NAME"], "reid_embedding")
         self.assertEqual(environment["TRITON_MODEL_VERSION"], "2")
+        self.assertEqual(environment["QDRANT_COLLECTION"], "reid_reference_active")
 
     def test_serving_bundle_survives_source_checkout_cleanup(self) -> None:
         artifacts_root = Path.cwd() / "artifacts"

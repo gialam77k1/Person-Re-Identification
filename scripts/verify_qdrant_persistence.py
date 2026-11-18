@@ -61,7 +61,7 @@ def wait_ready(base_url: str, attempts: int = 30) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Verify Qdrant data survives a container restart.")
     parser.add_argument("--qdrant-url", default="http://localhost:6333")
-    parser.add_argument("--collection", default="reid_reference_v1")
+    parser.add_argument("--collection", default="reid_reference_active")
     parser.add_argument("--compose-file", default="docker-compose.mlops.yml")
     parser.add_argument("--env-file", default=".env.mlops")
     parser.add_argument("--output", default="artifacts/deployment-tests/qdrant_persistence.json")

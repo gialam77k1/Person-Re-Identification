@@ -93,6 +93,7 @@ class InferenceService:
             "triton_server": self._observe_call("triton", "server_ready", self.triton.server_ready),
             "triton_model": self._observe_call("triton", "model_ready", self.triton.model_ready),
             "qdrant_collection": False,
+            "qdrant_lineage": False,
         }
         try:
             collection = self._observe_call("qdrant", "collection_info", self.qdrant.collection_info)
@@ -107,6 +108,12 @@ class InferenceService:
                 collection.get("status") == "green"
                 and vector_size == self.contract.embedding_dim
                 and points_count > 0
+            )
+            lineage = self._observe_call(
+                "qdrant", "reference_lineage", self.qdrant.reference_lineage
+            )
+            checks["qdrant_lineage"] = (
+                lineage.get("release_id") == self.contract.release_id
             )
             if self.metrics is not None:
                 self.metrics.collection_points.labels(self.settings.qdrant_collection).set(points_count)

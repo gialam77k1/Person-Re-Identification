@@ -144,7 +144,7 @@ Xác nhận credential AWS trong `.env.mlops` khớp credential MinIO.
 
 ### Qdrant không thấy dữ liệu cũ
 
-Xác nhận `QDRANT_STORAGE_PATH` trỏ đến thư mục bền vững ngoài repository, mặc định là `../person-reid-qdrant/storage`. Không đặt dữ liệu Qdrant trong Git checkout và không tạo collection mới nếu collection `reid_reference_v1` đã tồn tại.
+Xác nhận `QDRANT_STORAGE_PATH` trỏ đến thư mục bền vững ngoài repository, mặc định là `../person-reid-qdrant/storage`. Release pipeline tạo một collection bất biến cho từng manifest và chuyển alias `reid_reference_active`; không xóa collection cũ vì rollback cần dùng lại đúng embedding của phiên bản trước.
 
 ### FastAPI trả `503` tại `/ready`
 
@@ -153,7 +153,7 @@ Xác nhận `QDRANT_STORAGE_PATH` trỏ đến thư mục bền vững ngoài re
 ```bash
 ./scripts/mlops_stack.sh logs inference-api
 curl http://localhost:8000/v2/models/reid_embedding/ready
-curl http://localhost:6333/collections/reid_reference_v1
+curl http://localhost:6333/collections/reid_reference_active
 ```
 
 Contract và ví dụ gọi API nằm tại [`FASTAPI_INFERENCE.md`](FASTAPI_INFERENCE.md).

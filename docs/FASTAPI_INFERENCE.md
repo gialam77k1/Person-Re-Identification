@@ -23,7 +23,7 @@ Re-ranking không nằm trong online serving path.
 ```dotenv
 TRITON_MODEL_REPOSITORY=./artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository
 API_MODEL_MANIFEST_PATH=artifacts/pipeline/market1501-vit-bnneck-v1-dvc/release/model_manifest.json
-QDRANT_COLLECTION=reid_reference_v1
+QDRANT_COLLECTION=reid_reference_active
 ```
 
 Nếu artifact chưa có ở local:
@@ -64,7 +64,7 @@ curl --fail http://localhost:8080/health
 curl --fail http://localhost:8080/ready
 ```
 
-Endpoint trả HTTP `200` chỉ khi manifest đã nạp, Triton server sẵn sàng, model Triton sẵn sàng và collection Qdrant ở trạng thái `green`, đúng 512 chiều, có ít nhất một point. Nếu một điều kiện không đạt, endpoint trả HTTP `503` và chi tiết từng check.
+Endpoint trả HTTP `200` chỉ khi manifest đã nạp, Triton server sẵn sàng, model Triton sẵn sàng, collection Qdrant ở trạng thái `green`, đúng số chiều, có ít nhất một point và payload lineage của collection trùng với release model. Nếu một điều kiện không đạt, endpoint trả HTTP `503` và chi tiết từng check.
 
 ### Model info
 

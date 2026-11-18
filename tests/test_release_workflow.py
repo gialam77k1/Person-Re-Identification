@@ -81,6 +81,28 @@ class ReleaseWorkflowTest(unittest.TestCase):
             with self.subTest(step=step["name"]):
                 self.assertIn("source .env.mlops", step["run"])
 
+    def test_release_deploys_version_matched_qdrant_index(self) -> None:
+        staging = next(
+            step
+            for step in self.workflow["jobs"]["deploy-staging"]["steps"]
+            if step["name"] == "Deploy staging"
+        )
+        production = next(
+            step
+            for step in self.workflow["jobs"]["deploy-production"]["steps"]
+            if step["name"] == "Deploy production"
+        )
+        self.assertIn("deploy_local.sh deploy", staging["run"])
+        self.assertIn("deploy_local.sh deploy", production["run"])
+        self.assertIn("Qdrant index", staging["run"])
+
+    def test_rollback_reports_model_and_index_as_one_release(self) -> None:
+        rollback = (ROOT / ".github/workflows/rollback.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("deploy_local.sh rollback", rollback)
+        self.assertIn("previous model and matching Qdrant index", rollback)
+
 
 if __name__ == "__main__":
     unittest.main()
