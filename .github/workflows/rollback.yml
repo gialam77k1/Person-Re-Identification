@@ -60,7 +60,7 @@ jobs:
         run: >-
           python scripts/control_callback.py "${{ inputs.cycle_id }}"
           production_approval PASS --progress 1
-          --detail "Rollback completed and the previous release is healthy"
+          --detail "Rollback restored the previous model and matching Qdrant index; release is healthy"
 
       - name: Report rollback failure
         if: ${{ failure() && inputs.cycle_id != 'manual' }}

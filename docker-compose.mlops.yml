@@ -159,7 +159,9 @@ services:
     environment:
       TRITON_URL: http://triton-server:8000
       QDRANT_URL: http://qdrant:6333
-      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-reid_reference_v1}
+      # Release deployment atomically moves this stable alias to the
+      # immutable collection built from the matching model's reference set.
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-reid_reference_active}
       TRITON_MODEL_NAME: ${TRITON_MODEL_NAME:-reid_embedding}
       TRITON_MODEL_VERSION: ${TRITON_MODEL_VERSION:-1}
       API_TRITON_MODEL_REPOSITORY: ${API_TRITON_MODEL_REPOSITORY:-artifacts/pipeline/market1501-vit-bnneck-v1-dvc/triton/model_repository}
@@ -211,7 +213,7 @@ services:
       CONTROL_MLFLOW_URL: http://mlflow:5000
       CONTROL_PROMETHEUS_URL: http://prometheus:9090
       CONTROL_QDRANT_URL: http://qdrant:6333
-      CONTROL_QDRANT_COLLECTION: ${QDRANT_COLLECTION:-reid_reference_v1}
+      CONTROL_QDRANT_COLLECTION: ${QDRANT_COLLECTION:-reid_reference_active}
       CONTROL_TRITON_URL: http://triton-server:8000
       CONTROL_TRITON_MODEL: ${TRITON_MODEL_NAME:-reid_embedding}
       CONTROL_INFERENCE_API_URL: http://inference-api:8080

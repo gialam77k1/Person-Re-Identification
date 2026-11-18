@@ -111,6 +111,21 @@ class QdrantClient:
             raise UpstreamError("Qdrant collection response has no result object.")
         return result
 
+    def reference_lineage(self) -> dict[str, Any]:
+        response = request_json(
+            "POST",
+            f"{self.base_url}/collections/{self.collection}/points/scroll",
+            payload={"limit": 1, "with_payload": True, "with_vector": False},
+            timeout=self.timeout,
+        )
+        points = response.get("result", {}).get("points", [])
+        if not isinstance(points, list) or not points:
+            raise UpstreamError("Qdrant reference collection has no lineage sample.")
+        payload = points[0].get("payload")
+        if not isinstance(payload, dict):
+            raise UpstreamError("Qdrant reference point has no lineage payload.")
+        return payload
+
     def search(self, vector: np.ndarray, limit: int) -> list[dict[str, Any]]:
         response = request_json(
             "POST",

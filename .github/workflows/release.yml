@@ -203,7 +203,7 @@ jobs:
           set -a
           source .env.mlops
           set +a
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" deploy_staging RUNNING --detail "Deploying validated candidate to staging"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" deploy_staging RUNNING --detail "Building the immutable release Qdrant index and deploying the matching model to staging"
           ./scripts/deploy_local.sh deploy \
             --environment staging \
             --image "$IMAGE" \
@@ -212,8 +212,8 @@ jobs:
             --validation-report "artifacts/pipeline/${RELEASE_SLUG}/release/validation_report.json" \
             --manifest "artifacts/pipeline/${RELEASE_SLUG}/release/model_manifest.json" \
             --triton-model-repository "artifacts/pipeline/${RELEASE_SLUG}/triton/model_repository"
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" deploy_staging PASS --progress 1 --detail "Staging deployment completed"
-          python scripts/control_callback.py "${{ inputs.cycle_id }}" staging_test PASS --progress 1 --detail "Staging deployment smoke checks passed"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" deploy_staging PASS --progress 1 --detail "Staging model and version-matched Qdrant index deployed"
+          python scripts/control_callback.py "${{ inputs.cycle_id }}" staging_test PASS --progress 1 --detail "Staging model, index lineage and search readiness checks passed"
 
   deploy-production:
     name: Approve and deploy production
@@ -298,7 +298,7 @@ jobs:
             --tracking-uri "${MLFLOW_TRACKING_URI:-http://localhost:5000}" \
             --output "artifacts/deployments/production/registry_promotion.json"
           python scripts/control_callback.py "${{ inputs.cycle_id }}" production_approval PASS \
-            --progress 1 --detail "Production deployed; MLflow champion now points to $RELEASE_ID"
+            --progress 1 --detail "Production model and matching Qdrant index deployed; active Qdrant alias and MLflow champion now point to $RELEASE_ID"
 
   report-release-failure:
     name: Report release failure to Control Center

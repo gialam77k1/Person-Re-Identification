@@ -251,6 +251,12 @@ Kiểm thử deployment:
 Pull request phải qua lint, unit tests, repository validation và API image smoke test. Production
 luôn cần manual approval và có thể rollback đồng bộ API image, Triton model và Qdrant collection.
 
+Mỗi release dùng reference embeddings đã vượt validation gate để tạo một collection Qdrant vật lý
+bất biến có tên suy ra từ `release_id` và SHA-256 của manifest. Staging dùng alias
+`reid_reference_staging`, production dùng `reid_reference_active`. API chỉ báo `READY` khi payload
+lineage của collection trùng với model release. Vì vậy cùng một cơ chế áp dụng cho mọi bước nâng
+phiên bản (`v1 → v2`, `v2 → v3`, ...) và rollback luôn khôi phục cả model lẫn đúng không gian embedding.
+
 ## Cấu trúc repository
 
 ```text

@@ -74,7 +74,9 @@ class ApiSettings:
         return cls(
             triton_url=os.getenv("TRITON_URL", "http://localhost:8000").rstrip("/"),
             qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333").rstrip("/"),
-            qdrant_collection=os.getenv("QDRANT_COLLECTION", "reid_reference_v1"),
+            qdrant_collection=os.getenv(
+                "QDRANT_COLLECTION", "reid_reference_active"
+            ),
             model_name=os.getenv("TRITON_MODEL_NAME", "reid_embedding"),
             model_version=os.getenv("TRITON_MODEL_VERSION", "1"),
             serving_model_repository=resolve_repository_path(

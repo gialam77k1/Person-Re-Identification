@@ -40,6 +40,7 @@ class FakeQdrant:
         self.vector_size = 512
         self.last_vector: np.ndarray | None = None
         self.last_limit: int | None = None
+        self.release_id = "market1501-vit-bnneck:v1-dvc"
 
     def collection_info(self) -> dict[str, Any]:
         return {
@@ -47,6 +48,9 @@ class FakeQdrant:
             "points_count": self.points_count,
             "config": {"params": {"vectors": {"size": self.vector_size}}},
         }
+
+    def reference_lineage(self) -> dict[str, Any]:
+        return {"release_id": self.release_id, "manifest_sha256": "a" * 64}
 
     def search(self, vector: np.ndarray, limit: int) -> list[dict[str, Any]]:
         self.last_vector = vector
@@ -131,6 +135,12 @@ class InferenceApiTest(unittest.IsolatedAsyncioTestCase):
         response = await self.request("GET", "/ready")
         self.assertEqual(response.status_code, 503)
         self.assertFalse(response.json()["checks"]["qdrant_collection"])
+
+        self.qdrant.points_count = 2
+        self.qdrant.release_id = "market1501-vit-bnneck:v0"
+        response = await self.request("GET", "/ready")
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(response.json()["checks"]["qdrant_lineage"])
 
     async def test_embed_accepts_jpeg_and_returns_normalized_vector(self) -> None:
         response = await self.request(

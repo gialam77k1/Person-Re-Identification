@@ -21,6 +21,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.api.config import ReleaseContract, verify_serving_model_artifacts
+from src.qdrant_release_index import (
+    QdrantIndexError,
+    QdrantReleaseIndex,
+    environment_alias,
+    load_reference_bundle,
+)
 
 
 class ReleaseError(RuntimeError):
@@ -242,6 +248,7 @@ def runtime_snapshot_record(
         "local_image": local_image,
         "triton_model_name": str(model_info.get("model_name") or "reid_embedding"),
         "triton_model_version": str(model_info.get("model_version") or ""),
+        "qdrant_alias": str(model_info.get("qdrant_collection") or ""),
     }
 
 
@@ -285,15 +292,32 @@ def api_json(api_url: str, endpoint: str) -> dict[str, Any]:
         raise ReleaseError(f"API request failed for {endpoint}: {exc}") from exc
 
 
-def wait_for_release(api_url: str, release_id: str, attempts: int = 30) -> None:
+def wait_for_release(
+    api_url: str,
+    release_id: str,
+    attempts: int = 30,
+    *,
+    qdrant_collection: str | None = None,
+) -> None:
     last_error = "API did not become ready"
     for attempt in range(attempts):
         try:
             ready = api_json(api_url, "/ready")
             model_info = api_json(api_url, "/model-info")
-            if ready.get("status") == "ready" and model_info.get("release_id") == release_id:
+            collection_matches = (
+                qdrant_collection is None
+                or model_info.get("qdrant_collection") == qdrant_collection
+            )
+            if (
+                ready.get("status") == "ready"
+                and model_info.get("release_id") == release_id
+                and collection_matches
+            ):
                 return
-            last_error = f"ready={ready.get('status')}, release_id={model_info.get('release_id')}"
+            last_error = (
+                f"ready={ready.get('status')}, release_id={model_info.get('release_id')}, "
+                f"qdrant_collection={model_info.get('qdrant_collection')}"
+            )
         except ReleaseError as exc:
             last_error = str(exc)
         if attempt + 1 < attempts:
@@ -420,6 +444,7 @@ def build_compose_environment(
     serving_artifacts_root: Path,
     model_name: str,
     model_version: str,
+    qdrant_collection: str,
 ) -> dict[str, str]:
     environment = base.copy()
     environment.update(
@@ -432,6 +457,7 @@ def build_compose_environment(
             "SERVING_ARTIFACTS_ROOT": str(serving_artifacts_root.resolve()),
             "TRITON_MODEL_NAME": model_name,
             "TRITON_MODEL_VERSION": model_version,
+            "QDRANT_COLLECTION": qdrant_collection,
             # Docker Compose resolves a relative host path without ./ as a
             # named volume. Always pass the canonical host path for Triton.
             "TRITON_MODEL_REPOSITORY": str(triton_repository.resolve()),
@@ -454,6 +480,11 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         manifest_path, triton_repository, args.release_id
     )
     require_healthy_qdrant(os.environ.get("QDRANT_CONTAINER_NAME", "reid-qdrant"))
+    qdrant = QdrantReleaseIndex(args.qdrant_url, batch_size=args.qdrant_batch_size)
+    bundle = load_reference_bundle(manifest_path, args.release_id)
+    qdrant_collection = qdrant.ensure_collection(bundle)
+    qdrant_alias = args.qdrant_alias or environment_alias(args.environment)
+    previous_qdrant_collection = qdrant.alias_target(qdrant_alias)
     release_root = manifest_path.parents[1]
     try:
         manifest_relative = manifest_path.relative_to(ROOT)
@@ -476,6 +507,12 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         "rollback": is_rollback,
         "triton_model_name": model_name,
         "triton_model_version": model_version,
+        "qdrant_alias": qdrant_alias,
+        "qdrant_collection": qdrant_collection,
+        "previous_qdrant_collection": previous_qdrant_collection,
+        "qdrant_manifest_sha256": bundle.manifest_sha256,
+        "qdrant_points_count": bundle.count,
+        "qdrant_vector_size": bundle.dimension,
     }
     publication_path = release_root / "release" / "dvc_publication.json"
     if publication_path.is_file():
@@ -504,6 +541,9 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         serving_artifacts_root=serving_artifacts_root,
         model_name=model_name,
         model_version=model_version,
+        # Bind the API to the immutable physical collection. The stable alias
+        # is switched only after this exact model/index pair passes readiness.
+        qdrant_collection=qdrant_collection,
     )
     compose = [
         "docker",
@@ -513,26 +553,33 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         "--file",
         args.compose_file,
     ]
-    if not args.skip_pull:
-        subprocess.run(["docker", "pull", args.image], check=True, cwd=ROOT)
-    subprocess.run(
-        compose
-        + [
-            "up",
-            "-d",
-            "--no-build",
-            "--no-deps",
-            "--force-recreate",
-            "triton-server",
-            "inference-api",
-        ],
-        check=True,
-        cwd=ROOT,
-        env=compose_environment,
-    )
     try:
-        wait_for_release(args.api_url, args.release_id, attempts=90)
-    except ReleaseError:
+        if not args.skip_pull:
+            subprocess.run(["docker", "pull", args.image], check=True, cwd=ROOT)
+        subprocess.run(
+            compose
+            + [
+                "up",
+                "-d",
+                "--no-build",
+                "--no-deps",
+                "--force-recreate",
+                "triton-server",
+                "inference-api",
+            ],
+            check=True,
+            cwd=ROOT,
+            env=compose_environment,
+        )
+        wait_for_release(
+            args.api_url,
+            args.release_id,
+            attempts=90,
+            qdrant_collection=qdrant_collection,
+        )
+        qdrant.switch_alias(qdrant_alias, qdrant_collection)
+    except (ReleaseError, QdrantIndexError, subprocess.CalledProcessError):
+        qdrant.restore_alias(qdrant_alias, previous_qdrant_collection)
         subprocess.run(compose + ["ps"], cwd=ROOT, env=compose_environment, check=False)
         subprocess.run(
             compose + ["logs", "--no-color", "--tail", "200", "triton-server", "inference-api"],
@@ -580,6 +627,20 @@ def add_shared_deploy_arguments(parser: argparse.ArgumentParser, *, required: bo
     parser.add_argument("--compose-file", default="docker-compose.mlops.yml")
     parser.add_argument("--env-file", default=".env.mlops")
     parser.add_argument("--api-url", default="http://localhost:8080")
+    parser.add_argument(
+        "--qdrant-url",
+        default=os.environ.get("QDRANT_DEPLOY_URL", "http://localhost:6333"),
+    )
+    parser.add_argument(
+        "--qdrant-alias",
+        default=None,
+        help="Stable serving alias. Defaults to an environment-specific alias.",
+    )
+    parser.add_argument(
+        "--qdrant-batch-size",
+        type=int,
+        default=int(os.environ.get("QDRANT_INDEX_BATCH_SIZE", "128")),
+    )
     parser.add_argument(
         "--state-root",
         default=os.environ.get("DEPLOYMENT_STATE_ROOT", "../person-reid-deployments"),
@@ -643,7 +704,7 @@ def main() -> int:
         record = deploy(args) if args.command == "deploy" else rollback(args)
         print(json.dumps(record, indent=2))
         return 0
-    except (ReleaseError, subprocess.CalledProcessError, KeyError) as exc:
+    except (ReleaseError, QdrantIndexError, subprocess.CalledProcessError, KeyError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
