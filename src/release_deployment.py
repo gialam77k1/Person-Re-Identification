@@ -33,6 +33,20 @@ class ReleaseError(RuntimeError):
     pass
 
 
+PRODUCTION_RUNTIME_KEYS = (
+    "RELEASE_RUNTIME_MANAGED",
+    "RELEASE_ID",
+    "API_IMAGE",
+    "SERVING_ARTIFACTS_ROOT",
+    "TRITON_MODEL_REPOSITORY",
+    "TRITON_MODEL_NAME",
+    "TRITON_MODEL_VERSION",
+    "API_MODEL_MANIFEST_PATH",
+    "API_TRITON_MODEL_REPOSITORY",
+    "QDRANT_COLLECTION",
+)
+
+
 def read_json(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -172,6 +186,56 @@ def write_pending_state(state_root: Path, environment: str, record: dict[str, An
         json.dumps(record, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def production_runtime_environment(record: dict[str, Any]) -> dict[str, str]:
+    """Build the Compose overlay that recreates the exact promoted release."""
+    mapping = {
+        "RELEASE_RUNTIME_MANAGED": "1",
+        "RELEASE_ID": record.get("release_id"),
+        "API_IMAGE": record.get("image"),
+        "SERVING_ARTIFACTS_ROOT": record.get("serving_artifacts_root"),
+        "TRITON_MODEL_REPOSITORY": record.get("persistent_triton_model_repository"),
+        "TRITON_MODEL_NAME": record.get("triton_model_name"),
+        "TRITON_MODEL_VERSION": record.get("triton_model_version"),
+        "API_MODEL_MANIFEST_PATH": record.get("manifest"),
+        "API_TRITON_MODEL_REPOSITORY": record.get("triton_model_repository"),
+        "QDRANT_COLLECTION": record.get("qdrant_collection"),
+    }
+    invalid = [
+        key
+        for key in PRODUCTION_RUNTIME_KEYS
+        if not isinstance(mapping.get(key), str) or not str(mapping[key]).strip()
+    ]
+    if invalid:
+        raise ReleaseError(
+            "Production state cannot recreate serving runtime; missing: "
+            + ", ".join(invalid)
+        )
+    for key in ("SERVING_ARTIFACTS_ROOT", "TRITON_MODEL_REPOSITORY"):
+        if not Path(str(mapping[key])).is_absolute():
+            raise ReleaseError(f"Production runtime {key} must be an absolute path")
+    return {key: str(mapping[key]) for key in PRODUCTION_RUNTIME_KEYS}
+
+
+def write_production_runtime_environment(
+    state_root: Path,
+    record: dict[str, Any],
+    *,
+    output: Path | None = None,
+) -> Path:
+    environment = production_runtime_environment(record)
+    destination = output or state_root / "production" / "runtime.env"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    temporary.write_text(
+        "# Generated from production/current.json; do not edit manually.\n"
+        + "".join(f"{key}={environment[key]}\n" for key in PRODUCTION_RUNTIME_KEYS),
+        encoding="utf-8",
+    )
+    os.chmod(temporary, 0o600)
+    temporary.replace(destination)
+    return destination
 
 
 def select_rollback_record(state_root: Path, environment: str) -> tuple[dict[str, Any], Path]:
@@ -437,6 +501,7 @@ def materialize_serving_bundle(
 def build_compose_environment(
     base: dict[str, str],
     *,
+    release_id: str,
     image: str,
     manifest_relative: Path,
     triton_relative: Path,
@@ -450,6 +515,8 @@ def build_compose_environment(
     environment = base.copy()
     environment.update(
         {
+            "RELEASE_RUNTIME_MANAGED": "1",
+            "RELEASE_ID": release_id,
             "API_IMAGE": image,
             # These paths are resolved inside the inference image, where the
             # repository artifacts directory is mounted at /app/artifacts.
@@ -567,6 +634,7 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
 
     compose_environment = build_compose_environment(
         dict(os.environ),
+        release_id=args.release_id,
         image=args.image,
         manifest_relative=manifest_relative,
         triton_relative=triton_relative,
@@ -625,6 +693,8 @@ def deploy(args: argparse.Namespace, *, is_rollback: bool = False) -> dict[str, 
         )
         raise
 
+    if args.environment == "production":
+        write_production_runtime_environment(state_root, record)
     write_deployment_state(state_root, args.environment, record)
     return record
 
@@ -714,6 +784,17 @@ def parse_args() -> argparse.Namespace:
 
     rollback_parser = subparsers.add_parser("rollback", help="Restore the previous recorded release.")
     add_shared_deploy_arguments(rollback_parser, required=False)
+
+    runtime_parser = subparsers.add_parser(
+        "runtime-env",
+        help="Regenerate the Compose runtime overlay from deployment state.",
+    )
+    runtime_parser.add_argument(
+        "--state-root",
+        default=os.environ.get("DEPLOYMENT_STATE_ROOT", "../person-reid-deployments"),
+    )
+    runtime_parser.add_argument("--environment", choices=("production",), default="production")
+    runtime_parser.add_argument("--output")
     return parser.parse_args()
 
 
@@ -736,6 +817,16 @@ def main() -> int:
                 container_name=args.container_name,
             )
             print(json.dumps(record, indent=2))
+            return 0
+        if args.command == "runtime-env":
+            state_root = Path(args.state_root).resolve()
+            record = read_json(state_root / args.environment / "current.json")
+            destination = write_production_runtime_environment(
+                state_root,
+                record,
+                output=Path(args.output).resolve() if args.output else None,
+            )
+            print(destination)
             return 0
         record = deploy(args) if args.command == "deploy" else rollback(args)
         print(json.dumps(record, indent=2))

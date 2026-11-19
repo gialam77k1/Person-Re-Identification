@@ -23,8 +23,8 @@ cp .env.mlops.example .env.mlops
 Sau đó chạy stack:
 
 ```bash
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml up -d
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
+./scripts/mlops_stack.sh up
+./scripts/mlops_stack.sh status
 ```
 
 Các giao diện local:

@@ -124,6 +124,9 @@ services:
     shm_size: ${TRITON_SHM_SIZE:-1g}
     environment:
       NVIDIA_VISIBLE_DEVICES: ${TRITON_NVIDIA_VISIBLE_DEVICES:-0}
+    labels:
+      org.person-reid.runtime-managed: ${RELEASE_RUNTIME_MANAGED:?Use ./scripts/mlops_stack.sh; direct Compose may reset the production release}
+      org.person-reid.release-id: ${RELEASE_ID:?Release runtime is not resolved}
     ports:
       - "${TRITON_HTTP_PORT:-8000}:8000"
       - "${TRITON_GRPC_PORT:-8001}:8001"
@@ -151,6 +154,9 @@ services:
     image: ${API_IMAGE:-person-reid/inference-api:1.0.0}
     container_name: reid-inference-api
     restart: unless-stopped
+    labels:
+      org.person-reid.runtime-managed: ${RELEASE_RUNTIME_MANAGED:?Use ./scripts/mlops_stack.sh; direct Compose may reset the production release}
+      org.person-reid.release-id: ${RELEASE_ID:?Release runtime is not resolved}
     depends_on:
       qdrant:
         condition: service_healthy

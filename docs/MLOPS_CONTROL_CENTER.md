@@ -60,8 +60,8 @@ variable `CONTROL_API_URL=http://localhost:8090` nếu runner và stack chạy t
 ## Khởi động
 
 ```bash
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml up -d --build
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
+./scripts/mlops_stack.sh up
+./scripts/mlops_stack.sh status
 curl --fail http://localhost:8090/health
 ```
 

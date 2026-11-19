@@ -45,12 +45,12 @@ Kiểm tra cấu hình và model artifact:
 ./scripts/mlops_stack.sh verify
 ```
 
-Hoặc chạy Docker Compose trực tiếp:
-
-```bash
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml up -d --build
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
-```
+Không chạy `docker compose up` trực tiếp cho toàn stack. Luôn dùng
+`./scripts/mlops_stack.sh up`; script sẽ đọc `production/current.json` và nạp
+đúng image, Triton repository, manifest và Qdrant collection của release đang
+phục vụ. Điều này ngăn việc restart vô tình đưa v2/v3/v4 về cấu hình bootstrap v1.
+Để chỉ dựng lại Triton và Inference API theo production state mà không build lại
+toàn stack, chạy `./scripts/mlops_stack.sh restore-serving`.
 
 Các địa chỉ local:
 
@@ -82,8 +82,7 @@ bucket tồn tại. Nếu Console tại `http://localhost:9001` bị reset sau k
 đổi cấu hình, recreate riêng service mà không xóa volume:
 
 ```bash
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml \
-  up -d --force-recreate minio
+./scripts/mlops_stack.sh recreate minio
 ./scripts/mlops_stack.sh verify
 ```
 

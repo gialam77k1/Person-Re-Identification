@@ -103,6 +103,18 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("deploy_local.sh rollback", rollback)
         self.assertIn("previous model and matching Qdrant index", rollback)
 
+    def test_compose_requires_release_managed_runtime(self) -> None:
+        compose = (ROOT / "docker-compose.mlops.yml").read_text(encoding="utf-8")
+        self.assertIn("RELEASE_RUNTIME_MANAGED:?Use ./scripts/mlops_stack.sh", compose)
+        self.assertIn("RELEASE_ID:?Release runtime is not resolved", compose)
+
+    def test_stack_startup_restores_production_state(self) -> None:
+        stack = (ROOT / "scripts/mlops_stack.sh").read_text(encoding="utf-8")
+        self.assertIn('production/current.json', stack)
+        self.assertIn('release_deployment.py" runtime-env', stack)
+        self.assertIn("restore-serving", stack)
+        self.assertIn("verify_release", stack)
+
 
 if __name__ == "__main__":
     unittest.main()
