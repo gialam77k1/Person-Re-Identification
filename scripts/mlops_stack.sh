@@ -5,9 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${PROJECT_ROOT}/docker-compose.mlops.yml"
 ENV_FILE="${PROJECT_ROOT}/.env.mlops"
+BOOTSTRAP_RUNTIME_FILE="${PROJECT_ROOT}/configs/bootstrap-runtime.env"
+RUNTIME_ENV_FILE=""
 
 usage() {
-  echo "Usage: $0 {validate|up|status|verify|logs|down}"
+  echo "Usage: $0 {validate|up|restore-serving|recreate <service...>|status|verify|logs|down}"
 }
 
 require_env() {
@@ -26,10 +28,38 @@ load_env() {
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
   set +a
+  configure_runtime
+  set -a
+  # shellcheck disable=SC1090
+  source "${RUNTIME_ENV_FILE}"
+  set +a
+}
+
+configure_runtime() {
+  local state_root="${DEPLOYMENT_STATE_ROOT:-../person-reid-deployments}"
+  if [[ "${state_root}" != /* ]]; then
+    state_root="$(cd "${PROJECT_ROOT}" && realpath -m "${state_root}")"
+  fi
+  local current_state="${state_root}/production/current.json"
+  if [[ -f "${current_state}" ]]; then
+    RUNTIME_ENV_FILE="${state_root}/production/runtime.env"
+    conda run --no-capture-output -n reid python \
+      "${PROJECT_ROOT}/src/release_deployment.py" runtime-env \
+      --state-root "${state_root}" \
+      --environment production \
+      --output "${RUNTIME_ENV_FILE}" >/dev/null
+    echo "Serving runtime: production state $(sed -n 's/^RELEASE_ID=//p' "${RUNTIME_ENV_FILE}")"
+  else
+    RUNTIME_ENV_FILE="${BOOTSTRAP_RUNTIME_FILE}"
+    echo "Serving runtime: bootstrap v1 (no production state at ${current_state})"
+  fi
 }
 
 compose() {
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+  docker compose \
+    --env-file "${ENV_FILE}" \
+    --env-file "${RUNTIME_ENV_FILE}" \
+    -f "${COMPOSE_FILE}" "$@"
 }
 
 validate() {
@@ -46,7 +76,7 @@ validate() {
   if [[ "${model_repository}" != /* ]]; then
     model_repository="${PROJECT_ROOT}/${model_repository#./}"
   fi
-  local model_dir="${model_repository}/reid_embedding/1"
+  local model_dir="${model_repository}/${TRITON_MODEL_NAME:-reid_embedding}/${TRITON_MODEL_VERSION}"
   [[ -f "${model_dir}/model.onnx" ]] || {
     echo "Thiếu ${model_dir}/model.onnx" >&2
     exit 1
@@ -74,6 +104,20 @@ verify_url() {
   return 1
 }
 
+verify_release() {
+  local actual
+  actual="$(
+    curl --fail --silent --max-time 5 "http://localhost:${API_PORT:-8080}/model-info" |
+      conda run --no-capture-output -n reid python -c \
+        'import json,sys; print(json.load(sys.stdin).get("release_id", ""))'
+  )"
+  if [[ "${actual}" != "${RELEASE_ID}" ]]; then
+    echo "Serving release mismatch: expected ${RELEASE_ID}, got ${actual:-<empty>}" >&2
+    return 1
+  fi
+  echo "Serving release: ${actual}"
+}
+
 verify() {
   require_env
   load_env
@@ -85,6 +129,7 @@ verify() {
   verify_url "Qdrant" "http://localhost:${QDRANT_HTTP_PORT:-6333}/healthz"
   verify_url "Triton" "http://localhost:${TRITON_HTTP_PORT:-8000}/v2/health/ready"
   verify_url "Inference API" "http://localhost:${API_PORT:-8080}/ready"
+  verify_release
   compose run --rm minio-init >/dev/null
   echo "MinIO buckets: ready"
   echo "MLOps stack verification: PASS"
@@ -101,8 +146,27 @@ case "${1:-}" in
     compose up -d --build
     compose ps
     ;;
+  restore-serving)
+    require_env
+    load_env
+    compose up -d --no-build --no-deps --force-recreate triton-server inference-api
+    verify_url "Triton" "http://localhost:${TRITON_HTTP_PORT:-8000}/v2/health/ready"
+    verify_url "Inference API" "http://localhost:${API_PORT:-8080}/ready"
+    verify_release
+    ;;
+  recreate)
+    require_env
+    load_env
+    shift
+    if [[ "$#" -eq 0 ]]; then
+      echo "recreate requires at least one service name" >&2
+      exit 2
+    fi
+    compose up -d --force-recreate "$@"
+    ;;
   status)
     require_env
+    load_env
     compose ps
     ;;
   verify)
@@ -110,10 +174,12 @@ case "${1:-}" in
     ;;
   logs)
     require_env
+    load_env
     compose logs --tail=200 "${@:2}"
     ;;
   down)
     require_env
+    load_env
     compose down
     ;;
   *)

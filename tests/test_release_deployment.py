@@ -13,6 +13,7 @@ from src.release_deployment import (
     build_image_reference,
     build_compose_environment,
     materialize_serving_bundle,
+    production_runtime_environment,
     resolve_monitoring_storage_path,
     runtime_snapshot_record,
     select_rollback_record,
@@ -20,6 +21,7 @@ from src.release_deployment import (
     validate_image_reference,
     write_deployment_state,
     write_pending_state,
+    write_production_runtime_environment,
 )
 
 
@@ -66,6 +68,7 @@ class ReleaseDeploymentTest(unittest.TestCase):
         repository = Path.cwd() / "artifacts/pipeline/release/triton/model_repository"
         environment = build_compose_environment(
             {"KEEP": "value"},
+            release_id="market1501-duke-vit-bnneck:v2",
             image="ghcr.io/example/reid-api:abc-model-v2",
             manifest_relative=Path("artifacts/pipeline/release/release/model_manifest.json"),
             triton_relative=Path("artifacts/pipeline/release/triton/model_repository"),
@@ -78,6 +81,8 @@ class ReleaseDeploymentTest(unittest.TestCase):
         )
 
         self.assertEqual(environment["KEEP"], "value")
+        self.assertEqual(environment["RELEASE_RUNTIME_MANAGED"], "1")
+        self.assertEqual(environment["RELEASE_ID"], "market1501-duke-vit-bnneck:v2")
         self.assertEqual(environment["TRITON_MODEL_REPOSITORY"], str(repository.resolve()))
         self.assertEqual(
             environment["SERVING_ARTIFACTS_ROOT"],
@@ -111,6 +116,49 @@ class ReleaseDeploymentTest(unittest.TestCase):
             resolved = resolve_monitoring_storage_path("../ephemeral")
 
         self.assertEqual(resolved, Path("/persistent/reid-monitoring"))
+
+    def test_production_runtime_overlay_is_release_agnostic(self) -> None:
+        record = {
+            "release_id": "person-reid:v4",
+            "image": "ghcr.io/example/reid-api:abc-model-v4",
+            "serving_artifacts_root": "/srv/releases/v4/artifacts",
+            "persistent_triton_model_repository": "/srv/releases/v4/artifacts/triton",
+            "triton_model_name": "reid_embedding",
+            "triton_model_version": "4",
+            "manifest": "artifacts/pipeline/person-reid-v4/release/model_manifest.json",
+            "triton_model_repository": "artifacts/pipeline/person-reid-v4/triton/model_repository",
+            "qdrant_collection": "reid_reference_person_reid_v4_digest",
+        }
+
+        environment = production_runtime_environment(record)
+
+        self.assertEqual(environment["RELEASE_RUNTIME_MANAGED"], "1")
+        self.assertEqual(environment["RELEASE_ID"], "person-reid:v4")
+        self.assertEqual(environment["TRITON_MODEL_VERSION"], "4")
+        self.assertEqual(
+            environment["QDRANT_COLLECTION"], "reid_reference_person_reid_v4_digest"
+        )
+
+    def test_runtime_overlay_is_written_atomically_from_production_state(self) -> None:
+        record = {
+            "release_id": "person-reid:v5",
+            "image": "ghcr.io/example/reid-api:def-model-v5",
+            "serving_artifacts_root": "/srv/releases/v5/artifacts",
+            "persistent_triton_model_repository": "/srv/releases/v5/artifacts/triton",
+            "triton_model_name": "reid_embedding",
+            "triton_model_version": "5",
+            "manifest": "artifacts/pipeline/person-reid-v5/release/model_manifest.json",
+            "triton_model_repository": "artifacts/pipeline/person-reid-v5/triton/model_repository",
+            "qdrant_collection": "reid_reference_person_reid_v5_digest",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            state_root = Path(directory)
+            destination = write_production_runtime_environment(state_root, record)
+            text = destination.read_text(encoding="utf-8")
+
+            self.assertIn("RELEASE_ID=person-reid:v5\n", text)
+            self.assertIn("TRITON_MODEL_VERSION=5\n", text)
+            self.assertFalse((destination.parent / ".runtime.env.tmp").exists())
 
     def test_serving_bundle_survives_source_checkout_cleanup(self) -> None:
         artifacts_root = Path.cwd() / "artifacts"

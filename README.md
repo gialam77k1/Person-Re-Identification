@@ -105,10 +105,14 @@ Không commit `.env.mlops`, token hoặc secret. GitHub Actions cần có:
 ./scripts/mlops_stack.sh verify
 ```
 
+Nếu chỉ cần khôi phục đúng release production sau khi máy/containers khởi động
+lại, dùng `./scripts/mlops_stack.sh restore-serving`. Lệnh này đọc state hiện
+hành và xác nhận `/model-info` khớp release trước khi thành công.
+
 Kiểm tra container:
 
 ```bash
-docker compose --env-file .env.mlops -f docker-compose.mlops.yml ps
+./scripts/mlops_stack.sh status
 ```
 
 ### 3. Import batch trong Control Center
